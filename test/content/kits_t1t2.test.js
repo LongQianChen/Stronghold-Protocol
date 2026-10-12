@@ -7,6 +7,7 @@ import { makeBattle, enemyRec, chessRec, checkInvariants } from '../helpers/batt
 import { getDefaultSource } from '../../server/sim/simdata.js';
 import { ELEMENT_GAUGE_MAX, PROJECTILE_SPEEDS, BOOMERANG_RETURN_SPEED } from '../../server/sim/constants.js';
 import { sortEnemyTargets } from '../../server/sim/targeting.js';
+import { DRONE_TAG as ROCKROCK_DRONE } from '../../server/sim/content/kits/ops/chess_char_2_10-rockr.js';
 
 const ds = getDefaultSource();
 const raw = (id) => ds.rawChess(id);
@@ -1341,7 +1342,9 @@ test('2_10 洛洛: 自负此轭 drones stay locked on their target while the ski
   const t0 = h.b.time;
   h.run(4);
   const atks = h.hooksOf('attack').filter((c) => c.attacker === u && c.t > t0);
-  assert.ok(atks.length > 0 && atks.every((c) => c.targets.length === 1 && c.targets[0] === first), 'locked');
+  assert.ok(atks.length > 0 && atks.every((c) => c.targets.length === 1 && c.targets[0] === other), 'body keeps normal targeting');
+  const drones = h.hooksOf('damaged').filter((c) => c.source === u && c.t > t0 && c.dmg.tags?.includes(ROCKROCK_DRONE));
+  assert.ok(drones.length > 0 && drones.every((c) => c.target === first && c.dmg.isSkill && !c.dmg.isAttack), 'drone stays locked');
   done(h);
 });
 

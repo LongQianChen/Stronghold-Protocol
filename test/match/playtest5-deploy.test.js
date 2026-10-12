@@ -145,13 +145,14 @@ describe('#7 the Final Assault prep deploys on the boss field', () => {
     h.setStage(STAGE);
     h.toPrep(14);
     const m = h.m;
-    assert.equal(m.deployFieldOf(h.ps('p_1')), 'bossR');
-    assert.equal(m.deployFieldOf(h.ps('p_2')), 'bossL', 'the odd player alone on the left half');
-    m.onLeave('p_0');
-    assert.equal(m.deployFieldOf(h.ps('p_1')), 'bossL');
-    assert.equal(m.deployFieldOf(h.ps('p_2')), 'bossR');
+    const [left, right] = m.bossPairs.find(g => g.length === 2), lone = m.bossPairs.find(g => g.length === 1)[0];
+    assert.equal(m.deployFieldOf(h.ps(right)), 'bossR');
+    assert.equal(m.deployFieldOf(h.ps(lone)), 'bossL', 'the odd player alone on the left half');
+    m.onLeave(left);
+    assert.equal(m.deployFieldOf(h.ps(right)), 'bossL');
+    assert.equal(m.deployFieldOf(h.ps(lone)), 'bossR');
     // re-checked at once (Match._quit recomputes the players left), not at their next action
-    for (const [id, field] of [['p_1', 'bossL'], ['p_2', 'bossR']]) {
+    for (const [id, field] of [[right, 'bossL'], [lone, 'bossR']]) {
       assert.equal(h.ps(id)._deployField, field, `${id} board re-checked on ${field}`);
       assert.equal(h.ps(id)._legalityStale, false);
     }

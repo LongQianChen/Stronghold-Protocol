@@ -511,6 +511,7 @@ test('band map characters: spawnMapChar puts 预备干员-医疗 at its stage sl
   assert.ok(med);
   assert.deepEqual([med.tileR, med.tileC], [10, 2]);
   const gu = h.unit('test_guard');
+  assert.ok(med.aggroSeq > gu.aggroSeq, 'an ad-hoc map character keeps ordinary summon priority');
   gu.hp = 5000;
   h.run(4);
   assert.ok(gu.hp > 5000, 'healed');
@@ -518,6 +519,7 @@ test('band map characters: spawnMapChar puts 预备干员-医疗 at its stage sl
   h.step();
   const touch = spawnMapChar(h.b, 'p1', TOKEN_IDS.touch);
   assert.ok(touch);
+  assert.ok(touch.aggroSeq > gu.aggroSeq, 'an ad-hoc Touch also keeps ordinary summon priority');
   touch.skill.activate('test', { free: true });
   gu.hp = 3000;
   h.run(4);

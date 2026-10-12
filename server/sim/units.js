@@ -77,7 +77,7 @@ export class Unit {
     this.deathAt = -Infinity;
     this.respawnAt = Infinity;
     this.deploySeq = 0;         // deployment counter; also the identity of one deployment (content: `seq === u.deploySeq`)
-    this.aggroSeq = 0;          // 仇恨 order (the later the more attacked): = deploySeq, except summons of the initial deployment
+    this.aggroSeq = 0;          // 仇恨 order: usually deploySeq; initial summons and prepared map characters are exceptions
     this.spawnSeq = 0;
     this.elem = { burn: 0, neural: 0, necrosis: 0, apoptosis: 0, erosion: 0 };
     this.burstPending = null;   // { [element]: true } while that element's burst resolves (damage.js burstLocked)

@@ -50,7 +50,8 @@ test('#2 麦哲伦 S1: an enemy on a standing drone\'s range (air units too) cas
     const { h, u, ps } = field(MG, 0, [[DRONE_F, 12, 9]]);
     assert.equal(u.skill.rule, 'DEFAULT');
     assert.ok(ps[0].alive && ps[0].rangeKeySet.has(12 * COLS + 10) && outOfHerRange(u, 12, 10), 'the setup');
-    h.spawn('enemy_dummy', { pos: [11, 13] });   // outside every area
+    // (11, 13) would be held at the field edge, on the drone's tile (11, 10). Stay on the field and outside every area.
+    h.spawn('enemy_dummy', { pos: [11, 6] });
     assert.ok(!casts(h, u), 'nobody in her range or a drone\'s: no cast');
     h.spawn('enemy_dummy', { pos: [12, 10] });
     assert.ok(h.runUntil(() => u.skill.activations === 1, 1), 'an enemy on the drone\'s range casts S1');

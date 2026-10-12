@@ -4,6 +4,19 @@ Part of [DESIGN.md](../DESIGN.md) (the index; section numbers are global).
 
 ## 5. Simulation (server/sim) — engine contract
 
+联防 restoration (§30.13): the initial setup establishes buffs and devour attributes before restoring living
+operators' exact HP ratio and total SP; summons restore SP only. Opening Egir devour does not damage a carried
+survivor a second time. Forced-down carry stays out without spending an Egir revival; subsequent real knock-outs
+and redeploys are unchanged. No 1% / 1-HP floor is added to a positive carried ratio.
+
+Expanded automatic skill areas (§30.11) include 司霆惊蛰 S2's current low-terrain flood when it strictly contains the
+initial area, 斩业星熊 S3's selectable air targets, and 予愿安洁莉娜 S3's initial 3-9 ∪ x-4.
+Permanent range extension, control/operation cooldown and targetability still apply; normal attacks are unchanged.
+
+Prepared 外勤医疗 map characters (§30.22) keep an earlier aggro order than ordinary initial operators. Preparation
+can open their detail card and board-space range. Their `deploySeq` is still the later runtime spawn. The retained
+team grant (§30.14) is unchanged.
+
 ### 5.1 Battle API (implemented by the sim-core owner; consumed by match & content)
 
 ```js
@@ -117,6 +130,12 @@ Engine helpers (content must use these, never touch internals): `battle.dealDama
 
 ### 5.5 Combat rules (engine)
 
+- **Prepared 外勤医疗 slot**: 预备干员-医疗 is visible on the field during preparation. At `battleStart`, the elite count
+  chooses either that medic or its Touch replacement for the same slot. [ASSUMED] This replacement does not move the
+  slot behind the ordinary starting operators in effective deployment priority: both variants receive an earlier
+  `aggroSeq`, while their actual `deploySeq` still records the later runtime creation and guards deployment-scoped
+  effects. On a shared field, prepared slots follow player order [ASSUMED]. An ad-hoc map-character spawn during
+  combat retains ordinary summon priority. See §30.22 and SIM.md §1.
 - **Initial deployment** at t=0, free: operators by column — the left column first, top to bottom within a column (right-side boss player: from its own left, the highest field column) — then the summons (PRTS 卫戍协议/帮助 "按从上到下>从左到右的顺序部署。优先部署干员，随后为召唤物", read as a scan: down each column, the columns left to right — the order PRTS gives the 阿戈尔 devour, "更靠左和靠上"; row-major until 0.1.3, §23.23; `aggroSeq` ranks every start-of-battle summon after all operators) — a skill's placed summon (赫默 医疗探机, 巫恋 诅咒娃娃) included, once and free ("所有手动部署的召唤物，无视所属干员的持有状态…作战开始时立即部署一次"; afterwards it re-appears on its tile each time the owner's skill gives one, §20.1); on a shared field (联防, boss) the players' i-th operators deploy together [ASSUMED]. Deploy effects fire (`deploy` with `initial: true`). Then operators carried into 联防 knocked out (`carryState.down`) are forced out (`FORCED_EXIT`, HP 0, §19.3). Then `battleStart`, after which the forced-out operators' timers are re-read (redeploy-time effects that start with the battle, e.g. 机变 征召, cover them too).
 - **DP**: per player, start 10, +1/s, cap 99; used only for auto-redeploy (dead op: after `respawnTime`, if the tile it lies on is free and DP ≥ cost ⇒ redeploy there with full HP, SP = initSp). A knocked-out operator (and, since 0.1.2, one forced out by its own effects, §22.15) stays **down** on the tile it fell on — its own home when it fell on another board piece's home (that piece on the field or not) and its home is free, and 乌尔比安 knocked out while his S3 has moved him always on his deployment tile when it is free (the owner's deviation of 2026-10-07, `Unit.downAtHome`, §25.17.3) — until it redeploys there, and no ally deploys or moves onto that tile meanwhile (PRTS 卫戍协议/帮助 §作战阶段 单位部署; `Battle.downOn` / `restTile` / `_layBody`, §21.24; b.snap `down`, §18.3: counting / waiting for DP / its tile taken, a safeguard) — also one that entered 联防 knocked out (`FORCED_EXIT`, its full redeploy timer — confirmed by the user — with the battle-start redeploy effects, §19.3); summons, devices and enemies leave at once.
 - **Blocking** (contact radius, PRTS 游戏数据基础 §阻挡半径 / 作战机制 "中点判定…案例：阻挡"; `constants.js BLOCK_RADIUS`, `Battle._checkBlock`, §19.2): an operator with free capacity blocks an unblocked, blockable enemy whose position lies within its block radius of its centre — ground 0.7071 (squared 0.49999037), 0.8944 × the blocker's 阻挡半径倍率 for blockFly units vs flyers (起飞; mod `blockRadiusScale` = 倍率 − 1 — PRTS 游戏数据基础 "飞行阻挡半径 = 0.8944 × 阻挡半径倍率", 凯尔希·思衡托 +0.23), devices 0.4472 (阻隔工事 / 障碍物); air units (FLY, 近地悬浮, 浮空) only by blockFly units. A ground enemy is never blocked by a unit standing on a tile ground units cannot pass (围墙 / 围栏: PRTS 地形机制 "部署在其中的单位，若当前阻挡类型为'地面阻挡'则无法阻挡敌人" — an enemy pushed or pulled against the fence walks on; air blocking there stays [ASSUMED], §21.23) nor by an airborne (起飞) unit, which blocks flyers only (§21.22). An enemy holding 不可阻挡 (PRTS 异常效果 BLOCK_FREE 「无法阻挡/被阻挡，自动解除阻挡」) — `unblockable` (恐惧, 诱导, enemy abilities), 浮空, and 沉睡 (SLEEPING = 无法行动+无敌+不可阻挡) — is never blocked and is released at once: a sleeping enemy frees its blocker's slot, stays where it is and, once awake, is blocked again only by a blocker with room (§24.9). The nearest such operator wins (ties: scan order [ASSUMED]). It is re-checked every tick, moving or not, so another operator in contact with room takes the enemy over when its blocker dies, is withdrawn or is stunned, and an operator whose capacity frees up grabs an overlapping enemy; one that finds no room walks on. A stunned or frozen enemy is checked too — 晕眩 / 冻结 hold no 不可阻挡 (PRTS 异常效果: the STUN / FROZEN state machines stop its moves and attacks) —, so an operator redeployed beside a held enemy blocks it where it stands and lifts its 隐匿; one held short of contact is blocked once it walks in after the status (GitHub #232; until 0.2.0 the check waited for the status to end). A head-on enemy stops at contact (≈ 0.71 tile), outside the blocker's tile. Enemy uses `blockCnt` capacity (default 1). Blocked enemies stop moving and attack their blocker if melee (or anyone in range if ranged, blocker first). **Every blocker** — melee units (重装要塞 / 领主 / 哨戒铁卫 included), summons and a ranged operator on a melee tile alike — whose attack hits enemies may always target the enemies it blocks, in range or not, whatever its facing, and targets them first — a 速射手's air priority (优先攻击空中单位) excepted, which comes before the enemy it blocks (the owner's decision of 2026-10-08, GitHub #220) — ("可以选择且优先选择阻挡单位", PRTS 选择器; the user's rule after playtest #6, "阻挡了就一定要能打到": officially the collision pushes a blocked enemy to its blocker's front; `Battle.blockedTargets`, `targeting.js sortEnemyTargets`; §20.3 — it replaces the playtest #5 QA's melee-only restriction of §19.2). A healer (dmgType `heal`, or a skill attack turned into a heal) selects injured allies only and keeps healing while it blocks (PRTS 卫戍协议/帮助 "对于医疗干员（咒愈师分支除外），攻击目标为需要治疗的单位"; §21.17); 咒愈师 follow the blocker rule. The huge leaders are 自缚 + unblockable (§7).
@@ -167,11 +186,40 @@ Profession traits (default behaviours implemented once in the engine, keyed by `
 
 ---
 
+Unreleased funnel drones deal additional arts damage alongside the ordinary attack (PRTS 分支特性信息 驭械术师, §30.24).
+The engine keeps a 100 % ATK body instance and a separate drone instance, each through mitigation and shields.
+`funnelMul` holds only the drone ramp; the attack's `dmgMul` (至简's talent) is shared once. Extra attached drones
+raise `hits`, not the body count; 至简's charged S2 sets `funnelBodyHits` to two. Both share one `attackId`, attack
+hook and SP / charge use; additions have `addition` and `funnel` tags and do not count as `isAttack`. [ASSUMED] Body
+instances precede additions at the existing projectile impact; consecutive hits keep one ramp per volley. A skill
+that only buffs or retargets the normal attack keeps the body; `isSkill` is not the switch. `funnelBodyHits === 0`
+is drone-only (荒芜拉普兰德 S2): the ramp stays inside those hits. 耶拉 S2 detaches `funnelMul` the way 洛洛 S2 does:
+one 100 % body inside her range, the unreleased addition off, and the released drones as separate skill hits that
+keep the lock until the enemy dies or the skill ends (§30.24). 澄闪's skills stay on their own `dealDamage` paths.
+
+Funnel ramps return to the initial scale on a normal deployment, including automatic revival against the same living
+target (§30.25). The reset clears the current target, the scale and any per-target ramp map, and leaves other trait
+state alone. A free move (`moveRedeploy`, the same carry as a 秘术师's stored energy and 乌尔比安 S3) keeps the ramp.
+An in-flight shot recomputes the ramp when it lands, so a projectile launched before the reset can still step the new
+ramp.
+
+洛洛 S2 releases its trait drone into an independent skill tick (§30.26). Acquisition uses the body's normal target
+selection; a living selectable lock stays valid outside the body's range and returns only when that enemy dies or the
+skill ends. The body retains its own ranged ordinary attacks. The released ramp inherits the trait state but is
+isolated from older projectiles, and while it is out the unreleased addition is off. Ending the skill returns that
+ramp to the trait and restores the normal multiplier and the overload cap. S1 and other operators' funnel attacks keep
+their existing paths. [ASSUMED] There is no flight delay; an untargetable lock is dropped and retargeted; body control
+does not pause the released drone.
+
+---
+
 ## 7. Content modules (server/sim/content + match/effectsMeta handlers)
 
 Each domain file `server/sim/content/{tokens,bonds,garrisons,items,bands,enemies,bosses,devices,choices}.js` exports `install(battle)` (battle side; called once per Battle by `content/index.js → installContent`) and `registerMeta(registry)` (prep side; called once at server boot by `match/effectsMeta.js`, API documented in `docs/META.md`). Kits live one per file in `content/kits/ops/` (`export default { [baseChessId]: (bb, chess, def) => Kit }`), listed in `content/kits/index.js` (guide: `content/kits/README.md`). Content must be **data-driven from blackboards** (numbers never hard-coded when a blackboard key exists). Every effect gets at least one unit test in `test/content/*.test.js` using the `test/helpers/battleHarness.js` harness (provided by sim-core).
 
 - kits: all 112 visible chess + hidden ones used by effects (盟约·辅助干员), default skill + talents + trait specifics; tokens. The 72 non-collaboration 6★ DIY operators include 克莱门莎 (§28.1); her launch-day provisional mechanics are local to her kit. 黍 GUA-Y and 乌尔比安 CRU-Y follow the generated module blackboards and existing module-level rules (§28.2).
+  忍冬's 追凶 adds arts damage on the first qualifying instance too; the per-enemy window starts on that instance,
+  and repeated hits do not extend it. The addition keeps its own tag and re-entrancy guard (§30.3).
   克莱门莎 S2 removes dead, hidden, self-bound / teleport-immune and unreachable passengers before checking new
   boarding in the same tick. Each released passenger returns its current weight to the cabin's remaining budget
   and frees its slot (§28.27); neither corpses nor failed carries reserve capacity.
@@ -233,3 +281,14 @@ tile and attack-reach checks. Hand/temp rows, empty halves in single-player mode
 The general `onOwnBoard`/`onFieldBoard` contracts, other movement, summons and preparation placement remain unchanged.
 
 香槟炸弹 also rejects ordinary allied auras and inspiration as a device, through its shared internal selection barrier (§29.11). This does not isolate other unhealable summons or alter its detonation.
+
+§30.3 corrections: fortress targeting is blocked → ordinary range → own tile (selectable ground targets only).
+Automatic skill checks include that extra tile. Melee attacks are single-target unless the skill explicitly gives
+melee splash (Horn S2). Each shot retains its launch-time melee mode while flying. The bounty catapult's normal
+triple attack splashes at radius 1.5; 0.5 belongs to its 入戏 override. Clementia S3 accepts enemy erosion bursts only.
+Kjerag Ice and Tear Gas proc on actual carrier damage to enemies, including DoT/skill/splash; elemental gauge fill,
+HP loss, bare attack events and zero damage do not qualify. These changes do not alter other items' attack hooks.
+
+Xi alone opts into hostile selection immunity during its ten-second post-rebirth invincibility (§30.8).
+The generic `invulnerable` flag remains damage protection only; other rebirth kits retain their existing choices.
+Presence-only and SP-only skill triggers are not suppressed merely because their enemies are unselectable.

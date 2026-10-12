@@ -80,18 +80,22 @@ test('a 自选 pick: 澄闪 is offered at tiers 5 and 6 and a roster with her pa
     { ok: true, picks: { [SLOT[6]]: { charId: GD, skillIndex: 2, uniEquipId: FY } } });
 });
 
-test('her normal attack (no skill): one drone hit per attack — init, +delta per hit on the same target, up to the cap (FUN-X from 0.35, FUN-Y to 1.2); 精准导流 lowers the RES it meets', () => {
-  for (const f of [[5, false, null], [5, true, FX], [6, true, FY]]) {
+test('her normal attack (no skill): a body hit and one drone addition — init, +delta per hit on the same target, up to the cap (FUN-X from 0.35, FUN-Y to 1.2); 精准导流 lowers the RES of both', () => {
+  for (const f of FORMS_ALL) {
     const [tier, elite, mod] = f;
     const { h, u } = field({ tier, elite, mod, skill: 2 });
     const e = h.spawn('enemy_res', { pos: [10, 6] });
     h.run(12);
     const hits = mine(h, u).filter((c) => c.target === e && c.dmg.isAttack);
+    const drones = mine(h, u).filter((c) => c.target === e && c.dmg.tags.includes('funnel'));
     assert.ok(hits.length >= 8, `${label(f)}: ${hits.length} attacks`);
+    assert.equal(drones.length, hits.length, `${label(f)}: one addition per body hit`);
     const tb = traitOf(tier, elite, mod).bb, pen = talentOf(tier, elite, mod, 1).bb.magic_resist_penetrate_fixed;
     hits.slice(0, 8).forEach((c, i) => {
       const ramp = Math.min(tb.max_atk_scale, tb.init_atk_scale + i * tb.delta_atk_scale);
-      approx(c.amount, u.s.atk * ramp * (1 - (50 - pen) / 100), `${label(f)}: attack ${i + 1} at ${ramp}`);
+      approx(c.amount, u.s.atk * (1 - (50 - pen) / 100), `${label(f)}: body attack ${i + 1}`);
+      approx(drones[i].amount, c.amount * ramp, `${label(f)}: drone at ${ramp}`);
+      assert.equal(drones[i].dmg.attackId, c.dmg.attackId, 'same attack action');
       assert.equal(c.type, 'arts');
     });
     done(h);

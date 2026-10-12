@@ -525,6 +525,9 @@ export class AudioManager {
     this.voiceGate = new VoiceGate();
     this.voiceNode = null;    // { src, gain, url, token } of the line on air
     this.voiceToken = 0;
+    this.bondCueNode = null;
+    this.bondCueToken = 0;
+    this.bondCueScope = null;
     this.voiceOverrides = {};
     this.voiceLang = 'cn';    // settings 语音语言: 'cn' (audio.voice) | 'jp' (audio.voiceJp, falling back to audio.voice)
     this.startVoiceDone = false; // 行动出发 of this field (the first operator deployed says it)
@@ -666,6 +669,7 @@ export class AudioManager {
       muted: typeof v?.muted === 'boolean' ? v.muted : this.volumes.muted,
     };
     this._applyVolumes();
+    if (this.volumes.muted || this.volumes.sfx <= 0) this.stopBondCue();
   }
 
   /**
@@ -834,6 +838,58 @@ export class AudioManager {
 
   // ---- SFX ------------------------------------------------------------------------------------------------
 
+  /**
+   * True while a cue of `scope` started less than `ms` ago. One preparation update can both add layers (m.layer → layerGain)
+   * and raise the active-bond count (screens/game.js): the second trigger of that same update keeps the playing cue
+   * instead of cutting it off and starting it again. A later gain still replaces the cue at once (no cooldown).
+   */
+  bondCueRecent(scope, ms = 400) {
+    if (this.bondCueScope !== scope || typeof performance === 'undefined') return false;
+    return performance.now() - (this.bondCueAt || 0) < ms;
+  }
+
+  /** The official ADD_BOND bank has maxSoundAllowed=1 / popOldest=true. No extra cooldown. */
+  stopBondCue(scope = null) {
+    if (scope && this.bondCueScope !== scope) return;
+    this.bondCueToken++;
+    this.bondCueScope = null;
+    const cur = this.bondCueNode;
+    this.bondCueNode = null;
+    if (!cur) return;
+    try { cur.src.stop(); } catch { /* already ended */ }
+    cur.end();
+  }
+
+  _playBondCue(url, volume, scope = 'prep') {
+    this.stopBondCue();
+    const token = this.bondCueToken, ctx = this.ctx;
+    if (!ctx || !url || this.volumes.muted || this.volumes.sfx <= 0) return;
+    this.bondCueScope = scope;
+    this.bondCueAt = typeof performance !== 'undefined' ? performance.now() : 0;
+    this._buffer(url).then((buf) => {
+      if (!buf || token !== this.bondCueToken || ctx !== this.ctx || this.volumes.muted || this.volumes.sfx <= 0) return;
+      let src, gain;
+      const end = () => {
+        try { src?.disconnect(); gain?.disconnect(); } catch { /* ignore */ }
+        if (this.bondCueNode?.src === src) this.bondCueNode = null;
+      };
+      try {
+        src = ctx.createBufferSource(); gain = ctx.createGain();
+        src.buffer = buf;
+        gain.gain.value = Math.max(0, Math.min(1.5, volume));
+        src.connect(gain); gain.connect(this.sfxGain);
+        src.onended = end;
+        this.bondCueNode = { src, gain, end };
+        src.start();
+      } catch { end(); }
+    }, () => {});
+  }
+
+  /** One cue per real gain, including several layers at once or an inactive bond. */
+  layerGain(bondId, add, scope = 'prep') {
+    if (typeof bondId === 'string' && bondId && Number.isFinite(add) && add > 0) this.sfx('bondUp', { volume: 0.7, scope });
+  }
+
   _play(url, { volume = 1, rate = 1, limited = false, unitKey = null } = {}) {
     if (!this.ctx || !url || this.volumes.muted || this.volumes.sfx <= 0) return;
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -862,12 +918,15 @@ export class AudioManager {
   /**
    * UI sound by name (sfx.ui keys). Unknown names are ignored.
    * @param {string} name
-   * @param {{ volume?: number }} [o]
+   * @param {{ volume?: number, scope?: string }} [o]
    */
   sfx(name, o = {}) {
     try {
       const url = this.getManifest()?.audio?.sfx?.ui?.[name];
-      if (typeof url === 'string') this._play(url, { volume: o.volume ?? 0.9 });
+      if (typeof url === 'string') {
+        if (name === 'bondUp') this._playBondCue(url, o.volume ?? 0.9, o.scope);
+        else this._play(url, { volume: o.volume ?? 0.9 });
+      }
     } catch { /* ignore */ }
   }
 
@@ -1013,6 +1072,7 @@ export class AudioManager {
 
   /** Reset the unit map for a new field (m.field.units = UnitInfo[]). */
   setFieldUnits(units) {
+    this.stopBondCue();
     this.units.clear();
     // unit ids belong to one battle: a cast still held for a unit of the field left must not sound for a unit of the new
     // one that happens to share its id
@@ -1056,7 +1116,9 @@ export class AudioManager {
         if (!Array.isArray(e)) continue;
         const kind = e[0];
         if (kind === 'spawn') { this._track(e[1]); continue; }
-        if (kind === 'atk') {
+        if (kind === 'layer') {
+          this.layerGain(e[2], e[3], 'battle');
+        } else if (kind === 'atk') {
           // a chain bounce: its first id is the previous target, whose attack sound this is not (see header)
           if (CHAIN_KINDS.has(e[3])) { this.lastAttacker.delete(e[2]); continue; }
           const src = this.units.get(e[1]);
@@ -1176,6 +1238,11 @@ export function installAudio(deps) {
       const sync = (s) => {
         try {
           const pub = s.match?.public ?? null;
+          if (deps.selectRoute(s) !== 'game') audio.stopBondCue();
+          else if (![PHASE.COMBAT, PHASE.UNITE, PHASE.FINAL_ASSAULT, PHASE.HIDDEN_CORE].includes(pub?.phase)) {
+            // A new prep gain can precede its m.public phase update. Cancel only the previous battle's cue.
+            audio.stopBondCue('battle');
+          }
           // 开战 BGM: the round's own track out of bgm.combatAlts (骑士之日 / 无畏者 are fixed per round, not drawn),
           // so every client of a room hears the same one, a mid-fight re-render (or a teammate view) never switches,
           // and the next round moves on by the table. 联防 shares its round ⇒ same key ⇒ the loop keeps playing.

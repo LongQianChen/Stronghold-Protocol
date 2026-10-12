@@ -1,0 +1,46 @@
+name: PR title labels
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Run only this trusted script; never check out or execute PR head code.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            if (context.payload.action === 'edited' && !context.payload.changes?.title) return;
+
+            // Fetch current metadata so delayed events do not use an outdated title or labels.
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.issue.number,
+            });
+            const match = /^(fix|bug|docs|feat|feature)(?:\([^()\r\n]+\))?[:：]/i.exec(pr.title.trim());
+            if (!match) return;
+
+            const label = {
+              fix: 'bug', bug: 'bug', docs: 'documentation', feat: 'enhancement', feature: 'enhancement',
+            }[match[1].toLowerCase()];
+            if (pr.labels.some(({ name }) => name.toLowerCase() === label)) return;
+
+            // Only use labels already defined in this repository.
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.info(`Skipping missing repository label: ${label}`);
+              return;
+            }
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.issue.number,
+              labels: [label],
+            });

@@ -910,6 +910,50 @@ describe('in-match UI (mock harness, headless Chrome)', { skip: !ENABLED && 'set
     });
   }
 
+  test('session replacement: recovery action stays clickable above the AI away overlay', async () => {
+    const { page, problems } = await open('phase=PREP', { render: 'fallback' });
+    await page.click('.gtop__exit');
+    await page.waitForSelector('.modal');
+    const buttons = await page.$$('.modal__actions .btn');
+    await buttons[1].click(); // 暂离
+    await page.waitForSelector('.awayov[aria-label="AI 托管中"]', { visible: true });
+    await page.evaluate(async () => {
+      const { net } = await import('/js/net.js');
+      globalThis.__RECOVERY_CONNECTS__ = 0;
+      net.connect = () => { globalThis.__RECOVERY_CONNECTS__++; };
+      globalThis.__MOCK__.store.set({ connection: { status: 'closed', ping: 0, attempt: 0, retryAt: 0, lastError: { code: 'REPLACED' }, everOnline: true } });
+    });
+    await page.waitForSelector('.conn-banner .btn', { visible: true });
+    await sleep(300);
+    assert.deepEqual(await page.evaluate(() => {
+      const conn = globalThis.__MOCK__.store.get().connection;
+      return [conn.status, conn.lastError.code];
+    }), ['closed', 'REPLACED']);
+    assert.ok(await page.$('.awayov'), 'the away overlay remains during recovery');
+    assert.match(await page.$eval('.conn-banner', (el) => el.textContent), /该身份已在其他页面登录/);
+    assert.equal(await page.$eval('.conn-banner .btn', (el) => el.textContent.trim()), '在此页面继续');
+    const center = await page.$eval('.conn-banner .btn', (btn) => {
+      const r = btn.getBoundingClientRect();
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      return { x, y, hit: btn.contains(document.elementFromPoint(x, y)) };
+    });
+    assert.ok(center.hit, 'the recovery button receives pointer input above the away overlay');
+    await page.screenshot({ path: path.join(OUT, 'ui-recovery-above-away.png') });
+    await page.evaluate(async () => {
+      const { confirmDialog } = await import('/js/ui/components.js');
+      void confirmDialog({ title: 'Recovery layering check', text: 'Global dialog stays above connection recovery.' });
+    });
+    await page.waitForSelector('.modal');
+    assert.equal(await page.$eval('.conn-banner .btn', btn => {
+      const r = btn.getBoundingClientRect(); return btn.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+    }), false, 'the connection banner does not steal input from a global modal');
+    await page.keyboard.press('Escape'); await page.waitForSelector('.modal', { hidden: true });
+    await page.mouse.click(center.x, center.y);
+    assert.equal(await page.evaluate(() => globalThis.__RECOVERY_CONNECTS__), 1, 'the pointer click invokes the recovery action');
+    assert.deepEqual(problems.filter((p) => p.startsWith('pageerror:')), []);
+    await page.close();
+  });
+
   test('watch: the other pair of the Final Assault is refused and the eye stays put', async () => {
     const { page, problems } = await open('phase=FINAL_ASSAULT');
     const rows = await page.$$('.team__row');

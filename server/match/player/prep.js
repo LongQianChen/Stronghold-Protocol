@@ -33,15 +33,13 @@ export class PlayerPrep {
       if (!this.gd.item(slot.id)) return fail(ERR.BAD_TARGET);
       if (!this.m.itemPoolFor(this).canGain(slot.id)) return fail(ERR.SOLD_OUT);
       if (handFull) return fail(ERR.HAND_FULL);
-    } else {
+    } else if (slot.kind === 'chess') {
       const rec = this.gd.chess(slot.id);
       if (!rec || (rec.isDiy && !rec.diyFor)) return fail(ERR.BAD_TARGET);
-      const base = this.gd.baseIdOf(slot.id);
-      const need = rec.isGolden ? this.gd.goldenCopies : 1;
-      const pool = this.poolOf(base); // the shared pool, or this player's 自选 stock
-      if (pool.has(base) && pool.left(base) < need) return fail(ERR.SOLD_OUT);
+      // Owner decision 2026-10-11 (#498): already displayed operator rewards survive stock exhaustion.
+      // acquireChess records the deficit. Item rewards above still require itemPool.canGain.
       if (handFull) return fail(ERR.HAND_FULL);
-    }
+    } else return fail(ERR.BAD_TARGET);
     const price = Number.isFinite(slot.price) && slot.price > 0 ? Math.trunc(slot.price) : 0;
     if (price > this.funds) return fail(ERR.NO_FUNDS);
     slot.sold = true;

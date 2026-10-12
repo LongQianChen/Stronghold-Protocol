@@ -20,7 +20,9 @@
 // THIRD-PARTY-NOTICES.md, README.md, CHANGELOG.md, docs/PLAYING.md and docs/DEPLOY.md. `npm ci --omit=dev` in the
 // stage adds the production node_modules and (postinstall) public/vendor. The full zip adds the git-ignored art: the
 // files data/assets.json lists, public/fonts, and the local-client extraction (public/assets/local/,
-// data/local-assets.json) when present — nothing else on disk, so art the data no longer lists (焰狐龙梓兰, left out of
+// data/local-assets.json) when present, including the 0.2.5 battlefield scenes under public/assets/local/scene/
+// when this machine extracted them. Missing scenes are not an error: the board keeps the metal tiles, and the
+// summary says so. Nothing else on disk ships, so art the data no longer lists (焰狐龙梓兰, left out of
 // 自选 in 0.2.0, or files of an old mapping) never ships even when this machine still has it. FULL_ZIP_JP_VOICE (below)
 // decides whether the full zip carries the Japanese voice dub too (default: yes).
 // Left out: test/, the maintainer tools (build-data, golden, botbench, i18n, check-imports, this file …),
@@ -35,6 +37,14 @@
 // exactly the plan before zipping. Generated into the stage: packs/index.json, the pack index of the shipped packs
 // (tools/packs.mjs writePackIndex — what the server's GET /packs/index.json answers, for a static host), when any pack
 // ships (a language file of public/i18n/, a packs/<id>/pack.json).
+// The staged package.json is not a byte copy of the repository file (GitHub #531). A script stays only when every
+// `node <file>` it names is in the zip and it names at least one: start, dev, setup, doctor, launch, postinstall,
+// vendor, assets. `npm test` (`node --test`, and test/ is not shipped), golden, build-data, lint, typecheck and this
+// file are removed, so a player never gets a run that reports zero tests and exits 0. The same stage rewrites the
+// shipped Markdown (GitHub #530): a relative link whose target is in the zip stays relative; a picture becomes
+// <repo>/raw/v<tag>/<path>; another missing file becomes <repo>/blob/v<tag>/<path>; `../../releases/latest` becomes
+// the repository releases/latest URL. The tag is `v` plus the package version with a trailing `-dev` removed. The
+// copies in the git checkout stay relative.
 // The account name comes from the OS at run time (never written in the repository): SP_PACKAGE_SCAN_USER=0 skips it
 // (a name that is a common word), SP_PACKAGE_SCAN_NAMES=a,b adds more names to refuse.
 //
@@ -93,6 +103,10 @@ export const shipsPacks = (files) => files.some((f) => /^public\/i18n\/[^/]+\.js
 const NOT_TRACKED_SHIP = ['public/dev/', 'public/assets/', 'public/fonts/', 'public/vendor/'];
 /** The npm scripts a player runs: each `node <file>` of them must ship. */
 export const PLAYER_NPM_SCRIPTS = ['start', 'setup', 'doctor', 'launch', 'postinstall', 'vendor', 'assets', 'assets:pack'];
+/** Markdown copied into the zip. Relative links to anything else are rewritten at stage time. */
+export const PLAYER_MARKDOWN = [...ROOT_FILES, ...PLAYER_DOCS].filter((f) => f.endsWith('.md'));
+/** Where a packaged doc link points when the file itself is not in the zip. */
+export const GITHUB_REPO = 'https://github.com/sganggs/Stronghold-Protocol';
 
 /**
  * THE SWITCH for the Japanese voice dub in the full zip (`audio.voiceJp` of data/assets.json: 2674 files under
@@ -105,6 +119,8 @@ export const PLAYER_NPM_SCRIPTS = ['start', 'setup', 'doctor', 'launch', 'postin
 export const FULL_ZIP_JP_VOICE = true;
 /** Where the JP dub lies (plan.mjs voiceAlt: audio/voice/<lang>/<charId>/<file>). */
 export const JP_VOICE_DIR = 'public/assets/audio/voice/jp/';
+/** Extracted official battlefield scenes (0.2.5 asset pack). Already ignored with public/assets/. */
+const SCENE_ART_PREFIX = 'public/assets/local/scene/';
 
 /**
  * Refused in a plan and in a stage: 0.1.x's list (owner-only notes, the promo project, caches, per-machine config) and
@@ -220,9 +236,11 @@ export const manifestFiles = listedArtFiles;
  * data/local-assets.json (when present). `missing`: listed files not on disk; `orphans`: files under public/assets
  * that nothing lists (left out); `held`: listed files the zip holds back on purpose — the JP voice dub when `jpVoice`
  * (FULL_ZIP_JP_VOICE) is off: neither shipped nor missing, and never deleted by an update.
+ * `scenes`: the files under public/assets/local/scene/ (the 0.2.5 battlefield scenes). They are also in `files`.
+ * A lite plan and a machine that has not extracted them return `scenes: []`; packaging still succeeds.
  */
 export function artPlan(root, { lite = false, jpVoice = FULL_ZIP_JP_VOICE } = {}) {
-  if (lite) return { files: [], missing: [], orphans: [], held: [], local: false };
+  if (lite) return { files: [], missing: [], orphans: [], held: [], local: false, scenes: [] };
   const listed = manifestFiles(readJson(path.join(root, 'data', 'assets.json')) ?? {});
   const local = isFile(path.join(root, 'data', 'local-assets.json'));
   if (local) for (const f of manifestFiles(readJson(path.join(root, 'data', 'local-assets.json')) ?? {})) listed.add(f);
@@ -242,7 +260,11 @@ export function artPlan(root, { lite = false, jpVoice = FULL_ZIP_JP_VOICE } = {}
   // without case: on Windows / macOS a file whose name differs only in case is the listed one (fetch-assets orphanFiles)
   const lower = new Set([...files, ...held].map((f) => f.toLowerCase()));
   const orphans = listTree(root, 'public/assets').filter((f) => !lower.has(f.toLowerCase()));
-  return { files: [...files].sort(), missing: missing.sort(), orphans, held: held.sort(), local };
+  const sorted = [...files].sort();
+  return {
+    files: sorted, missing: missing.sort(), orphans, held: held.sort(), local,
+    scenes: sorted.filter((f) => f.startsWith(SCENE_ART_PREFIX)),
+  };
 }
 
 const URL_MOUNTS = [['/data/', 'data/'], ['/shared/', 'shared/'], ['/sim/', 'server/sim/']];
@@ -290,6 +312,116 @@ export function entryProblems(pkg, files) {
     }
   }
   return out;
+}
+
+const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|svg)$/i;
+const ABSOLUTE_OR_ANCHOR = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
+
+/** `node <file>` paths a script names. A bare `node --test` names none. */
+export function playerScriptTargets(cmd) {
+  return [...String(cmd ?? '').matchAll(/\bnode\s+(?:--[\w-]+\s+)*([\w./-]+\.m?js)\b/g)].map((m) => m[1]);
+}
+
+/**
+ * Honest in a player zip: every `node <file>` it names is shipped, and it names at least one. `eslint`, `tsc` and
+ * `node --test` (no file, and test/ is not shipped) are not.
+ * @param {string} cmd
+ * @param {Set<string> | string[]} shipped
+ */
+export function playerScriptOk(cmd, shipped) {
+  const files = playerScriptTargets(cmd);
+  if (!files.length) return false;
+  const have = shipped instanceof Set ? shipped : new Set(shipped);
+  return files.every((f) => have.has(f));
+}
+
+/**
+ * package.json as the zip should ship it. Player scripts are always kept (entryProblems reports one whose file is
+ * missing). Any other script is kept only when playerScriptOk. Key order of the rest of the object stays.
+ * @param {object} pkg
+ * @param {Set<string> | string[]} shipped tracked player files (art is not a script target)
+ */
+export function playerPackageJson(pkg, shipped) {
+  const have = shipped instanceof Set ? shipped : new Set(shipped);
+  const scripts = {};
+  for (const [name, cmd] of Object.entries(pkg?.scripts || {})) {
+    if (PLAYER_NPM_SCRIPTS.includes(name) || playerScriptOk(cmd, have)) scripts[name] = cmd;
+  }
+  const next = {};
+  let sawScripts = false;
+  for (const [k, v] of Object.entries(pkg || {})) {
+    if (k === 'scripts') { next.scripts = scripts; sawScripts = true; }
+    else next[k] = v;
+  }
+  if (!sawScripts) next.scripts = scripts;
+  return next;
+}
+
+/** Problems in the package.json the zip would write. Empty when every remaining script starts shipped files. */
+export function playerPackageProblems(pkg, files) {
+  const shipped = files instanceof Set ? files : new Set(files);
+  const next = playerPackageJson(pkg, shipped);
+  const out = [];
+  for (const name of PLAYER_NPM_SCRIPTS) {
+    if (pkg?.scripts?.[name] != null && next.scripts?.[name] == null) out.push(`packaged npm script "${name}" was dropped`);
+  }
+  for (const [name, cmd] of Object.entries(next.scripts || {})) {
+    if (!playerScriptOk(cmd, shipped)) out.push(`packaged npm run ${name} does not start shipped files`);
+  }
+  return out;
+}
+
+/**
+ * `v` + version, with a trailing `-dev` removed (`0.2.5-dev` → `v0.2.5`, `0.2.4` → `v0.2.4`).
+ * [ASSUMED] an unreleased `-dev` build points player docs at the tag that version will use.
+ * @param {string} version
+ */
+export function releaseTag(version) {
+  return `v${String(version ?? '').replace(/-dev$/, '')}`;
+}
+
+function docLinkPath(fromFile, href) {
+  const raw = String(href).split('#')[0];
+  const dir = path.posix.dirname(posixRel(fromFile));
+  return path.posix.normalize(path.posix.join(dir, raw));
+}
+
+/**
+ * The href a packaged copy of `fromFile` should use. Shipped targets stay relative (fragment included). Anything
+ * else in the repository becomes a GitHub blob (or raw, for a picture) at releaseTag(version). `../../releases/latest`
+ * becomes the repository's releases page. A different climb out of the repository throws.
+ * @param {string} href
+ * @param {string} fromFile path of the markdown file inside the zip
+ * @param {Set<string> | string[]} shipped
+ * @param {string} version package.json version
+ */
+export function playerDocHref(href, fromFile, shipped, version) {
+  if (ABSOLUTE_OR_ANCHOR.test(href)) return href;
+  const hash = href.includes('#') ? href.slice(href.indexOf('#')) : '';
+  const norm = docLinkPath(fromFile, href);
+  if (norm.startsWith('..') || path.posix.isAbsolute(norm)) {
+    const tail = norm.replace(/^(?:\.\.\/)+/, '');
+    if (tail === 'releases/latest') return `${GITHUB_REPO}/releases/latest${hash}`;
+    throw new Error(`packaged doc ${fromFile} links outside the repository: ${href}`);
+  }
+  const have = shipped instanceof Set ? shipped : new Set(shipped);
+  if (have.has(norm)) return href;
+  const kind = IMAGE_EXT.test(norm) ? 'raw' : 'blob';
+  return `${GITHUB_REPO}/${kind}/${releaseTag(version)}/${norm}${hash}`;
+}
+
+function rewriteDocLine(line, fromFile, shipped, version) {
+  return line.replace(/(!?\[[^\]]*\]\()([^)\s]+)\)/g, (_all, pre, href) => `${pre}${playerDocHref(href, fromFile, shipped, version)})`);
+}
+
+/** Rewrite inline links in a shipped markdown file. Fenced code blocks are left as written. */
+export function rewritePlayerDoc(text, fromFile, shipped, version) {
+  let fenced = false;
+  return String(text).split('\n').map((line) => {
+    if (/^```/.test(line)) { fenced = !fenced; return line; }
+    if (fenced) return line;
+    return rewriteDocLine(line, fromFile, shipped, version);
+  }).join('\n');
 }
 
 /**
@@ -376,6 +508,7 @@ export function plan(root, opts = {}) {
   if (!lite && !art.files.some((f) => f.startsWith('public/assets/'))) problems.push('no art under public/assets: run npm run setup first, or build --lite');
   for (const p of importProblems(root, keep)) problems.push(p);
   for (const p of entryProblems(pkg, keep)) problems.push(p);
+  for (const p of playerPackageProblems(pkg, keep)) problems.push(p);
   if (!opts.allowDirty) for (const f of dirtyFiles(root, keep)) problems.push(`uncommitted change: ${f} (commit it, or --allow-dirty)`);
   const names = scanNames(opts.env || process.env);
   const modules = opts.measure !== false || (opts.scan !== false && names.length) ? prodModuleFiles(root, lock) : [];
@@ -401,6 +534,7 @@ export function plan(root, opts = {}) {
   return {
     version: pkg.version || '0.0.0', lite, tracked: keep, art: art.files, generated, files, dropped, orphans: art.orphans,
     held: art.held, localArt: art.local, problems, names: names.length, scanned,
+    scenes: { files: art.scenes || [], bytes: sumBytes(root, art.scenes || []) },
     bytes: {
       tracked: trackedBytes, art: artBytes, modules: modulesBytes, vendor: vendorBytes,
       total: trackedBytes + artBytes + modulesBytes + vendorBytes,
@@ -419,6 +553,12 @@ export function formatSummary(p) {
   ];
   if (!p.lite) {
     lines.push(`art: ${p.art.length} files, ${MB(p.bytes.art)} (data/assets.json, public/fonts${p.localArt ? ', public/assets/local + data/local-assets.json' : '; no local-client art here'})`);
+    const sceneFiles = p.scenes?.files;
+    if (sceneFiles?.length) {
+      lines.push(`battlefield scenes: ${sceneFiles.length} files, ${MB(p.scenes.bytes || 0)} (0.2.5 asset pack, public/assets/local/scene; the metal board is the fallback when a stage has none)`);
+    } else if (p.scenes) {
+      lines.push('battlefield scenes: none on this machine (the full bundle ships the metal board; fetch_scenes.py then extract.py --only scene before packaging to include the 11 official scenes)');
+    }
   }
   if (p.generated?.length) lines.push(`generated: ${p.generated.join(', ')} (the pack index of the shipped packs, for a static host)`);
   lines.push(`production node_modules: ${MB(p.bytes.modules)} · public/vendor: ${MB(p.bytes.vendor)} (npm ci --omit=dev and its postinstall)`);
@@ -496,6 +636,24 @@ function copyInto(from, to, rel) {
   fs.chmodSync(dst, fs.statSync(src).mode & 0o777);
 }
 
+/** Rewrite the staged package.json and the shipped markdown. The git checkout is not touched. Throws on a bad link. */
+function rewritePlayerStage(stage, p) {
+  const shipped = new Set([...(p.tracked || []), ...(p.generated || [])]);
+  const pkgPath = path.join(stage, 'package.json');
+  if (isFile(pkgPath)) {
+    const pkg = readJson(pkgPath);
+    if (!pkg) throw new Error('package.json in the stage is not JSON');
+    fs.writeFileSync(pkgPath, `${JSON.stringify(playerPackageJson(pkg, shipped), null, 2)}\n`);
+  }
+  for (const rel of PLAYER_MARKDOWN) {
+    const file = path.join(stage, rel);
+    if (!isFile(file)) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    const next = rewritePlayerDoc(text, rel, shipped, p.version);
+    if (next !== text) fs.writeFileSync(file, next);
+  }
+}
+
 function freshTargets(targets, force) {
   for (const t of targets) {
     if (!fs.existsSync(t)) continue;
@@ -512,6 +670,7 @@ function makeStage(root, p, stage, { install, env, log }) {
   const generated = new Set(p.generated || []);
   log(`copying ${p.files.length - generated.size} files → ${stage}`);
   for (const rel of p.files) if (!generated.has(rel)) copyInto(root, stage, rel);
+  rewritePlayerStage(stage, p);
   if (generated.has(GENERATED_PACK_INDEX)) {
     const index = writePackIndex(stage, path.join(stage, GENERATED_PACK_INDEX));
     log(`${GENERATED_PACK_INDEX}: ${index.packs.map((x) => `${x.type} ${x.id}`).join(', ') || 'no pack'}`);

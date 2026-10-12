@@ -493,6 +493,11 @@ export class SkillRuntime {
         || (this.triggerEnemies && b.enemiesInKeys(keys, u, TRIGGER_PROFILE).length > 0);
       if (b.enemiesInKeys(keys, u, u.profile).length > 0 || this._allyTargetIn(keys)) return true;
     }
+    if (!this.healSkill && u.profile?.fortress) {
+      // The branch's own-tile melee range also satisfies the basic cast condition for unblockable fragments.
+      const here = [u.tileR * COLS + u.tileC];
+      if (b.enemiesInKeys(here, u, u.profile).length > 0 || this._allyTargetIn(here)) return true;
+    }
     // the enemies a unit blocks are always its targets (Battle.blockedTargets), in range or not — PRTS 卫戍协议/帮助
     // "敌人被近战干员自身阻挡" satisfies the target condition of the basic strategy (a ranged blocker too: user playtest #6)
     if (!this.healSkill && u.blocking.length && b.blockedTargets(u, u.profile).length > 0) return true;

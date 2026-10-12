@@ -12,10 +12,10 @@ export default {
     const hits = textNum(d.skill?.description, /连续攻击(\d+|[一二两三四五])次/, 2);
     const insight = (battle) => (battle.rng.chance(num(t0.prob, 0)) ? num(t0.atk_scale, 1) : 1);
     return {
-      trait: { dmgMul: (battle, unit, target) => funnelMap(battle, unit, target) * insight(battle) },
+      trait: { funnelMul: funnelMap, dmgMul: insight },
       skill: {
         kind: charges > 1 ? 'charges' : 'instant',
-        attack: { atkScale: num(bb.atk_scale, 1), hits, dmgType: 'arts', dmgMul: (battle) => insight(battle) },
+        attack: { atkScale: num(bb.atk_scale, 1), hits, funnelBodyHits: hits, dmgType: 'arts', dmgMul: insight },
       },
       // S1 迅捷打击·γ型: ATK / ASPD + (the drones' ramp and 忽有所悟 stay on every attack through the trait)
       skills: altSkills(chess, d, bb, { 'skcom_quickattack[3]': statSkill }),

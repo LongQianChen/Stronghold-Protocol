@@ -6,15 +6,54 @@ import { pairPlayers, bossPoolHp, SharedBossPool, hiddenEligible } from '../../s
 import { GameData } from '../../server/match/gamedata.js';
 import { FakeBattle } from './fakeBattle.js';
 import { DATA, makeMatch, checkInvariants } from './harness.js';
+import { createRng } from '../../server/sim/rng.js';
 
 const bossFields = () => FakeBattle.instances.filter((b) => b.kind === 'boss' || b.kind === 'hidden');
 
-test('pairing by seat: (1,2), (3,4); an odd player alone', () => {
+test('pairing is seeded, independent of input order, includes everyone once and can draw every partner', () => {
   const p = (seat) => ({ seat, playerId: `s${seat}` });
-  assert.deepEqual(pairPlayers([p(0)]).map((g) => g.map((x) => x.seat)), [[0]]);
-  assert.deepEqual(pairPlayers([p(2), p(0)]).map((g) => g.map((x) => x.seat)), [[0, 2]]);
-  assert.deepEqual(pairPlayers([p(3), p(1), p(0)]).map((g) => g.map((x) => x.seat)), [[0, 1], [3]]);
-  assert.deepEqual(pairPlayers([p(3), p(1), p(0), p(2)]).map((g) => g.map((x) => x.seat)), [[0, 1], [2, 3]]);
+  const partners = new Set(), lone = new Set();
+  for (let seed = 1; seed <= 64; seed++) for (const n of [1, 2, 3, 4]) {
+    const alive = Array.from({ length: n }, (_, i) => p(i));
+    const groups = pairPlayers(alive, createRng(seed));
+    assert.deepEqual(groups, pairPlayers([...alive].reverse(), createRng(seed)));
+    assert.equal(groups.length, Math.ceil(n / 2));
+    assert.deepEqual(groups.flat().map(x => x.seat).sort(), alive.map(x => x.seat));
+    if (n === 4) partners.add(groups.find(g => g.some(x => x.seat === 0)).find(x => x.seat !== 0).seat);
+    if (n === 3) lone.add(groups.find(g => g.length === 1)[0].seat);
+  }
+  assert.deepEqual([...partners].sort(), [1, 2, 3]);
+  assert.deepEqual([...lone].sort(), [0, 1, 2]);
+});
+
+test('previous boss partners and sides persist; only orphaned survivors form a new pair', () => {
+  const all = [0, 1, 2, 3].map(seat => ({ seat, playerId: `s${seat}` }));
+  const previous = [['s3', 's0'], ['s2', 's1']];
+  const ids = groups => groups.map(g => g.map(p => p.playerId));
+  assert.deepEqual(ids(pairPlayers(all, createRng(99), previous)), previous);
+  assert.deepEqual(ids(pairPlayers(all.filter(p => p.seat !== 0), createRng(99), previous)), [['s2', 's1'], ['s3']]);
+  assert.deepEqual(ids(pairPlayers(all.filter(p => p.seat > 1), createRng(99), previous)), [['s3', 's2']]);
+});
+
+test('boss preview, actual fields and Hidden Core retain one per-match draw', () => {
+  const h = makeMatch({ mode: 'coop', difficulty: 'HARD', humans: 4, seed: 31, fake: true,
+    script: b => ['boss', 'hidden'].includes(b.kind) ? { bossDps: 1e9 } : {} }).start();
+  try {
+    h.drive(() => h.m.phase === PHASE.PREP && h.m.round === 14);
+    const pairs = structuredClone(h.m.bossPairs);
+    assert.deepEqual(h.m.bossWaves.map(w => w.players), pairs);
+    for (const p of h.m.order) {
+      p.bondCountBonus.yanShip = 3; p.layers.yanShip = 400; p.recompute();
+      const group = h.m.bossGroupOf(p);
+      assert.equal(group.side, pairs.find(g => g.includes(p.playerId)).indexOf(p.playerId) === 0 ? 'L' : 'R');
+    }
+    h.drive(() => h.m.phase === PHASE.FINAL_ASSAULT);
+    assert.deepEqual(h.m.fields.map(f => f.players), pairs);
+    h.drive(() => h.m.phase === PHASE.PREP && h.m.round === 15);
+    assert.deepEqual(h.m.bossWaves.map(w => w.players), pairs);
+    h.drive(() => h.m.phase === PHASE.HIDDEN_CORE);
+    assert.deepEqual(h.m.fields.map(f => f.players), pairs);
+  } finally { h.m.dispose(); }
 });
 
 test('boss pool = bloodPoint[difficulty] × the players alive at the fight\'s start (solo × 1) × tuning; config restores the fixed pool; shared and never negative', () => {
@@ -225,22 +264,24 @@ test('Final Assault: a fighting player may only watch its own boss field; elimin
   h.drive(() => m.phase === PHASE.PREP && m.round === 14);
   h.ps('p_3').eliminate(13);
   h.drive(() => m.phase === PHASE.FINAL_ASSAULT);
-  assert.deepEqual(m.fields.map((f) => [f.fieldId, f.players]), [['b1', ['p_0', 'p_1']], ['b2', ['p_2']]]);
-  assert.equal(m.handle('p_0', { t: 'g.watch', fieldId: 'b2' }).error, 'BAD_TARGET', 'the other group is hidden');
-  assert.equal(m.handle('p_2', { t: 'g.watch', fieldId: 'b1' }).error, 'BAD_TARGET');
-  assert.deepEqual(m.handle('p_1', { t: 'g.watch', fieldId: 'b1' }), { ok: true });
+  const pair = m.fields.find(f => f.players.length === 2), lone = m.fields.find(f => f.players.length === 1);
+  assert.deepEqual(m.fields.flatMap(f => f.players).sort(), ['p_0', 'p_1', 'p_2']);
+  const [first, second] = pair.players, third = lone.players[0];
+  assert.equal(m.handle(first, { t: 'g.watch', fieldId: lone.fieldId }).error, 'BAD_TARGET', 'the other group is hidden');
+  assert.equal(m.handle(third, { t: 'g.watch', fieldId: pair.fieldId }).error, 'BAD_TARGET');
+  assert.deepEqual(m.handle(second, { t: 'g.watch', fieldId: pair.fieldId }), { ok: true });
   assert.deepEqual(m.handle('p_3', { t: 'g.watch', fieldId: 'b2' }), { ok: true }, 'an eliminated player spectates freely');
   assert.deepEqual(m.handle('p_3', { t: 'g.watch', fieldId: 'b1' }), { ok: true });
-  assert.equal(m.watchers.get('p_0'), 'b1', 'the refused watch keeps the default (own) field');
+  assert.equal(m.watchers.get(first), pair.fieldId, 'the refused watch keeps the default (own) field');
   // the prep-scouting id of a player of the other group is no way around the rule, and never detaches the viewer
-  const scouted = h.allTo('p_0', 'm.field').length;
-  assert.deepEqual(m.handle('p_0', { t: 'g.watch', fieldId: 'n:p_2' }), { error: 'BAD_TARGET', detail: 'no such field' });
-  assert.deepEqual(m.handle('p_0', { t: 'g.watch', fieldId: 'n:p_1' }), { error: 'BAD_TARGET', detail: 'no such field' });
-  assert.equal(h.allTo('p_0', 'm.field').length, scouted, 'no board of the other group was sent');
-  assert.equal(m.watchers.get('p_0'), 'b1', 'still streaming the own boss field');
-  const snaps = h.allTo('p_0', 'b.snap').length;
+  const scouted = h.allTo(first, 'm.field').length;
+  assert.deepEqual(m.handle(first, { t: 'g.watch', fieldId: `n:${third}` }), { error: 'BAD_TARGET', detail: 'no such field' });
+  assert.deepEqual(m.handle(first, { t: 'g.watch', fieldId: `n:${second}` }), { error: 'BAD_TARGET', detail: 'no such field' });
+  assert.equal(h.allTo(first, 'm.field').length, scouted, 'no board of the other group was sent');
+  assert.equal(m.watchers.get(first), pair.fieldId, 'still streaming the own boss field');
+  const snaps = h.allTo(first, 'b.snap').length;
   h.sched.advance(500);
-  assert.ok(h.allTo('p_0', 'b.snap').length > snaps, 'b.snap of b1 keeps coming');
+  assert.ok(h.allTo(first, 'b.snap').length > snaps, 'snapshots of the own field keep coming');
   m.dispose();
 });
 

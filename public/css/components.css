@@ -508,6 +508,15 @@
   white-space: pre-line;
 }
 .tooltip.is-shown { opacity: 1; }
+.tooltip--aside { max-width: 3.2rem; white-space: normal; }
+.tooltip--compound { display: flex; gap: .16rem; max-width: min(8rem, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; pointer-events: auto; overscroll-behavior: contain; }
+.tooltip--compound .tooltip__main { flex: 1 1 2.2rem; min-width: 0; }
+.tooltip--compound .tooltip--aside { flex: 1 1 2.2rem; min-width: 0; border-left: 1px solid var(--line-2); padding-left: .12rem; }
+@media (max-width: 600px) {
+  .tooltip--compound { flex-direction: column; }
+  .tooltip--compound .tooltip__main, .tooltip--compound .tooltip--aside { flex: none; max-width: 100%; width: 100%; }
+  .tooltip--compound .tooltip--aside { border-left: 0; border-top: 1px solid var(--line-2); padding: .1rem 0 0; }
+}
 .tooltip--top.is-shown { animation: tip-up var(--t-fast) var(--ease-out); }
 .tooltip--bottom.is-shown { animation: tip-down var(--t-fast) var(--ease-out); }
 @keyframes tip-up { from { transform: translateY(4px); } }

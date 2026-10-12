@@ -17,8 +17,10 @@
 //   hidden from later 'kill' handlers) · death(c,…) · status(c,…) (statusApplied on e) · burst(c,…) (elementBurst on e)
 //   · tick(b,e,a,dt) every `iv` s (every tick when iv is 0) · skill: `cd`/`left`(=icd)/`cond`/`fire` (cooldown runs
 //   continuously; fires when ready, the enemy can act and `cond` holds). `sil: true` = the ability's handbook line
-//   is flagged SILENCE (沉默 disables it: exactly the data's `format: "SILENCE"` lines — and 萨卡兹枯朽战士 / 组长's
-//   死亡爆炸, a NORMAL line whose client template checks 沉默: archetypes.js kitPolluted); stun / freeze / sleep block
+//   is flagged SILENCE (沉默 disables it: exactly the data's `format: "SILENCE"` lines). 萨卡兹枯朽战士 / 组长's
+//   【污染秽蚀】 death fog is the one NORMAL line also silenced (archetypes.js kitPolluted, `enemy_1267_nhpbr` and
+//   `_2` only): the owner's official-play recall of 2026-10-12 is that a death while silenced creates no fog, and
+//   that recall contradicts the PRTS / in-game text 「不可沉默」 (DESIGN §30.23). stun / freeze / sleep block
 //   skills. Enemy SP skills ("数次攻击后…"): SP +1 per attack, the (spCost+1)-th attack is the skill attack (official
 //   粉碎攻坚手 text: spCost 2 = "攻击2次后，下一次攻击").
 // Shared mechanics: reborn() — "首次被击倒后重生 / 第二形态" (the first KO is hidden from kill credit and bounty; a

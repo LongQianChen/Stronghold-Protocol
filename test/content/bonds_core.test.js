@@ -544,11 +544,12 @@ test('阿戈尔 5: a member devoured by several 阿戈尔 spends one slot at mos
 });
 
 test('阿戈尔 5: an operator\'s own save or revive uses no slot (斯卡蒂\'s DRE-Y, M3茧甲, 埃芒加德 [ASSUMED for the band]); the slot waits for its first unanswered knock-out', () => {
-  // 斯卡蒂 (elite, module DRE-Y by default) enters 联防 at half HP in front of 乌尔比安: his mark is lethal, DRE-Y saves her
+  // 斯卡蒂 (elite, module DRE-Y by default) starts a normal field at half HP in front of 乌尔比安: his mark is lethal,
+  // DRE-Y saves her. Half HP is a fixture here; a restored 联防 target no longer pays opening devour damage twice.
   // (PRTS: once per deployment, full HP with max HP −60 %) — no knock-out, so no slot
   const SKADI = 'chess_char_3_05_b', ULPIA = 'chess_char_5_05_a', GHOST = 'chess_char_2_07_a', HN = 'chess_char_3_09_a', DEEP = 'chess_char_1_04_a';
   const h = makeBattle({
-    kind: 'unite', autoFinish: false, timeLimit: 60, hooks: ['damaged', 'death', 'deploy'], captureNoisy: true,
+    kind: 'normal', autoFinish: false, timeLimit: 60, hooks: ['damaged', 'death', 'deploy'], captureNoisy: true,
     units: [
       { chessId: ULPIA, row: 10, col: 3 }, { chessId: SKADI, row: 10, col: 4, dir: 'UP', carryState: { hpPct: 0.5 } },
       { chessId: GHOST, row: 12, col: 3 }, { chessId: HN, row: 12, col: 5 }, { chessId: DEEP, row: 12, col: 7 },

@@ -473,6 +473,9 @@ function kitXi(ab) {
   };
   const re = reborn({
     dur: T(ab, 'reborn.duration') ?? 0, invincible: T(ab, 'reborn.invincible') ?? 0,
+    // #510: Xi's post-rebirth 无敌 also prevents hostile selection (PRTS “自在” / 无敌).
+    // Explicit opt-in: the engine's general invulnerable flag remains damage protection only.
+    invincibleUntargetable: true,
     onKo(b, e) { b.removeBuff(e, 'ab:xiShield'); },
     onReborn(b, e) {
       P.form2 = true;

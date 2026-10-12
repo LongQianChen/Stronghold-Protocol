@@ -206,7 +206,7 @@ export function buildDiagnostics(input) {
       b.done ? 'done' : b.loading ? 'loading' : 'running', b.paused ? 'paused' : null, Number.isFinite(b.speed) ? `${b.speed}x` : null)}`);
   }
   if (settings) {
-    lines.push(`settings: ${join(`quality ${settings.quality}`, settings.damageNumbers ? 'damage numbers' : null, settings.muted ? 'muted' : null)}`);
+    lines.push(`settings: ${join(`quality ${settings.quality}`, settings.damageNumbers ? 'damage numbers' : null, settings.officialDamageNumbers ? 'official damage numbers' : null, settings.muted ? 'muted' : null)}`);
   }
   const shown = entries.slice().reverse();
   const tot = input.total ?? total;

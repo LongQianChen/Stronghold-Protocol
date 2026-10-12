@@ -17,7 +17,7 @@
 // projectile_chr_gdglow_funnel_s1_1 … s3_3 (`_lifeTimeType` 2: until stopped, `_stopWhenSourceInvalid`, its crash
 // AdvancedApplyDamage MAGICAL at atk_scale_2) and their s12 / s3 blast projectiles.
 // - Trait (驭械术师) "操作浮游单元造成法术伤害；单元攻击同一敌人伤害提升（最高造成干员110%攻击力的伤害）" (trait bb init / delta /
-//   max_atk_scale): the engine's funnel profile (professions.js: her normal attack = one drone hit at init → +delta per hit on
+//   max_atk_scale): the engine's funnel profile (professions.js: her normal attack = a body hit plus one drone addition at init → +delta per hit on
 //   the same target → max). FUN-X: init 0.35 ("单元初始伤害提高"); FUN-Y: max 1.2. Ranged arts, 3-1, hits air (PRTS "可对空"),
 //   blocks 1, ground enemies target her.
 // - Skill drones (the three skills "浮游单元+N，释放浮游单元锁定敌人攻击 … 锁敌后直至敌人被击杀、自爆或技能结束后返回干员身边"): while a

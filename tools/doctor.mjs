@@ -251,7 +251,7 @@ async function main() {
   const local = checkLocal();
   const client = findClient(null);
   row(local.manifest ? 'ok' : 'skip', '本地客户端美术（可选）', local.manifest
-    ? `${local.count} 项${local.board3d ? '，3D 棋盘可用' : '，无棋盘贴图（2D 棋盘）'}${local.board3d && !local.tiles ? '；缺 tiles.json → node tools/setup.mjs' : ''}`
+    ? `${local.count} 项${local.board3d ? '，3D 棋盘可用' : '，无棋盘贴图（2D 棋盘）'}${local.scenes ? '，已提取各战场官方场景' : '，无各战场官方场景（3D 棋盘用金属地块；node tools/setup.mjs --scenes）'}${local.board3d && !local.tiles ? '；缺 tiles.json → node tools/setup.mjs' : ''}`
     : client ? `检测到 ${client.kind} 客户端 → node tools/setup.mjs --local` : `未提取：${LOCAL_ART_FALLBACK}（${LOCAL_ART_COPY_HINT}）`);
   if (client || local.manifest) {
     const py = findPython();

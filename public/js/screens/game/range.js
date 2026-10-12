@@ -13,15 +13,18 @@ export function inspectRange({ target, detail, pieces, showPrep = false, field, 
     const e = pieces?.get(target.uid);
     if (!e || e.area !== 'board') return null;
     row = e.row; col = e.col; dir = normDir(e.piece.dir);
-  } else if (target?.kind === 'unit' && !showPrep) {
+  } else if (target?.kind === 'unit' && (!showPrep || target.prepMapChar === true)) {
     const unit = target.unit;
     if (!unit || unit.side !== 'ally' || (unit.kind !== 'op' && unit.kind !== 'token')) return null;
     if (unit.area != null && unit.area !== 'board') return null;
+    // A prepared map character is a read-only view, not a simulated unit yet. Its board-space coordinates come from
+    // m.private.prepMapChars and must not be read from a previous battle's snapshot or transformed twice on boss R.
+    if (showPrep && (unit.kind !== 'token' || detail.type !== 'token' || detail.token?.kind !== 'mapChar')) return null;
     // Snapshots exclude undeployed, hidden and removed units. Dead units remain briefly for their death animation.
-    if (!field?.prep && (!snapshot || snapshot[3] <= 0)) return null;
-    row = Math.round(snapshot ? snapshot[2] : unit.y);
-    col = Math.round(snapshot ? snapshot[1] : unit.x);
-    dir = normDir(live?.dir, null) || normDir(unit.dir, null) || (unit.facing === -1 ? 'LEFT' : 'RIGHT');
+    if (!showPrep && !field?.prep && (!snapshot || snapshot[3] <= 0)) return null;
+    row = Math.round(!showPrep && snapshot ? snapshot[2] : unit.y);
+    col = Math.round(!showPrep && snapshot ? snapshot[1] : unit.x);
+    dir = (!showPrep && normDir(live?.dir, null)) || normDir(unit.dir, null) || (unit.facing === -1 ? 'LEFT' : 'RIGHT');
   } else return null;
   if (!Number.isFinite(row) || !Number.isFinite(col)) return null;
   const record = detail.type === 'token' ? { ...detail.token, ...tokenVariantFor(detail.token, detail.ownerId) }

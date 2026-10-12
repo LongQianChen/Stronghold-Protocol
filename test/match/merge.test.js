@@ -156,14 +156,16 @@ test('merge whose copies are not deployed (temp) with a full hand overflows the 
   m.dispose();
 });
 
-test('reward pick respects the pool and a full hand; offers expire at prep end', () => {
+test('displayed operator rewards survive stock exhaustion but respect a full hand and expire at prep end', () => {
   const { h, m, ps } = prep(24);
   ps.pushRewardOffer('merge');
   const offer = ps.offers[0];
   const id0 = offer.slots[0].id;
   const taken = m.pool.take(id0, 100);
-  assert.deepEqual(m.handle('p_0', { t: 'g.reward', idx: 0 }), { error: ERR.SOLD_OUT });
+  assert.deepEqual(m.handle('p_0', { t: 'g.reward', idx: 0 }), { ok: true });
+  assert.equal(m.pool.entries.get(id0).left, -1);
   m.pool.give(id0, taken);
+  ps.pushRewardOffer('merge', { ids: [id0] });
   const others = chessOfTier(3).filter((c) => m.pool.has(c) && !offer.slots.some((s) => s.id === c));
   for (let i = 0; ps.hand.some((p) => p == null); i++) give(m, ps, others[i]);
   assert.deepEqual(m.handle('p_0', { t: 'g.reward', idx: 0 }), { error: ERR.HAND_FULL });

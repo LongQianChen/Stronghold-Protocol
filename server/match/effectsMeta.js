@@ -480,6 +480,7 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     lp: () => ps.lp,
     alive: () => ps.alive,
     bandId: () => ps.bandId,
+    teamMedicGranted: () => m.teamMedicGranted(),
     shopLevel: () => ps.shop.level,
     bond: (id) => (ps.bonds[id] ? { ...ps.bonds[id] } : null),
     bonds: () => Object.fromEntries(Object.entries(ps.bonds).map(([k, v]) => [k, { ...v }])),
@@ -573,6 +574,7 @@ export function makeCtx(m, ps, source, hook, ev = null) {
         toTemp: !!opts.toTemp,
         noPool,
         deferMerge: ps._deferItemMerge > 0,
+        requirePool: opts.requirePool !== false,
       });
       return p ? view(p) : null;
     },

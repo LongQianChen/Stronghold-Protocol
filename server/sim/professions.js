@@ -21,6 +21,9 @@
 //   noAttack bool (never attacks)   noAttackUnlessSkill bool (attacks only while its skill is active)
 //   noHeal bool (cannot be healed by others)   blockFly bool   onHitStatus {key, duration, value}
 //   dmgMul(battle, unit, target) → number      afterHit(battle, unit, target, {dealt,x,y})
+//   funnelMul(battle, unit, target) → number (drone ramp, separate from the caster's attack multiplier)
+//   funnelBodyHits n (body hits kept beside that ramp. Omit it for one. 0: drone-only, ramp folded into the hits,
+//                     no body — 荒芜拉普兰德 S2. >0: that many body hits — 至简 S2. Not keyed off the skill flag)
 //   canAttack(battle, unit) → bool             afterAttack(battle, unit, targets)
 //   skipEnemy(enemy) → bool (an enemy the unit never selects — targeting.js canTargetEnemy; 嵯峨 "不攻击重伤单位")
 //   healThrough(healer, ally) → bool (a healer that selects and heals that ally through its 禁疗 — Battle
@@ -385,8 +388,17 @@ const installTactician = (battle, unit) => {
 };
 
 const installFunnel = (battle, unit) => {
-  unit.trait.funnelTarget = null;
-  unit.trait.funnelScale = unit.profile.funnel?.init ?? 0.2;
+  // PRTS 分支特性信息 驭械术师: changing the target, or redeploying, resets the drone ramp at once, even against the
+  // same living enemy. The per-target map (耶拉 / 至简) resets with it. A free move (moveRedeploy, the same carry as a
+  // 秘术师's stored energy and 乌尔比安 S3) keeps the ramp. An in-flight drone still applies the ramp it computes on
+  // impact, so a shot launched before the reset can step the new ramp.
+  const reset = () => {
+    unit.trait.funnelTarget = null;
+    unit.trait.funnelScale = unit.profile.funnel?.init ?? 0.2;
+    unit.trait.funnelMap?.clear();
+  };
+  reset();
+  battle.on('deploy', (ctx) => { if (ctx.unit === unit && !ctx.move) reset(); }, { owner: unit });
 };
 
 /**
@@ -508,7 +520,7 @@ export const SUB = Object.freeze({
   blastcaster: P({ rangeAoe: true }),
   chain: P({ chain: { count: 3, falloff: 0.15, radius: CHAIN_RADIUS, sluggish: 0.5 } }),
   funnel: P({ projectile: 'drone', install: installFunnel,
-    dmgMul: (battle, unit, target) => {
+    funnelMul: (battle, unit, target) => {
       const f = unit.profile.funnel || { init: 0.2, delta: 0.15, max: 1.1 };
       if (unit.trait.funnelTarget === target.id) unit.trait.funnelScale = Math.min(f.max, (unit.trait.funnelScale ?? f.init) + f.delta);
       else { unit.trait.funnelTarget = target.id; unit.trait.funnelScale = f.init; }

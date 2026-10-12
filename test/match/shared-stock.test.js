@@ -8,6 +8,33 @@ import { installDraftFacade } from '../../server/match/match/phases.js';
 
 const PACK = 'chess_item_5_07_e_a';
 const byName = name => Object.values(DATA.chess).find(c => !c.isGolden && c.name === name).chessId;
+
+test('four already displayed operator offers may exceed stock; selling first repays the deficit', () => {
+  const h = makeMatch({ mode: 'coop', humans: 4, seed: 11, fake: true }).start().toPrep();
+  const m = h.m, id = byName('溯光星源'), ps = [...m.players.values()];
+  assert.equal(m.pool.cap(id), 10);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) ps[i].acquireChess(id);
+  assert.equal(m.pool.left(id), 1);
+  for (const p of ps) {
+    p.funds = 100;
+    p.shop.slots[0] = { kind: 'chess', id, basePrice: 3, frozen: true, sold: false };
+  }
+  assert.equal(m.pool.left(id), 1, 'displaying an offer does not reserve stock');
+  for (const p of ps) {
+    const funds = p.funds; assert.ok(p.buy(0).ok, 'every pre-existing offer stays purchasable');
+    assert.equal(p.funds, funds - 3); assert.equal(p.shop.slots[0].sold, true);
+    assert.equal(p.buy(0).error, 'SOLD_OUT', 'the same offer cannot be bought twice');
+  }
+  assert.equal(m.pool.entries.get(id).left, -3); assert.equal(m.pool.left(id), 0);
+  assert.equal(m.pool.roll(m.rngShop, { tier: 6, filter: candidate => candidate === id }), null);
+  for (let i = 0; i < 4; i++) {
+    const piece = ps[i].allChess().find(c => c.id === id); assert.ok(piece);
+    assert.ok(ps[i].sell(piece.uid).ok);
+    assert.equal(m.pool.left(id), Math.max(0, i - 2));
+    checkInvariants(m);
+  }
+  m.dispose();
+});
 test('a duplicate draft card becomes unavailable when the preceding player exhausts equipment stock', () => {
   const h = makeMatch({ mode: 'coop', humans: 2, seed: 11, fake: true }).start().toPrep();
   const m = h.m, a = h.ps('p_0'), b = h.ps('p_1');
@@ -30,6 +57,17 @@ test('measured operator capacities and exceptions: co-op doubles shared stock, n
   }
   assert.equal(coop.poolCopies('chess_char_6_diy1_a'), solo.poolCopies('chess_char_6_diy1_a'));
   assert.equal(solo.itemPoolCopies(PACK), 2); assert.equal(coop.itemPoolCopies(PACK), 2);
+});
+
+test('an operator reward shown before stock exhaustion still arrives and records its copy', () => {
+  const h = makeMatch({ mode: 'coop', humans: 2, seed: 11, fake: true }).start().toPrep();
+  const m = h.m, a = h.ps('p_0'), b = h.ps('p_1'), id = byName('溯光星源');
+  a.pushRewardOffer('test', { ids: [id] });
+  for (let i = 0; i < m.pool.cap(id); i++) b.acquireChess(id);
+  assert.equal(m.pool.left(id), 0);
+  assert.ok(a.pickReward(0).ok); assert.equal(a.offers.length, 0);
+  assert.ok(a.allChess().some(c => c.id === id));
+  assert.equal(m.pool.entries.get(id).left, -1); checkInvariants(m); m.dispose();
 });
 
 test('shared equipment occupancy includes hand/equipped/elite, never displayed offers; destroying frees stock', () => {

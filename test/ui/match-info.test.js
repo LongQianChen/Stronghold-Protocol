@@ -106,6 +106,18 @@ test('MatchBondRow: greyed by state (✕ disc), the banned-member badge, the red
   assert.equal(badge('deputShip'), undefined);
   assert.equal(tipOf('deputShip').props.text, '助力');
   assert.equal(disc('deputShip').props.tier, DATA.bonds.deputShip.thresholds.length);
+  // the box beside the tip: one line per banned member (avatar, name, its bonds with this one highlighted); none ⇒ null
+  const aside = tipOf('preciShip').props.aside;
+  const ops = [...walk(aside)].filter((v) => hasClass(v, 'brief-bantip__op'));
+  const bannedPreci = DATA.bonds.preciShip.visibleMembers.filter((id) => PUB.bannedChess.includes(id));
+  assert.deepEqual(ops.map((v) => v.props['data-chess']), bannedPreci);
+  for (const op of ops) {
+    const c = DATA.chess[op.props['data-chess']];
+    assert.ok([...walk(op)].some((v) => v.type === UnitThumb && v.props.id === c.chessId));
+    assert.match(textOf(op), new RegExp('^' + c.name));
+    assert.ok([...walk(op)].some((v) => hasClass(v, 'is-this') && textOf(v) === '精准'));
+  }
+  assert.equal(tipOf('deputShip').props.aside, null);
 });
 
 test('MatchLegend: the grey and the badge; "或本模式禁用" only when the mode switches bonds off', () => {

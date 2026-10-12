@@ -138,12 +138,16 @@ test('耶拉 S2: two drones ramp independently on two targets, ATK up; 低眉 +1
   const n0 = dmgBy(h, u).length;
   h.run(8);
   const hits = dmgBy(h, u).slice(n0);
-  const onA = hits.filter((c) => c.target === a).map((c) => c.amount), onB = hits.filter((c) => c.target === b).map((c) => c.amount);
+  const drones = hits.filter((c) => c.dmg?.tags?.includes('kjera:drone'));
+  const onA = drones.filter((c) => c.target === a).map((c) => c.amount), onB = drones.filter((c) => c.target === b).map((c) => c.amount);
   assert.ok(onA.length >= 3 && onB.length >= 3, 'both locked targets attacked');
   const atk = u.s.atk;
   approx(onA[0], atk * tr.init_atk_scale, 1e-6, 'ramp start');
   approx(onA[1], atk * (tr.init_atk_scale + tr.delta_atk_scale), 1e-6, 'ramp +15 %');
+  approx(onB[0], atk * tr.init_atk_scale, 1e-6, 'second drone starts its own ramp');
   approx(onB[1], atk * (tr.init_atk_scale + tr.delta_atk_scale), 1e-6, 'second drone ramps on its own');
+  const body = hits.filter((c) => c.dmg?.isAttack && !c.dmg.isSkill);
+  assert.ok(body.length >= 1 && body.some((c) => Math.abs(c.amount - atk) < 1e-4), 'her own hit stays at 100% ATK');
   h.run(15);
   assert.ok(noisy(h, 'statusApplied').some((c) => c.source === u && c.status === 'cold' && c.duration === bb['attack@cold']), 'cold proc');
   checkInvariants(h.b);
@@ -1032,14 +1036,17 @@ test('耶拉 S2: against a lone enemy both drones lock it and ramp independently
   const n0 = dmgBy(h, u).length;
   h.run(4);
   const hits = dmgBy(h, u).slice(n0);
+  const drones = hits.filter((c) => c.dmg?.tags?.includes('kjera:drone'));
   const byT = new Map();
-  for (const c of hits) (byT.get(c.t) ?? byT.set(c.t, []).get(c.t)).push(c.amount / u.s.atk);
+  for (const c of drones) (byT.get(c.t) ?? byT.set(c.t, []).get(c.t)).push(c.amount / u.s.atk);
   const volleys = [...byT.values()];
   assert.ok(volleys.length >= 3);
-  assert.ok(volleys.every((v) => v.length === 2), 'two drone hits per attack');
+  assert.ok(volleys.every((v) => v.length === 2), 'two drone hits per tick');
   approx(volleys[0][0], tr.init_atk_scale, 1e-6);
   approx(volleys[0][1], tr.init_atk_scale, 1e-6, 'second drone starts its own ramp');
   approx(volleys[1][1], tr.init_atk_scale + tr.delta_atk_scale, 1e-6);
+  const full = u.s.atk * u.s.atkScaleMul;
+  assert.ok(hits.some((c) => c.dmg?.isAttack && !c.dmg.isSkill && Math.abs(c.amount - full) < 1e-4), 'body at 100% ATK');
   checkInvariants(h.b);
 });
 

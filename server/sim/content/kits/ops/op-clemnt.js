@@ -222,7 +222,7 @@ export default {
           }]);
         }
         battle.on('elementBurst', ({ target, element }) => {
-          if (element !== 'erosion' || !up(unit) || !unit.skill?.active || unit.skill.id !== S3
+          if (element !== 'erosion' || target?.side !== 'enemy' || !up(unit) || !unit.skill?.active || unit.skill.id !== S3
             || !canTargetEnemy(unit, target, GROUND)) return;
           unit.mem.clemntBombs?.marks.set(target, battle.time + num(b3.ep_break_duration, 1));
         }, { owner: unit });

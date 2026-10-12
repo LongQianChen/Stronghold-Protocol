@@ -11,6 +11,9 @@ public/assets/
 public/fonts/
 # tools/local-extract/extract.py → public/assets/local/** and this per-machine manifest
 # (optional: the client and the tests work without it; docs/DEPLOY.md §6 lists what falls back)
+# Battlefield scenes (0.2.5): extracted files live under public/assets/local/scene/ (already ignored by
+# public/assets/ above). Downloaded bundles live in .cache/official-scenes/ (already ignored by .cache/ below).
+# The repository never stores those official files.
 data/local-assets.json
 # download caches, upstream tables, ledgers, reports, setup state
 .cache/
@@ -45,3 +48,5 @@ desktop.ini
 .idea/
 .vscode/
 .claude/
+# tools/sim-check.mjs: the corpus and its Node traces for /dev/sim-check.html
+public/dev/simcheck/data/

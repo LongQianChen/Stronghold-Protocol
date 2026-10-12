@@ -286,9 +286,11 @@ test('Final Assault: two client-run pair fields share the server pool (b.progres
   h.drive(() => m.phase === PHASE.FINAL_ASSAULT);
   const [b1, b2] = fields(h);
   assert.deepEqual([b1.fieldId, b2.fieldId], ['b1', 'b2']);
-  assert.deepEqual([b1.mode, b1.authority, b2.mode, b2.authority], ['client', 'p_0', 'client', 'p_2'], 'lowest seat of each pair');
+  const authorities = [b1, b2].map(f => [...f.players].sort((a, b) => h.ps(a).seat - h.ps(b).seat)[0]);
+  assert.deepEqual([b1.mode, b1.authority, b2.mode, b2.authority], ['client', authorities[0], 'client', authorities[1]], 'lowest seat of each pair');
   const startMsgs = h.sent.filter(([, x]) => x.t === 'b.start' && x.kind === 'boss');
-  assert.deepEqual(startMsgs.map(([pid, x]) => `${pid}:${x.fieldId}:${x.authoritative ? 'A' : 'r'}`).sort(), ['p_0:b1:A', 'p_1:b1:r', 'p_2:b2:A', 'p_3:b2:r']);
+  assert.deepEqual(startMsgs.map(([pid, x]) => `${pid}:${x.fieldId}:${x.authoritative ? 'A' : 'r'}`).sort(),
+    [b1, b2].flatMap((f, i) => f.players.map(pid => `${pid}:${f.fieldId}:${pid === authorities[i] ? 'A' : 'r'}`)).sort());
   assert.equal(startMsgs[0][1].spec.boss.poolMax, m.bossPool.maxHp);
   const max = m.bossPool.maxHp;
   h.sched.advance(3000);
@@ -639,7 +641,7 @@ test('boss bounty eligibility: forced real results on a team victory qualify; sy
 function bossPaid(seed, { leaks = 0, leaksBy = null, leaked = {} }) {
   const { h, m, f } = faWithForger(seed);
   const card = DATA.choices.cards.bounty.find((c) => c.payout === 'perfect' && m.gd.enemy(c.enemyKey));
-  const ps = f.players.map((pid) => h.ps(pid));
+  const ps = f.players.map((pid) => h.ps(pid)).sort((a, b) => a.seat - b.seat); // return payouts by player, not random side
   for (const p of ps) m.addBounty(p, { ...card, rounds: 2, multiRound: false });
   const before = ps.map((p) => p.pendingFunds);
   const lp0 = m.teamLp;

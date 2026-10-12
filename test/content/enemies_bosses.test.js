@@ -70,12 +70,12 @@ test('stats-only enemies attach no ability and fight with their data stats', () 
   }
 });
 
-// Abilities the client makes silenceable although their handbook line is NORMAL (the battle prefab's buff template checks
-// SILENCED): 萨卡兹枯朽战士 / 组长's PollutedDie = template projectile_on_killed, the 死亡爆炸 template of 高能源石虫's
-// SILENCE-flagged blast too (community report of 2026-10-06, item 10; DESIGN §25.18.2)
+// 萨卡兹枯朽战士 / 组长's PollutedDie is silenced even though the handbook line is NORMAL and the PRTS / in-game text
+// says 「不可沉默」. The owner's official-play recall of 2026-10-12 (GitHub #470) is that a death while silenced
+// creates no fog. Only these two keys share that ability (DESIGN §30.23; 0.2.0's client-template reading is §25.18.2).
 const SILENCE_BY_TEMPLATE = new Set(['enemy_1267_nhpbr', 'enemy_1267_nhpbr_2']);
 
-test('沉默: exactly the abilities whose handbook line is SILENCE-flagged can be silenced (every authored enemy), plus the ones whose client template checks it', () => {
+test('沉默: exactly the abilities whose handbook line is SILENCE-flagged can be silenced (every authored enemy), plus 萨卡兹枯朽战士 / 组长\'s death fog', () => {
   const h = arena();
   h.step();
   for (const key of [...Object.keys(KITS), ...Object.keys(BOSS_KITS)]) {
@@ -768,8 +768,8 @@ for (const key of ['enemy_1267_nhpbr', 'enemy_1267_nhpbr_2']) {
     approx(h.unit('t_wall').stats.taken, 3 * tb(key, 'PollutedDie.polluted_damage_low'));
   });
 
-  // PRTS 特殊机制 死亡爆炸 "默认可沉默…若不处于沉默状态，将会…释放"; client template projectile_on_killed: CheckAbnormalFlag
-  // SILENCED (unset) before EmitProjectile (community report of 2026-10-06, item 10: a silenced one still poisoned)
+  // Owner's official-play recall of 2026-10-12 (GitHub #470): a death while the silence icon is already showing
+  // creates no fog. That contradicts the PRTS / in-game text 「不可沉默」. The same PollutedDie ability is on both keys.
   test(`${nm(key)}: silenced when it dies, it releases no 污染秽蚀; a silence that ran out does not stop it`, () => {
     const h = arena({ units: [{ chessId: 't_wall', row: 10, col: 6 }] });
     h.step();

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Sim check · 卫戍协议：盟约</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230c0f0e'/%3E%3Cpath fill='%234ed8af' d='M5 3h3v2h2V3h4v2h2V3h3v5l-2 2v7l2 2v2H5v-2l2-2v-7L5 8z'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/css/theme.css" />
+  <style>
+    /* The check (simcheck/ui.js) in the game's tokens (css/theme.css): green-grey panels, mint, gold / red for the
+       differences. A long scrolling page, fit for a phone. */
+    html, body { margin: 0; height: auto; min-height: 100%; overflow-y: auto; background: var(--bg-0); }
+    select { min-width: 0; max-width: 100%; }
+    #app { --sc-bg: var(--bg-0); --sc-panel: var(--bg-1); --sc-fg: var(--text-hi); --sc-muted: var(--text-lo); --sc-line: var(--line);
+      --sc-accent: var(--mint-500); --sc-ok: var(--mint-500); --sc-warn: var(--gold-2); --sc-bad: var(--red-premium);
+      --sc-font: var(--font-cjk); --sc-mono: var(--font-mono); }
+  </style>
+</head>
+<body>
+  <main id="app"><p style="color:var(--text-lo);padding:16px">正在载入战斗模拟…</p></main>
+  <script type="module" src="./sim-check.js"></script>
+</body>
+</html>

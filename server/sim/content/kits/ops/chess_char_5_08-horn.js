@@ -50,7 +50,7 @@ export default {
         }),
         skchr_horn_2: () => ({
           kind: 'ammo', ammo: s2Ammo,
-          attack: { atkScale: num(bb['attack@s2.atk_scale'], 1) },
+          attack: { atkScale: num(bb['attack@s2.atk_scale'], 1), fortressMeleeSplash: true },
           onStart({ unit }) { unit.mem.hornS2Over = false; },
           onEnd({ unit }) { unit.mem.hornS2Over = false; },
         }),

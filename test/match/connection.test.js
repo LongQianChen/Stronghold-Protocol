@@ -222,7 +222,7 @@ test('onLeave: a quitter has no place in the Final Assault pairing or the boss p
   assert.equal(alive.length, 2);
   assert.ok(!alive.includes(first));
   h.drive(() => m.phase === PHASE.FINAL_ASSAULT);
-  assert.deepEqual(m.fields.map((f) => f.players), [alive], 'one boss field for the two players left');
+  assert.deepEqual(m.fields.map((f) => [...f.players].sort()), [[...alive].sort()], 'one boss field for the two players left');
   assert.equal(m.bossPool.maxHp, bossPoolHp(m.gd, m.bossId, 2), 'the co-op boss pool of two alive players');
   assert.equal(m.bossPool.maxHp, m.gd.boss(m.bossId).bloodPoint[m.gd.difficulty] * 2, 'bloodPoint × the two players left; the quitter does not count (DESIGN §25.13.4)');
   const end = h.runToEnd();

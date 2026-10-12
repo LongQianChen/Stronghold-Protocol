@@ -229,6 +229,8 @@ export default {
         },
         [S3]: {
           kind: 'ammo',
+          // The skill's initial attack area includes the eight surrounding tiles as well as its 3-9 grid.
+          trigger: { rule: 'ACTIVE_RANGE', grid: g39x4 },
           ammo: Math.max(1, Math.floor(num(b3['attack@trigger_time'], 1))),
           mods: { atkPct: num(b3.atk) }, flags: LIFTOFF,
           targeting: s3Targeting,

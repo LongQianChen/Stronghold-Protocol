@@ -385,6 +385,7 @@ export class Match {
     this.sp = null;
     this.wave = null;
     this.bossWaves = null;
+    this.bossPairs = null; // drawn once per match; the hidden round retains partners and sides
     this.fields = [];
     this.runner = null;
     /** playerId → fieldId */

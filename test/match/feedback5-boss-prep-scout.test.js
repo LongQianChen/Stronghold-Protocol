@@ -17,6 +17,7 @@ import { leaderStand } from '../../public/js/render/prepfield.js';
 function bossPrep(seed) {
   const h = makeMatch({ mode: 'coop', difficulty: 'FUNNY', humans: 4, seed, fake: true }).start();
   const m = h.m;
+  m.bossPairs = [['p_0', 'p_1'], ['p_2', 'p_3']]; // explicit mirrored-layout fixture, not the pairing policy
   h.drive(() => m.phase === PHASE.PREP && m.round === m.gd.bossRound, { ready: true });
   return h;
 }
@@ -64,6 +65,7 @@ test('a scout of a boss round\'s prep is the boss field: the player\'s half (mir
 test('the eliminated viewer is pushed the boss-field scout at the boss round\'s start (item 56); a normal round\'s scout stays the normal board', () => {
   const h = makeMatch({ mode: 'coop', difficulty: 'FUNNY', humans: 3, seed: 56, fake: true }).start();
   const m = h.m;
+  m.bossPairs = [['p_0', 'p_1'], ['p_2']]; // keep this scout fixture's named left/right roles
   h.toPrep(1);
   h.ps('p_2').eliminate(1);
   h.toPrep(2);

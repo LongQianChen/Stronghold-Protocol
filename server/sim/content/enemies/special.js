@@ -412,7 +412,9 @@ export const SPECIAL_KITS = Object.freeze({
     // report of 2026-10-06, item 24); it picks by 仇恨值, not its blocker first
     spawn(b, e) { e.profile.blockFree = true; },
     dealt(c, b, e) {
-      const n = T(ab, 'Attack.attack@times') ?? 1, r = T(ab, 'Attack.attack@projectile_range') ?? 0;
+      // PRTS 自制投石机: normal stones splash in radius 1.5. The talent's projectile_range (0.5) belongs to
+      // the separate 入戏 random-offset attack, not its ordinary volley in this mode.
+      const n = T(ab, 'Attack.attack@times') ?? 1, r = 1.5;
       const t = c.target;
       for (let i = 1; i < n; i++) hurt(b, e, t, e.s.atk, 'phys');
       // the stone's splash ("碰撞无视迷彩"): an area selection — no unblocking 隐匿 ally

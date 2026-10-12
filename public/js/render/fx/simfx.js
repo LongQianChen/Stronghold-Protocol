@@ -258,6 +258,10 @@ export class FxSim {
       case 'dodge': {
         this.particle('soft', p.x, p.y, { tint: 0xffffff, life: 0.3, s0: s / 128 * 0.5, s1: s / 128 * 0.9, a0: 0.5, a1: 0 });
         this.particle('slash', p.x, p.y, { tint: col, life: 0.22, s0: s / 128 * 0.8, s1: s / 128 * 1.1, a0: 0.7, a1: 0, rot: -0.5 });
+        // num:'m' — the sim already decided this dodge would have been a red number (PRTS yellow MISS, #ff9000).
+        if (ex.num === 'm' && at.v && this.ctx.settings?.damageNumbers !== false && this.ctx.settings?.officialDamageNumbers) {
+          this.officialNumber(at.v, 0, 'miss');
+        }
         break;
       }
       case 'counter': {

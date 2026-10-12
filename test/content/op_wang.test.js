@@ -330,7 +330,7 @@ test('S2 连星 (AUTO, SP_FULL): a triggered piece hits every enemy on its conne
     assert.deepEqual([sk.spCost, sk.bb['attack@atk_scale'], sk.bb['attack@move_speed'], sk.bb['attack@duration']], elite ? [16, 4.8, -0.4, 6] : [17, 4.2, -0.35, 6], `T${tier}`);
     const { h, u } = field({ tier, elite, skill: 1, stones: [[10, 6], [10, 7]] });
     const onLine = h.spawn('enemy_fly', { pos: [10, 9] });       // 3 tiles right of (10,6)…(10,7)+2: on the horizontal line
-    const beyond = h.spawn('enemy_dummy', { pos: [10, 11] });    // 4 tiles past (10,7)
+    const beyond = h.spawn('enemy_dummy', { pos: [10, 2] });     // 4 tiles before (10,6) (the field ends at column 10)
     const vertical = h.spawn('enemy_dummy', { pos: [12, 7] });   // its battle-start 跟子 (11,7) is 上 of it: the vertical line is on
     const off = h.spawn('enemy_dummy', { pos: [9, 4] });         // on neither line
     const trig = h.spawn('enemy_runner', { pos: [10, 7] });

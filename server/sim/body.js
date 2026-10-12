@@ -1,8 +1,9 @@
 // server/sim/body.js — where a unit can be hit: the ONE helper behind every range test that targets enemies (user
 // playtest #5 item 10: "大体型的关底boss实际受击判定范围很小…原版是很大的一片区域").
 //
-// Regular units are a point: in a grid range when the tile containing their position (round(y), round(x)) is a range
-// tile, in a radius when their position is (DESIGN §3). Huge units (巨型单位 — enemy data `hitArea`, tools/build-data.mjs
+// Regular units are a point: in a grid range when the tile containing their position is a range tile — the position
+// rounded half to even (detmath roundHalfEven; PRTS 作战机制 "受击方坐标经round函数取整(四舍六入五成双)得到其所属格
+// 坐标") —, in a radius when their position is (DESIGN §3). Huge units (巨型单位 — enemy data `hitArea`, tools/build-data.mjs
 // HIT_AREAS, from PRTS "巨型单位：受击判定区域为长4.95、宽2.95的长方形，向上偏移1.0") are hit anywhere on a rectangle
 // `w` tiles along the columns × `h` along the rows, centred on their position moved `dx` columns right and `dy` rows
 // up:
@@ -24,7 +25,7 @@
 // `hitRect`).
 
 import { ROWS, COLS } from './constants.js';
-import { hypot } from './detmath.js';
+import { hypot, roundHalfEven } from './detmath.js';
 
 /**
  * Validated hit area of a data record (`{ w, h, dx, dy }`, tiles) or null for a regular (point) unit.
@@ -47,7 +48,7 @@ export function hitRect(u) {
 
 /** Tile key of a unit's position (-1 off the grid). */
 function posKey(u) {
-  const r = Math.round(u.y), c = Math.round(u.x);
+  const r = roundHalfEven(u.y), c = roundHalfEven(u.x);
   return r < 0 || r >= ROWS || c < 0 || c >= COLS ? -1 : r * COLS + c;
 }
 
@@ -68,7 +69,7 @@ export function bodyKeys(u) {
 /** Does the unit occupy tile (r, c)? */
 export function bodyOnTile(u, r, c) {
   const R = hitRect(u);
-  if (!R) return Math.round(u.y) === r && Math.round(u.x) === c;
+  if (!R) return roundHalfEven(u.y) === r && roundHalfEven(u.x) === c;
   return c + 0.5 > R.x0 + 1e-9 && c - 0.5 < R.x1 - 1e-9 && r + 0.5 > R.y0 + 1e-9 && r - 0.5 < R.y1 - 1e-9;
 }
 
@@ -100,7 +101,7 @@ export function bodyInRadius(u, x, y, r) {
  * around it; …): "周围八格"-style square areas centred on a tile.
  */
 export function bodyTileReach(u, r, c) {
-  if (!u.hitArea) return Math.max(Math.abs(Math.round(u.y) - r), Math.abs(Math.round(u.x) - c));
+  if (!u.hitArea) return Math.max(Math.abs(roundHalfEven(u.y) - r), Math.abs(roundHalfEven(u.x) - c));
   let best = Infinity;
   for (const k of bodyKeys(u)) {
     const kr = Math.floor(k / COLS), kc = k % COLS;

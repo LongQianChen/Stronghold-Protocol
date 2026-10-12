@@ -20,8 +20,10 @@ import { createBattleRunner } from '../../public/js/battle/runner.js';
 import { createStore, initialState } from '../../public/js/store.js';
 import * as specMod from '../../server/sim/spec.js';
 import { DataSource } from '../../server/sim/simdata.js';
-import { DATA, makeMatch, checkInvariants } from './harness.js';
+import { DATA, makeMatch, checkInvariants, legalTileFor } from './harness.js';
 import { FakeBattle } from './fakeBattle.js';
+import { ownerBoard } from '../../public/js/ui/watchBonds.js';
+import { bondMembers, diyGetter, diyRecordFor, memberHeadCount } from '../../public/js/ui/gameLogic.js';
 
 const row = (h, pid) => h.m.publicView().players.find((p) => p.playerId === pid);
 const entry = (list, id) => (list || []).find((b) => b.bondId === id) || null;
@@ -272,4 +274,95 @@ test('runner: a battle that disables gains (联防 / boss) publishes no live lay
   r.advance(100);
   assert.deepEqual(r.store.get().match.battle.bondLayers, {});
   r.runner.dispose();
+});
+
+const DIY_SLOT = 'chess_char_5_diy1_a';
+const HUANG_PICK = { charId: 'char_017_huang', skillIndex: 1, uniEquipId: 'uniequip_002_huang' };
+const SIEGE_PICK = { charId: 'char_112_siege', skillIndex: 2, uniEquipId: 'uniequip_002_siege' };
+const DIY_DATA = { chess: DATA.chess, backups: DATA.backups };
+const getChess = (id) => DATA.chess[id] || null;
+
+/** The same record lookups as BondPopup: own picks from m.private, a teammate's from each field unit. */
+function diyRows(bondId, priv) {
+  const get = diyGetter(getChess, priv, DIY_DATA);
+  const record = (p) => (p.diy ? diyRecordFor(getChess(p.id), p.diy, DIY_DATA) : null) || get(p.id);
+  return bondMembers(DATA.bonds[bondId], priv, [], get, () => null, record);
+}
+
+/** Controlled match fixture: legal seat picks, acquire/merge and g.move; the match builds the unmodified b.start. */
+function diyWatchMatch(elite) {
+  const seats = [SIEGE_PICK, HUANG_PICK].map((pick, seat) => ({
+    seat, playerId: `p_${seat}`, name: `P${seat}`, isBot: false, connected: true, diy: { [DIY_SLOT]: pick },
+  }));
+  const h = makeMatch({ mode: 'coop', seats, spectators: ['s_spec'], seed: 7309, clientCombat: true, clients: false }).start();
+  h.toPrep(1);
+  const ps = h.ps('p_1');
+  let piece;
+  for (let i = 0; i < (elite ? 3 : 1); i++) piece = ps.acquireChess(DIY_SLOT);
+  assert.ok(piece);
+  const tile = legalTileFor(h.m, ps, piece.id);
+  assert.ok(tile);
+  assert.deepEqual(h.m.handle('p_1', { t: 'g.move', uid: piece.uid, to: { area: 'board', row: tile[0], col: tile[1] } }), { ok: true });
+  return h;
+}
+
+for (const elite of [false, true]) test(`runner: watched ${elite ? 'elite' : 'normal'} DIY operator is a bond member before and after deployment`, async (t) => {
+  const h = diyWatchMatch(elite);
+  t.after(() => h.m.dispose());
+  const assertHuang = (priv) => {
+    for (const bondId of ['yanShip', 'victoriaShip']) {
+      const rows = diyRows(bondId, priv);
+      assert.equal(memberHeadCount(rows, false), 1, `${bondId}: the fielded DIY member counts once`);
+      const row = rows.find((x) => x.diy);
+      assert.deepEqual([row.id, row.rec.charId, row.name, row.onBoard, row.rec.isGolden], [DIY_SLOT, HUANG_PICK.charId, '煌', true, false]);
+      assert.deepEqual(row.pick, HUANG_PICK, 'the watched owner\'s skill and module, not our pick in the same slot');
+    }
+  };
+  assertHuang(ownerBoard(h.m.prepFieldMeta(h.ps('p_1')), 'p_1'));
+  assert.deepEqual(diyRows('victoriaShip', h.ps('p_0').privateView()).filter((x) => x.diy).map((x) => [x.rec.charId, x.owned]), [[SIEGE_PICK.charId, false]], 'our unbought pick stays our own');
+  assert.equal(diyRows('yanShip', h.ps('p_0').privateView()).some((x) => x.diy), false);
+  for (const pid of ['p_0', 'p_1']) assert.deepEqual(h.m.handle(pid, { t: 'g.ready', ready: true }), { ok: true });
+  h.runToPhase(PHASE.COMBAT, 1);
+  assert.deepEqual(h.m.handle('p_0', { t: 'g.watch', fieldId: 'n:p_1' }), { error: 'WRONG_PHASE', detail: 'own battle running' });
+  assert.deepEqual(h.m.handle('s_spec', { t: 'g.watch', fieldId: 'n:p_1' }), { ok: true });
+  const start = JSON.parse(JSON.stringify(h.lastTo('s_spec', 'b.start')));
+  assert.deepEqual([start.watch, start.authoritative, start.elapsed], [true, false, 0]);
+  assert.equal(start.spec.players[0].units[0].chessId, elite ? DIY_SLOT.replace(/_a$/, '_b') : DIY_SLOT);
+  assert.deepEqual(start.spec.players[0].units[0].diy, HUANG_PICK);
+  const r = rig();
+  t.after(() => r.runner.dispose());
+  r.net.emit('b.start', start);
+  await r.settle();
+  const field = r.store.get().match.field;
+  assert.equal(field.units.some((u) => u.kind === 'op'), false, 'the initial meta precedes deployment');
+  const board = () => ownerBoard(field, 'p_1', r.runner.ownerOps('p_1', start.fieldId));
+  t.diagnostic(JSON.stringify({ elite, specPick: start.spec.players[0].units[0].diy, initialMetaOps: field.units.filter((u) => u.kind === 'op').length, runnerOps: r.runner.ownerOps('p_1'), yanMembers: memberHeadCount(diyRows('yanShip', board()), false) }));
+  assertHuang(board());
+  r.advance(20000, 50);
+  const unit = r.runner._entries.get(start.battleId).battle.allyUnits.find((u) => u.kind === 'op');
+  assert.ok(unit.deployed, 'the real simulation deployed the operator');
+  assertHuang(board());
+  const op = r.runner.ownerOps('p_1')[0];
+  assert.notEqual(op.diy, unit.def.loadout.diy, 'the popup receives a copy of the frozen sim pick');
+  op.diy.charId = SIEGE_PICK.charId;
+  assert.deepEqual(r.runner.ownerOps('p_1')[0].diy, HUANG_PICK, 'a consumer cannot change the battle or the next read');
+  assert.deepEqual(r.runner.ownerOps('p_0'), [], 'another owner');
+  assert.deepEqual(r.runner.ownerOps('p_1', 'n:p_0'), [], 'another field');
+  // A fresh runner after a spectator reconnect, and switching back from another field, retain the member too.
+  const starts = h.allTo('s_spec', 'b.start').length;
+  h.sched.advance(1000);
+  h.m.addSpectator('s_spec');
+  assert.equal(h.allTo('s_spec', 'b.start').length, starts + 1, 'the spectator reconnect emits a fresh b.start');
+  assert.ok(h.lastTo('s_spec', 'b.start').elapsed > 0, 'the resumed replica catches up to the match clock');
+  const resumed = rig();
+  t.after(() => resumed.runner.dispose());
+  resumed.net.emit('b.start', JSON.parse(JSON.stringify(h.lastTo('s_spec', 'b.start'))));
+  await resumed.settle();
+  assertHuang(ownerBoard(resumed.store.get().match.field, 'p_1', resumed.runner.ownerOps('p_1')));
+  r.net.emit('b.start', h.lastTo('p_0', 'b.start'));
+  await r.settle();
+  assert.deepEqual(r.runner.ownerOps('p_1'), [], 'switching fields drops the other field\'s members');
+  r.net.emit('b.start', start);
+  await r.settle();
+  assertHuang(ownerBoard(r.store.get().match.field, 'p_1', r.runner.ownerOps('p_1')));
 });

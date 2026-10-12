@@ -61,6 +61,9 @@ S→C:
   interpolate linearly; nothing is inferred from the attack animation.
 - `b.ev` — `{ fieldId, ev: [ ... ] }` event tuples: `['spawn', UnitInfo]`, `['atk', srcId, tgtId, projKind]`, `['dmg', tgtId, amount, type]`, `['heal', tgtId, amount]`, `['skill', id, on:0|1]`, `['die', id, reason]` (reason `'killed'`, `'retreat'`, `'expired'` …; only `'killed'` plays an operator's knock-down sound), `['status', id, key, on]`, `['fx', kind, x, y, extra]` (`'hitCap' {id, n}` = a cancelled 限伤 hit, drawn as nothing, §20.12; `extra.form` = the unit's model form from then on (an enemy's mode, a 傀儡师's 替身 §22.11) — `shared/protocol.js fxForm`, state like a spawn: never dropped by the client, §21.4), `['layer', playerId, bondId, n]`, `['bounty', playerId, coins]`, `['deploy', id]`
 - `m.toast {kind, text}` · `m.ticker {text, id, type, priority, playerId}` (the strip plays the highest priority first, §21.10) · `m.emote {playerId, id}` · `m.result {...}`
+- `m.layer {playerId, bondId, add}` — a positive prep layer gain, sent only to that player in ROUND_START / SP_DRAFT /
+  PREP for audio feedback. No replay on reconnect/resync and no settlement backfill; battle audio uses `layer` tuples
+  from the displayed field. Older clients can ignore this notification without changing gameplay.
 - `m.unitStats {seq, round, units: [unitStatsEntry]}` — the answer to `g.unitStats` (`seq` echoed): every own board operator / summon by uid with `{id, uid, defId, hp, alive, maxHp, atk, def, res, interval, blockCnt, moveSpeed, range?, base: {…same}}` and `dir?` (shared/protocol.js `unitStatsEntry`; `range` = an ally's live range grid, facing RIGHT, never a target-selection grid, §21.16; `dir` = the unit's facing now, UP|RIGHT|DOWN|LEFT — the snapshot tuples carry none and UnitInfo `dir` is the facing at send time — which the detail card's range overlay rotates by, GitHub PR #281) as its next battle starts (§18.5)
 
 `UnitInfo = { id, kind, side, ownerId, defId, name, tier, golden, spine, avatar, x, y, facing, dir, maxHp, skillIndex?, moduleId?, items?, form? }` (`dir` = the ally's deploy direction; the renderer picks the model (Back for UP, mirrored for LEFT) and the ground wedge from it; `skillIndex` = the ally's equipped skill (§16): the renderer plays that skill's Spine clip (`anims.skills[i]`) and the audio its own ON_SKILL_START sound; `moduleId` = an elite ally's equipped module (uniEquipId | 'none'); `items` = an ally operator's equipped item ids (absent without any; never on enemies or summons): the bond popup lists a 变形同构体 wearer from them and the detail card shows its 同构 chip and 装备 (§21.11); all three also on the prep-scouting `m.field` units (`Match.prepFieldMeta`, the held pieces included), so a teammate's unit shows its owner's loadout in the detail card and its equipped items as item pips on the unit (prep surfaces; user playtest #2 item 3); `form` = the unit's current model form (an enemy's mode §21.4, a 傀儡师's 替身 §22.11; a view built mid-battle starts in it)).
@@ -158,6 +161,19 @@ codes are UI metadata only, never authentication. No new network message or nick
 
 Optional `coins: [[id, balance, cap]]` is an integer skill-currency readout (§29.6), separate from ammo. It includes zero, is stepped between snapshots and clears when omitted. Result-validation names for board operators are resolved from the server's DIY/stand-in selections, never a supplied display name.
 
-Preparation state carries read-only `prepMapChars` for 外勤医疗. Boss-mate and scouting metadata include them in
-displayed field coordinates. Draft cards expose optional `soldOut` when equipment stock is unavailable; the client
+Preparation state carries read-only `prepMapChars` for 外勤医疗. The owner's entries can be clicked for a detail card
+and board-space range preview without adding a placement intent or a combat entity. Boss-mate and scouting metadata
+include them in displayed field coordinates. Draft cards expose optional `soldOut` when equipment stock is unavailable; the client
 disables picking and the server checks again before consumption.
+
+`m.public.bossPairs: [[playerId, playerId?], …] | null` publishes the preparation pairing, first member left and
+second right. It is drawn once per match and retained for Hidden Core; intact pairs survive departures, singles
+pair up. Clients use it for preparation camera/placement/team frames; only older servers lacking the field use
+the legacy seat-order fallback. Viewing or reconnecting never draws a new pair.
+
+[ASSUMED] Touch's confirmed initial team grant persists for this match after its holder is eliminated or leaves.
+The maintainer explicitly approved retaining this policy on 2026-10-12; its official-game lifetime remains unverified.
+The preparation medic and future battle's medic/Touch use the same entitlement; the receiving player must still be
+alive. A mere draft focus grants nothing; another match starts without it. Only `band_amedic` is retained in
+`contentInfo.matchBands`; `teammates` and other team strategies still filter eliminated players. The official text
+and initial/unlimited-round data do not explicitly settle the holder-elimination case (§30.14).

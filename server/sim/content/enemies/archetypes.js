@@ -337,10 +337,11 @@ function rebirthCleanse(b, e) {
  * (no move / attack / skill).
  * `onKo(b, e, a)` runs at once (self-destruct, freeing prisoners …), `during(b, e, a, elapsed)` every tick of it; then the
  * enemy stands up with `hpRatio` of its max HP, `onReborn(b, e, a)` switches the form and `invincible` s of 无敌 follow.
+ * `invincibleUntargetable` opts a verified enemy into hostile selection immunity for that same window (Xi, #510).
  * `a.state`: undefined → 'reborn' → 'form2'. The 'telegraph' fx of the knock-out carries `form: 'reborn'` and the 'revive'
  * fx `form: 'form2'`: models with those clip sets (render/units.js FORMS — 锏, 扎罗, “复仇者”, 杰斯顿) play them.
  */
-function reborn({ dur = 0, hpRatio = 1, invincible = 0, onKo = null, during = null, onReborn = null, key = 'ab:reborn' } = {}) {
+function reborn({ dur = 0, hpRatio = 1, invincible = 0, invincibleUntargetable = false, onKo = null, during = null, onReborn = null, key = 'ab:reborn' } = {}) {
   const finish = (b, e, a) => {
     if (!e.alive || a.state !== 'reborn') return;
     a.state = 'form2';
@@ -348,7 +349,8 @@ function reborn({ dur = 0, hpRatio = 1, invincible = 0, onKo = null, during = nu
     e.profile.noAttack = a.noAtk;
     if (onReborn) safe(b, e, () => onReborn(b, e, a));
     e.hp = Math.max(1, e.s.maxHp * Math.max(0, Math.min(1, hpRatio)));
-    if (invincible > 0) b.addBuff(e, { key: `${key}:inv`, duration: invincible, visible: true, flags: { invulnerable: true } });
+    if (invincible > 0) b.addBuff(e, { key: `${key}:inv`, duration: invincible, visible: true,
+      flags: { invulnerable: true, ...(invincibleUntargetable ? { untargetable: true } : {}) } });
     if (e.route) e.route.pts = null;
     e.atkCd = 0;
     rebirthCooldowns(e);
@@ -656,13 +658,16 @@ const kitSelfFear = (ab) => [selfFear(ab)];
 const kitEmber = (ab) => [husk({ hits: T(ab, 'Revive[Trigger].prop_max_hp'), delay: T(ab, 'Revive[Trigger].interval') })];
 
 /**
- * 萨卡兹枯朽战士 / 组长 · death: 【污染秽蚀】 (PRTS 天赋 "{{特殊机制|死亡爆炸}}（释放半径2.0，持续8s的【污染秽蚀】）"). Silenced at its
- * death it releases nothing: PRTS 特殊机制 死亡爆炸 "如无特殊说明，此能力默认可沉默…若不处于沉默状态，将会…释放", and the
- * client agrees — its PollutedDie ability is a buff of template `projectile_on_killed` (battle prefab
- * enemy_1267_nhpbr / _2), whose ON_OWNER_KILLED first checks `CheckAbnormalFlag SILENCED` (unset) before it emits the
- * pollution projectile — the template of 高能源石虫's SILENCE-flagged blast too. Its handbook line alone is NORMAL, the one
- * exception to the handbook rule of content/enemies.js (community report of 2026-10-06, item 10: until 0.2.0 a
- * silenced one still poisoned its blockers).
+ * 萨卡兹枯朽战士 / 组长 (`enemy_1267_nhpbr`, `enemy_1267_nhpbr_2`) · death: 【污染秽蚀】 (PollutedDie; PRTS 天赋
+ * "{{特殊机制|死亡爆炸}}（释放半径2.0，持续8s的【污染秽蚀】）"). These two keys are the only enemies with this ability.
+ * Not this fog: 萨卡兹枯朽战车 / 尖端's 秽蚀轰击 (an attack skill, `_ignoreSilence`), 枯朽之种's self-destruct,
+ * 枯朽萃聚使徒's summons, 萨卡兹枯朽前锋 / 辟路前锋's arts while in a 源石污染区, 假想敌：蚀裂's death cloud, and
+ * 高能源石虫's 死亡爆炸.
+ * A death while silenced creates no fog. The owner's official-play recall of 2026-10-12 (GitHub #470) is that
+ * killing one that already shows the silence icon leaves no 污染秽蚀. That recall contradicts the PRTS / in-game
+ * text 「不可沉默」. Both handbook lines are NORMAL ("被击倒时释放污染秽蚀…"), not SILENCE. 0.2.0 already withheld
+ * the fog, from the general 死亡爆炸 line "如无特殊说明，此能力默认可沉默" and the client template
+ * `projectile_on_killed` (DESIGN §25.18.2). The recorded reason is now the owner's recall, against 「不可沉默」.
  */
 const kitPolluted = (ab) => [{
   sil: true,

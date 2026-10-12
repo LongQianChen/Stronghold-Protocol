@@ -44,6 +44,18 @@ test('user Given strategy medics When inspecting them Then their healing tiles r
   }
 });
 
+test('user Given a prepared map medic When its card opens Then its board-space range is visible before battle', () => {
+  for (const id of ['char_605_cmedic', 'char_613_acmedc']) {
+    const unit = medic(id, { id: -1, uid: -1, area: 'board', x: 2, y: 10, dir: 'RIGHT' });
+    const r = inspectRange({ ...args(unit), target: { kind: 'unit', unit, prepMapChar: true }, showPrep: true,
+      field: { prep: false }, snapshot: [99, 18, 3, 1202, 1202] });
+    assert.deepEqual([r.row, r.col, r.dir], [10, 2, 'RIGHT'], 'use the original board coordinates even on the mirrored boss half');
+    assert.equal(rangeTiles(r.grid, r.row, r.col, r.dir).length, 12);
+    assert.equal(inspectRange({ ...args(unit), target: { kind: 'unit', unit }, showPrep: true }), null,
+      'other unit cards do not become prep-range previews');
+  }
+});
+
 test('user Given a moving battle medic When its current range changes Then the overlay follows live range and position', () => {
   const r = inspectRange(args(medic(), { field: { prep: false }, snapshot: [71, 8, 10, 120, 200], live: { range: tokens.char_613_acmedc.skill.rangeGrid } }));
   assert.equal(r.grid.length, 18);

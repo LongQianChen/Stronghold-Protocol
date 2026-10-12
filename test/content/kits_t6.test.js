@@ -997,8 +997,9 @@ test('荒芜拉普兰德: 叙拉古的荣幸 +5 initial SP on every deployment; 
   // (S3 may be running — its drones do not normal-attack): wait for a normal attack after stage 3
   assert.ok(h.runUntil(() => h.dmg.some((d) => d.src === u.id && d.attack && d.tgt === e.id && d.t > ts), 60));
   const last = h.dmg.filter((d) => d.src === u.id && d.attack && d.tgt === e.id).at(-1);
-  const same = h.dmg.filter((d) => d.src === u.id && d.attack && d.t === last.t);
-  assert.equal(same.length, 2, 'two drone hits per attack');
+  const same = h.dmg.filter((d) => d.src === u.id && d.t === last.t);
+  assert.equal(same.filter((d) => d.attack).length, 1, 'one body hit per attack');
+  assert.equal(same.filter((d) => d.tags.includes('funnel')).length, 2, 'two drone additions per attack');
 });
 
 test('缪尔赛思: 流形 copies stats/range/damage type but not the attack shape (锏 2-hit); a capped melee copy steals nothing more', () => {
@@ -1120,7 +1121,8 @@ test('异客: the S3 storm is range x-1 — the 13-tile diamond — around the t
   // in the diamond (|Δrow| + |Δcol| ≤ 2 by tile): (2, 0) / (0, −2) / (1.95, 0.4) lay outside the old 1.5 circle
   for (const off of [[0, 0], [2, 0], [0, -2], [-2, 0], [1.45, 1.45], [1.95, 0.4]]) assert.equal(strikes(off), 8, `(${off}) struck by all 8 strikes`);
   // outside it: tile (+2, +1), and tile (+3, 0) — (1.55, 1.05) was inside the old circle around the target's position
-  for (const off of [[2, 1], [1.55, 1.05], [0, 2.6]]) assert.equal(strikes(off), 0, `(${off}) never struck`);
+  // three tiles off along the columns: the field has no row 13 (a probe there is held on row 12, inside the diamond)
+  for (const off of [[2, 1], [1.55, 1.05], [2.6, 0]]) assert.equal(strikes(off), 0, `(${off}) never struck`);
 });
 
 test('蕾缪安: 通缉 needs a continuous 8 s stay in a 拉特兰 range (leaving restarts the count)', () => {

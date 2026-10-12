@@ -31,11 +31,12 @@
 //                                               elite or not) stand on the field get ATK +atk
 //   act2autochess_band3_buff  伊奥莱塔 统御号令 at combat start n = elite operators on the field ⇒ every elite operator
 //                                               ATK +atk_per_cnt × n, HP +max_hp_per_cnt × n (all 直接乘算)
-//   auto_chess_change_map     Touch 外勤医疗    "所有玩家场地上出现一名<预备干员-医疗>": while any alive player of the match
-//                                               holds band_amedic, every player's field gets the map character of the
+//   auto_chess_change_map     Touch 外勤医疗    "所有玩家场地上出现一名<预备干员-医疗>": once selected in this match, its
+//                                               retained team grant gives every player's field the map character of the
 //                                               variant whose common_condition holds for that player's elites on the field
 //                                               (condition_golden_chess_le cnt → 预备干员-医疗, _ge cnt → Touch), spawned at
-//                                               combat start on its stage slot (tokens.spawnMapChar)
+//                                               combat start on its stage slot (tokens.spawnMapChar). [ASSUMED] that slot's
+//                                               aggroSeq precedes ordinary initial operators; deploySeq stays the runtime spawn
 // Prep-only bands (economy / shop / grants / layers at prep end or round start) live in bands/meta.js.
 
 import {
@@ -238,12 +239,17 @@ function installMapChars(battle) {
   const holders = battle.players.filter((ps) => matchBands(battle, ps.playerId).includes(AMEDIC_BAND));
   if (!holders.length) return;
   battle.on('battleStart', () => {
+    const chars = [];
     for (const ps of holders) {
       const elites = deployedOps(battle, ps.playerId).filter(isElite).length;
-      for (const id of amedicCharsFor(elites, variants)) {
-        const u = spawnMapChar(battle, ps.playerId, id);
-        if (u) fxOn(battle, 'summon', u, keyOf(AMEDIC_BAND), AMEDIC_BAND);
-      }
+      for (const id of amedicCharsFor(elites, variants)) chars.push({ playerId: ps.playerId, id });
+    }
+    for (const [i, { playerId, id }] of chars.entries()) {
+      // The reserve medic occupies this stage slot in preparation; Touch replaces it at battle start. [ASSUMED]
+      // Replacement preserves the slot's priority before ordinary deployments. Shared-field ordering between
+      // prepared characters follows player order, as for other initial placements (lifecycle.js).
+      const u = spawnMapChar(battle, playerId, id, { preBattleAggroSeq: i - chars.length });
+      if (u) fxOn(battle, 'summon', u, keyOf(AMEDIC_BAND), AMEDIC_BAND);
     }
   });
 }

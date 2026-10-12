@@ -457,7 +457,11 @@ function devour(battle, pid, bb, members) {
     // start, resolves nothing (`knocked`: it is off the field)
     if (knocked(t)) continue;
     S.fxOn(battle, 'devour', t, 'bond:egirShip', 'devour', { from: m.id });
-    if (amount > 0) battle.loseHp(t, mitigate(amount, 'phys', t.s), { source: m, tags: ['bond:egir:devour'] });
+    // The maintainer's 2026-10-11 联防 carry decision: reconstruct marks/attributes, but do not apply a second
+    // opening HP loss (or trigger deaths/revives) to an operator restored from the previous field. Battle.start
+    // applies its exact HP ratio and SP after the opening hooks. Fresh units and all other battle kinds still pay.
+    const restored = battle.kind === 'unite' && Number.isFinite(t.carry?.hpPct) && t.carry.hpPct > 0;
+    if (amount > 0 && !restored) battle.loseHp(t, mitigate(amount, 'phys', t.s), { source: m, tags: ['bond:egir:devour'] });
     if (!layered.has(t)) {
       layered.add(t);
       S.gainLayers(battle, { playerId: pid, bonds: 'egirShip', n: S.tierOf(t), source: m, reason: 'bond' });

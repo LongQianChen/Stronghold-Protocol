@@ -711,6 +711,91 @@ test('Touch 外勤医疗: every player of a match with the band gets 预备干�
   cover('band_amedic');
 });
 
+test('外勤医疗: 预备干员-医疗 and Touch keep preplaced targeting order against a flying 守墓石像', () => {
+  const defs = {
+    harold: chessRec({ id: 'harold', profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+    elite1: chessRec({ id: 'elite1', golden: true, profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+    elite2: chessRec({ id: 'elite2', golden: true, profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+  };
+  for (const [eliteCount, mapCharId] of [[1, 'char_605_cmedic'], [2, 'char_613_acmedc']]) {
+    const h = makeBattle({
+      stageId: 'act2autochess_m01', bandId: 'band_amedic', autoFinish: false, timeLimit: 100,
+      defs: { chess: defs }, units: [
+        { chessId: 'harold', row: 11, col: 3 },
+        { chessId: 'elite1', row: 12, col: 8 },
+        ...(eliteCount === 2 ? [{ chessId: 'elite2', row: 9, col: 8 }] : []),
+      ],
+    });
+    h.step();
+    const medic = h.unit(mapCharId), harold = h.unit('harold');
+    const ops = h.allies().filter((u) => u.kind === 'op');
+    assert.ok(medic?.alive && harold?.alive, mapCharId);
+    assert.ok(ops.every((u) => medic.deploySeq > u.deploySeq), 'battleStart creates the map character after initial deployment');
+    assert.ok(ops.every((u) => medic.aggroSeq < u.aggroSeq), 'its targeting order precedes every initial operator');
+    assert.equal(medic.s.taunt, harold.s.taunt, 'the two targets have equal taunt');
+
+    const gargoyle = h.spawn('enemy_1172_dugago', { pos: [10, 3], routeIndex: 0, mods: { speedMul: 0 } });
+    assert.ok(gargoyle);
+    h.b.kill(gargoyle, null); // first knock-out changes 守墓石像 into its flying form
+    assert.ok(gargoyle.alive);
+    const attacks = [];
+    h.b.on('enemyAttackStart', ({ enemy, targets }) => {
+      if (enemy === gargoyle && gargoyle.motion === 'FLY') attacks.push({ target: targets[0], x: enemy.x, y: enemy.y });
+    });
+    assert.ok(h.runUntil(() => attacks.length > 0, 20), 'flying gargoyle starts an attack');
+    const { target, x, y } = attacks[0];
+    const reach = gargoyle.base.rangeRadius + 0.25;
+    for (const u of [harold, medic]) assert.ok((u.x - x) ** 2 + (u.y - y) ** 2 <= reach ** 2, `${u.defId} is in range at target lock`);
+    assert.equal(gargoyle.blockedBy, null);
+    assert.equal(target, harold, `${mapCharId}: the later ordinary operator is selected`);
+    h.b.addBuff(medic, { key: 'test:taunt', mods: { taunt: 1 }, persist: true });
+    assert.ok(h.runUntil(() => attacks.length > 1, 20), 'gargoyle starts another attack');
+    assert.equal(attacks[1].target, medic, 'higher taunt still takes precedence over deployment order');
+    checkInvariants(h.b);
+  }
+});
+
+test('外勤医疗: 联防右侧 Touch retains its prepared targeting order', () => {
+  const defs = {
+    harold: chessRec({ id: 'harold', profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+    elite1: chessRec({ id: 'elite1', golden: true, profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+    elite2: chessRec({ id: 'elite2', golden: true, profession: 'TANK', skill: null, stats: { atk: 0, maxHp: 1e7, blockCnt: 0 } }),
+  };
+  const players = [
+    { playerId: 'L', seat: 0, side: 'L', colOffset: 0, bandId: 'band_amedic', bonds: {}, playerEffects: [], units: [] },
+    { playerId: 'R', seat: 1, side: 'R', colOffset: 8, bandId: 'band_amedic', bonds: {}, playerEffects: [], units: [
+      { uid: 1, kind: 'chess', chessId: 'harold', row: 11, col: 3 },
+      { uid: 2, kind: 'chess', chessId: 'elite1', row: 12, col: 8 },
+      { uid: 3, kind: 'chess', chessId: 'elite2', row: 9, col: 8 },
+    ] },
+  ];
+  const h = makeBattle({ kind: 'unite', stageId: 'act2autochess_m01', players, defs: { chess: defs }, autoFinish: false });
+  h.step();
+  const leftMedic = h.allies().find((u) => u.ownerId === 'L' && u.defId === 'char_605_cmedic');
+  const rightTouch = h.allies().find((u) => u.ownerId === 'R' && u.defId === 'char_613_acmedc');
+  const harold = h.allies().find((u) => u.ownerId === 'R' && u.defId === 'harold');
+  assert.ok(leftMedic && rightTouch && harold);
+  assert.deepEqual([leftMedic.tileR, leftMedic.tileC], [10, 2]);
+  assert.deepEqual([rightTouch.tileR, rightTouch.tileC], [10, 10]);
+  assert.ok(leftMedic.aggroSeq < rightTouch.aggroSeq && rightTouch.aggroSeq < harold.aggroSeq);
+  assert.ok(rightTouch.deploySeq > harold.deploySeq);
+
+  const gargoyle = h.spawn('enemy_1172_dugago', { pos: [10, 11], routeIndex: 0, mods: { speedMul: 0 } });
+  assert.ok(gargoyle);
+  h.b.kill(gargoyle, null);
+  const attacks = [];
+  h.b.on('enemyAttackStart', ({ enemy, targets }) => {
+    if (enemy === gargoyle && enemy.motion === 'FLY') attacks.push({ target: targets[0], x: enemy.x, y: enemy.y });
+  });
+  assert.ok(h.runUntil(() => attacks.length > 0, 20));
+  const { target, x, y } = attacks[0];
+  const reach = gargoyle.base.rangeRadius + 0.25;
+  for (const u of [harold, rightTouch]) assert.ok((u.x - x) ** 2 + (u.y - y) ** 2 <= reach ** 2);
+  assert.equal(gargoyle.blockedBy, null);
+  assert.equal(target, harold);
+  checkInvariants(h.b);
+});
+
 test('coverage: every band is exercised by a test above', () => {
   cover('band_dusk'); // 夕: 画卷 grant (fixed-round test) + 墨色真颜 (battle test)
   const missing = Object.keys(DATA.bands).filter((id) => !COVER.has(id)).sort();

@@ -60,7 +60,7 @@ export class BattleSummons {
     if (opts.stats) for (const [k, v] of Object.entries(opts.stats)) if (Number.isFinite(v)) u.base[k] = v;
     this._setupUnit(u, opts.kit ?? null);
     if (opts.untargetable) this.addBuff(u, { key: 'trait:untargetable', flags: { untargetable: true }, persist: true, allowDead: true });
-    if (!this._deploy(u, { initial: false })) {
+    if (!this._deploy(u, { initial: false, preBattleAggroSeq: opts.preBattleAggroSeq })) {
       // tile still busy (a unit stands there even with `force`): drop the half-built token and its hooks
       u.removed = true;
       this.offOwner(u);

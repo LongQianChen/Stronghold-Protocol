@@ -1,6 +1,6 @@
 // Real-server browser E2E of the community reports of 2026-10-06, items 51 / 55 (the boss round's prep). A co-op match
 // jumped to the boss round (fastServer SP_START_ROUND=boss), 2 humans (seats 0 and 3) + 2 AI seats, every board placed
-// by the jump (SP_AUTO_PLACE), so the pairs are (host, AI 1) and (AI 2, guest) — the guest is the right-hand player.
+// by the jump (SP_AUTO_PLACE). Pairing is random; both clients must use the published pair and side.
 //   * item 51: each human's prep shows its own pieces on its half (the guest's mirrored onto the right half) and its
 //     partner's pieces on the other half (read-only 'm:<uid>' views from m.private bossMate, facing as the battle will
 //     place them), the leader standing on the boss field; the team panel frames the pair's two avatars (green, the
@@ -33,6 +33,7 @@ const prepView = (c) => c.page.evaluate(() => {
   const pick = (pre) => entries.filter(([k]) => String(k).startsWith(pre)).map(([, x]) => ({ id: x.info?.defId, owner: x.info?.ownerId ?? null, x: Math.round(x.x), y: Math.round(x.y), dir: x.info?.dir ?? null }));
   return {
     me: s.me.playerId, phase: s.match.public?.phase, camKind: v?.debug?.camKind ?? null, mode: v?.mode ?? null,
+    pair: s.match.public?.bossPairs?.find(g => g.includes(s.me.playerId)) ?? [],
     field: s.match.field ? { fieldId: s.match.field.fieldId, kind: s.match.field.kind, prep: !!s.match.field.prep, side: s.match.field.side ?? null } : null,
     own: pick('p:'), mates: pick('m:'), scout: entries.filter(([k]) => typeof k === 'number' || /^\d+$/.test(String(k))).length,
     leader: v?.debug?.leader ? { key: v.debug.leader.key, shown: !!v.debug.leader.view?.root?.visible } : null,
@@ -68,6 +69,7 @@ async function coopAtBoss(P, base, prefix) {
       if (s.phase !== 'BAND_DRAFT') { picked.add(c.label); continue; }
       if (picked.has(c.label) || s.draft?.turn !== s.me) continue;
       await c.click('.dband:not(.is-taken)', null, { nth: c === host ? 2 : 5 });
+      await c.click('.draft-detail__btns .btn--primary', '确认选择');
       picked.add(c.label);
     }
     await sleep(250);
@@ -91,15 +93,16 @@ describe('the boss round\'s prep: the pair together, the frames, a watcher\'s bo
       const gv = await prepView(guest);
       await host.shot('prep');
       await guest.shot('prep');
-      // the host holds the left half, its AI partner the right one; the guest the right half, its AI partner the left
-      assert.equal(hv.camKind, 'bossPrep');
-      assert.equal(gv.camKind, 'bossPrep');
-      assert.deepEqual([hv.bossMate?.side, gv.bossMate?.side], ['R', 'L'], JSON.stringify({ hv: hv.bossMate, gv: gv.bossMate }));
-      assert.ok(hv.own.length >= 4 && hv.own.every((u) => u.x <= 10), `host's pieces on the left half: ${JSON.stringify(hv.own)}`);
-      assert.ok(gv.own.length >= 4 && gv.own.every((u) => u.x >= 10), `guest's pieces mirrored onto the right half: ${JSON.stringify(gv.own)}`);
-      assert.ok(hv.mates.length >= 4 && hv.mates.every((u) => u.x >= 10 && u.owner === hv.bossMate.playerId), `the AI partner's pieces on the right half: ${JSON.stringify(hv.mates)}`);
-      assert.ok(gv.mates.length >= 4 && gv.mates.every((u) => u.x <= 10 && u.owner === gv.bossMate.playerId), `the AI partner's pieces on the left half: ${JSON.stringify(gv.mates)}`);
-      assert.ok(hv.mates.some((u) => u.dir === 'LEFT'), 'mirrored onto the right half: RIGHT reads LEFT');
+      for (const v of [hv, gv]) {
+        assert.equal(v.camKind, 'bossPrep');
+        assert.equal(v.pair.length, 2);
+        const right = v.pair.indexOf(v.me) === 1;
+        assert.equal(v.bossMate?.playerId, v.pair.find(id => id !== v.me));
+        assert.equal(v.bossMate.side, right ? 'L' : 'R');
+        assert.ok(v.own.length >= 4 && v.own.every(u => right ? u.x >= 10 : u.x <= 10), `own side: ${JSON.stringify(v)}`);
+        assert.ok(v.mates.length >= 4 && v.mates.every(u => (right ? u.x <= 10 : u.x >= 10) && u.owner === v.bossMate.playerId));
+        assert.ok((right ? v.own : v.mates).some(u => u.dir === 'LEFT'), 'the right-half units mirror their facing');
+      }
       assert.ok(hv.leader?.shown && gv.leader?.shown, 'the leader stands on the boss field for both');
       assert.deepEqual(hv.framed.sort(), [hv.names[hv.me], hv.names[hv.bossMate.playerId]].sort(), 'the host and its partner framed');
       assert.deepEqual(gv.framed.sort(), [gv.names[gv.me], gv.names[gv.bossMate.playerId]].sort(), 'the guest and its partner framed');

@@ -1,6 +1,7 @@
 // Real-server browser E2E of user playtest #2 item 10 (+ item 6 on the real flow): the boss round's prep shows the
 // player's own half of the boss field (tiles, gates, objective) and placing works — solo (标准: R9 最终攻势; 险境:
-// R15 隐秘核心) and co-op (two humans: the host prepares on the LEFT half, the guest on the mirrored RIGHT half) — then
+// R15 隐秘核心) and co-op (two humans: each prepares on the half m.public.bossPairs assigns, the second of the pair
+// on the mirrored RIGHT half) — then
 // the Final Assault starts with the placed units on the boss field. Along the way (item 6): the pen stays hidden with
 // the board (🔍▶▶ shows it, 🔍◀◀ "返回战场" hides it again), scouting a teammate (前往查看) and coming back, and in
 // the boss battle.
@@ -21,6 +22,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { Client, ROOT, sleep, hasChrome, startRealServer, problemsOf, waitForFunctionLong } from '../e2e/client.mjs';
+import { prepCamera } from '../../public/js/ui/gameLogic/camera.js';
 
 const ENABLED = process.env.SP_E2E === '1' && hasChrome() && existsSync(path.join(ROOT, 'public/assets'));
 const ONLY = process.env.SP_P2_REAL || '';
@@ -99,6 +101,29 @@ async function placeOne(c, dir = 'RIGHT') {
     }
   }
   throw new Error(`${c.label}: nothing could be placed`);
+}
+
+/**
+ * The half this client prepares on, from the published pairing (`m.public.bossPairs` through `prepCamera`).
+ * The first of a pair is on the left half; the second is on the mirrored right half. Seat order is not a side.
+ */
+async function assignedBossSide(c) {
+  const snap = await c.page.evaluate(() => {
+    const s = globalThis.__SP__.store.get();
+    const pub = s.match.public || {};
+    return {
+      me: s.me?.playerId ?? null,
+      phase: pub.phase ?? null, round: pub.round ?? null, bossRound: pub.bossRound ?? null, hiddenRound: pub.hiddenRound ?? null,
+      bossPairs: pub.bossPairs ?? null,
+      players: (pub.players || []).map((p) => ({ playerId: p.playerId, seat: p.seat, alive: p.alive !== false })),
+    };
+  });
+  const cam = prepCamera(snap, snap.me);
+  const pair = (Array.isArray(snap.bossPairs) ? snap.bossPairs : []).find((g) => Array.isArray(g) && g.includes(snap.me));
+  assert.equal(cam.kind, 'bossPrep', `${c.label}: boss-round prep (pairs ${JSON.stringify(snap.bossPairs)})`);
+  assert.ok(pair, `${c.label}: a published pair`);
+  assert.equal(cam.opts.side, pair.indexOf(snap.me) % 2 === 1 ? 'R' : 'L', `${c.label}: the side is the pair index`);
+  return { side: cam.opts.side, me: snap.me, pair, bossPairs: snap.bossPairs };
 }
 
 /** The boss-round prep checks shared by every variant. */
@@ -344,7 +369,7 @@ describe('user playtest #2 item 10 — boss-round prep on the boss field (real s
     }
   });
 
-  test('co-op 险境 (R14): host on the left half, guest on the mirrored right half; scouting and 返回 keep the pen hidden', { skip: only('coop'), timeout: 10 * 60 * 1000 }, async () => {
+  test('co-op 险境 (R14): each player on the half bossPairs assigns (the right half mirrored); scouting and 返回 keep the pen hidden', { skip: only('coop'), timeout: 10 * 60 * 1000 }, async () => {
     const srv = await startRealServer({ fast: { timerScale: 1, combatSpeed: 8, startRound: 'boss', items: ['chess_item_6_03_m'] } });
     const P = await pptr();
     const host = new Client(P, srv.base, 'host', { prefix: 'fix' });
@@ -386,8 +411,12 @@ describe('user playtest #2 item 10 — boss-round prep on the boss field (real s
       await sleep(1800);
       const hs = await host.st();
       assert.equal(hs.round, hs.bossRound, 'the boss round');
-      await checkBossPrep(host, 'L', 'host');
-      await checkBossPrep(guest, 'R', 'guest');
+      const hostSeat = await assignedBossSide(host);
+      const guestSeat = await assignedBossSide(guest);
+      assert.ok(hostSeat.pair.includes(guestSeat.me), `the two players share a pair (${JSON.stringify(hostSeat.bossPairs)})`);
+      assert.notEqual(hostSeat.side, guestSeat.side, 'a pair occupies both halves');
+      await checkBossPrep(host, hostSeat.side, 'host');
+      await checkBossPrep(guest, guestSeat.side, 'guest');
       const hp = await placeOne(host, 'RIGHT');
       const gp = await placeOne(guest, 'RIGHT');
       await sleep(600);
@@ -404,12 +433,14 @@ describe('user playtest #2 item 10 — boss-round prep on the boss field (real s
         const w = await viewState(host);
         assert.equal(w.penVisible, 0, 'scouting: no pen figure with the teammate\'s board');
         assert.ok(w.band[1] <= 13, `scouting: no pen rows (${w.band})`);
+        assert.equal(w.camKind, 'bossPrep', 'scouting: the boss field');
+        assert.deepEqual(w.prepField, { kind: 'bossPrep', side: guestSeat.side, mirror: guestSeat.side === 'R' }, 'scouting: the teammate\'s half');
         await host.click('.gm__watching button, .team__back', null, { timeout: 4000 });
         await host.page.waitForFunction(() => document.querySelector('.gm')?.dataset.camera === 'bossPrep', { timeout: 6000 });
         await sleep(900);
         const back = await viewState(host);
         assert.equal(back.penVisible, 0, '返回: no pen figure');
-        assert.deepEqual(back.prepField, { kind: 'bossPrep', side: 'L', mirror: false }, '返回: the own boss half again');
+        assert.deepEqual(back.prepField, { kind: 'bossPrep', side: hostSeat.side, mirror: hostSeat.side === 'R' }, '返回: the own boss half again');
       }
       await penRoundTrip(guest, 'guest');
       // Real clients open their own 教鞭 candidates together; refreshing one tab restores that same private choice.
@@ -454,8 +485,8 @@ describe('user playtest #2 item 10 — boss-round prep on the boss field (real s
         await c.page.waitForFunction(() => globalThis.__SP__.store.get().match.private.personalChoice === null, { timeout: 6000 });
       }
       for (const c of [host, guest]) await c.click('.readybtn');
-      await checkBossBattle(host, hp, 'L', 'host');
-      await checkBossBattle(guest, gp, 'R', 'guest');
+      await checkBossBattle(host, hp, hostSeat.side, 'host');
+      await checkBossBattle(guest, gp, guestSeat.side, 'guest');
       assert.deepEqual(problemsOf([host, guest]), []);
     } finally {
       for (const c of [host, guest]) if (c.problems.length) console.log(c.label, c.problems.slice(0, 20).join('\n'));

@@ -4,7 +4,7 @@
 // and the list compaction.
 // Installed on Battle.prototype by server/sim/Battle.js (a method container: never instantiated; `this` is the battle).
 
-import { MAX_ALIVE_ENEMIES } from '../constants.js';
+import { MAX_ALIVE_ENEMIES, FIELD_EDGE_INSET } from '../constants.js';
 import { Unit } from '../units.js';
 import { compileRoute } from '../ai.js';
 import { unitInfo } from '../snapshot.js';
@@ -201,11 +201,11 @@ export class BattleSpawns {
   }
 
   _clampPos(e) {
-    const R = this.rect;
-    if (e.x < R.c0 - 0.5) e.x = R.c0 - 0.5;
-    if (e.x > R.c1 + 0.5) e.x = R.c1 + 0.5;
-    if (e.y < R.r0 - 0.5) e.y = R.r0 - 0.5;
-    if (e.y > R.r1 + 0.5) e.y = R.r1 + 0.5;
+    const R = this.rect, m = 0.5 - FIELD_EDGE_INSET; // inside the edge: on the edge tile, never halfway (body.js)
+    if (e.x < R.c0 - m) e.x = R.c0 - m;
+    if (e.x > R.c1 + m) e.x = R.c1 + m;
+    if (e.y < R.r0 - m) e.y = R.r0 - m;
+    if (e.y > R.r1 + m) e.y = R.r1 + m;
   }
 
   _compactEnemies() {

@@ -7,11 +7,76 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PHASE } from '../../shared/constants.js';
-import { botPickCard, bountyKillChance, itemTarget, arrange, botPrepBegin, botPrepEnd, bondPlan, rangeTiles, effDps, rangeRec, buyScoreOf } from '../../server/match/bot.js';
+import { botPickBand, botPickCard, bountyKillChance, itemTarget, arrange, botPrepBegin, botPrepEnd, bondPlan, rangeTiles, effDps, rangeRec, buyScoreOf } from '../../server/match/bot.js';
 import { parseKey, tileKey } from '../../server/match/board.js';
 import { makeMatch, checkInvariants, give, giveItem, legalTileFor, DATA } from './harness.js';
 
 const soloBot = (o = {}) => makeMatch({ mode: 'solo', difficulty: 'NORMAL', seats: [{ seat: 0, playerId: 'ai_0', name: 'AI', isBot: true, connected: true }], ...o });
+
+test('#514: a living teammate soft-reserves an opening bond, and elimination releases it', () => {
+  const { m } = makeMatch({ humans: 2, difficulty: 'HARD', seed: 11 }).start().toPrep();
+  const [human, bot] = m.order;
+  try {
+    bot.isBot = true;
+    human.bandId = null;
+    const chessOf = (bond) => Object.values(DATA.chess).find((c) => c.visible && !c.isGolden && c.tier <= 3
+      && Array.isArray(c.bonds) && c.bonds.includes(bond)
+      && c.bonds.filter((b) => m.gd.bond(b)?.isCore).length === 1);
+    const usable = m.gd.bondIds.filter((id) => m.gd.bond(id)?.isCore && !m.gd.modeInactiveBonds.has(id) && chessOf(id));
+    assert.ok(usable.length >= 2, 'two core bonds with a single-core chess');
+    const [a, b] = usable;
+    give(m, bot, chessOf(a).chessId, 'hand');
+    give(m, bot, chessOf(b).chessId, 'hand');
+    const focus = () => { bot._botFocus = null; bot._botFocusId = null; return bondPlan(m, bot).focus; };
+    const natural = focus();
+    assert.ok(natural === a || natural === b, natural);
+    const other = natural === a ? b : a;
+    let found = false;
+    for (let layers = 10; layers <= 60 && !found; layers += 10) {
+      bot.layers[other] = layers;
+      if (focus() === other) found = true;
+    }
+    assert.equal(focus(), other, 'one layer step is enough for the other bond to lead');
+    const band = m.gd.bandIds().find((id) => {
+      const bonds = m.gd.bandBondIds(id);
+      return bonds.includes(other) && !bonds.includes(natural);
+    });
+    assert.ok(band, `a strategy names ${other} and not ${natural}`);
+    human.bandId = band;
+    assert.notEqual(focus(), other, 'the opening strategy pulls focus off the reserved bond');
+    human.alive = false;
+    assert.equal(focus(), other, 'elimination ends the reservation');
+  } finally { m.dispose(); }
+});
+
+test('#514: strategy selection stays possible, and less likely, while a teammate holds that opening', () => {
+  const { m } = makeMatch({ humans: 2, difficulty: 'HARD', seed: 3 }).start().toPrep();
+  const [human, bot] = m.order;
+  try {
+    bot.isBot = true;
+    human.bandId = null;
+    const tally = (id, n = 400) => {
+      let hits = 0;
+      for (let i = 0; i < n; i++) if (botPickBand(m, bot) === id) hits++;
+      return hits;
+    };
+    const open = new Map();
+    for (let i = 0; i < 400; i++) {
+      const id = botPickBand(m, bot);
+      open.set(id, (open.get(id) || 0) + 1);
+    }
+    const ranked = [...open.entries()].filter(([id]) => m.gd.bandBondIds(id).length > 0).sort((x, y) => y[1] - x[1]);
+    const [band, base] = ranked[0];
+    assert.ok(base > 5, `${band} is drawn often enough to compare (${base})`);
+    human.bandId = band;
+    const reserved = tally(band);
+    assert.ok(reserved > 0, 'a soft reservation can still draw the strategy');
+    assert.ok(reserved < base, `reserved ${reserved} times, unreserved ${base}`);
+    human.alive = false;
+    const released = tally(band);
+    assert.ok(released > reserved, `elimination raises the rate from ${reserved} to ${released}`);
+  } finally { m.dispose(); }
+});
 
 test('user: Given a faction strategy teammate, When scoring shared high-tier chess, Then humans and bots receive the same preference even with full stock', () => {
   const { m } = makeMatch({ humans: 3, seed: 11 }).start().toPrep();

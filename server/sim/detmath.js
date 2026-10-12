@@ -10,6 +10,7 @@
 // test/sim/detmath.test.js scans server/sim/).
 //
 //   hypot(x, y)         √(x² + y²) as Math.sqrt(x*x + y*y), rescaled by exact powers of two outside 2^±500
+//   roundHalfEven(x)    nearest integer, ties to even (四舍六入五成双); Math.round and Math.floor, never −0
 //   powi(x, n)          xⁿ for an integer n: square-and-multiply in double-double, one final rounding
 //   sin(x), cos(x)      fdlibm 5.3 (__kernel_sin / __kernel_cos / __ieee754_rem_pio2)
 //   atan2(y, x)         fdlibm (FreeBSD msun e_atan2.c / s_atan.c)
@@ -46,6 +47,17 @@ export function hypot(x, y) {
   return Math.sqrt(x * x + y * y);
 }
 
+/**
+ * x rounded to an integer, ties to even (2.5 → 2, 3.5 → 4, −2.5 → −2): the rule PRTS 作战机制 gives for the tile of a
+ * target — 受击方坐标经round函数取整(四舍六入五成双)得到其所属格坐标. Math.round rounds ties up (2.5 → 3). Exact; never −0.
+ * @param {number} x
+ */
+export function roundHalfEven(x) {
+  const f = Math.floor(x);
+  if (x - f !== 0.5) return Math.round(x) + 0;
+  return (f % 2 === 0 ? f : f + 1) + 0;
+}
+
 // ---- integer powers ----------------------------------------------------------------------------------------------
 
 const SPLIT = 134217729; // 2^27 + 1 (Dekker)
@@ -67,13 +79,15 @@ function mul2(ah, al, bh, bl, out) {
 /**
  * xⁿ for an integer n (the sim's powers are stack counts, chain bounces …). The square-and-multiply runs in
  * double-double and rounds once, so the result is correctly rounded in practice; a non-integer exponent or a huge
- * base falls back to Math.pow.
+ * base falls back to Math.pow. A zero base takes Math.pow's exact results: an odd power keeps the sign of −0, which
+ * the double-double sum would lose ((−0)¹ = −0, (−0)⁻¹ = −∞).
  * @param {number} x
  * @param {number} n
  */
 export function powi(x, n) {
   // eslint-disable-next-line no-restricted-properties -- outside the integer domain only (never in the sim)
   if (!Number.isInteger(n) || !Number.isFinite(x) || Math.abs(x) > P500) return Math.pow(x, n);
+  if (x === 0) { const odd = n % 2 !== 0; return n === 0 ? 1 : n > 0 ? (odd ? x : 0) : (odd ? 1 / x : Infinity); }
   if (n < 0) return 1 / powi(x, -n);
   ACC[0] = 1; ACC[1] = 0; BASE[0] = x; BASE[1] = 0;
   let k = n;

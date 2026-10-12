@@ -4,12 +4,23 @@ import { GEO, PHASE } from '../../../../shared/constants.js';
 import { BOSS_ROW_SHIFT, MAX_COL } from '../../render/prepfield.js';
 import { int, isObj } from './shared.js';
 
+/** Server-owned random pairs. Seat inference is only for an older server without the field. */
+function prepPair(pub, myId) {
+  const alive = (Array.isArray(pub?.players) ? pub.players : []).filter(p => isObj(p) && p.alive !== false);
+  if (!alive.some(p => p.playerId === myId)) return [];
+  if (pub.bossPairs !== undefined) {
+    return (Array.isArray(pub.bossPairs) ? pub.bossPairs : []).find(g => Array.isArray(g) && g.includes(myId)) || [];
+  }
+  const ids = alive.sort((a, b) => int(a.seat, 99) - int(b.seat, 99)).map(p => p.playerId);
+  const i = ids.indexOf(myId);
+  return ids.slice(i - i % 2, i - i % 2 + 2);
+}
 
 /**
  * Camera of the own prep board (research 09 §1.2 "Final Assault, right side", DESIGN §15): in the prep of a boss round
  * (最终攻势 / 隐秘核心: `pub.round` is `bossRound` or `hiddenRound`) the pieces stand on the player's half of the shared
  * boss field — `{ kind: 'bossPrep', opts: { side } }`; the side follows the server's pairing (server/match/
- * finalAssault.js pairPlayers: the alive players in seat order, two by two; the second of a pair is on the mirrored
+ * finalAssault.js pairPlayers, sent in m.public.bossPairs; the second of a pair is on the mirrored
  * right half 'R', a lone player on 'L'). Any other prep: the own board `{ kind: 'prep', opts: { rect, side: 'L' } }`.
  * @param {any} pub m.public
  * @param {string|null} myId
@@ -19,9 +30,7 @@ export function prepCamera(pub, myId) {
   const normal = { kind: 'prep', opts: { rect: { ...GEO.NORMAL_RECT }, side: 'L' } };
   const r = pub?.round;
   if (!Number.isInteger(r) || r <= 0 || !(r === pub.bossRound || r === pub.hiddenRound)) return normal;
-  const alive = (Array.isArray(pub.players) ? pub.players : []).filter((p) => isObj(p) && p.alive !== false)
-    .sort((a, b) => int(a.seat, 99) - int(b.seat, 99));
-  const idx = alive.findIndex((p) => p.playerId === myId);
+  const idx = prepPair(pub, myId).indexOf(myId);
   if (idx < 0) return normal; // eliminated / unknown: no board of its own on the boss field
   return { kind: 'bossPrep', opts: { side: idx % 2 === 1 ? 'R' : 'L' } };
 }
@@ -32,7 +41,7 @@ const BOSS_PREP_PHASES = new Set([PHASE.ROUND_START, PHASE.SP_DRAFT, PHASE.PREP]
  * The players framed in green on the team panel (community report of 2026-10-06, item 51: 「同组两个玩家屏幕左边的头像也像原版
  * 那样用绿框框起来」 — the official co-op frame, ui/battle `bg_team_border`): in a boss round (最终攻势 / 隐秘核心) the viewer
  * and its pair partner — from the round's start (回合开始 / 机变 / 休整期: the pairing `prepCamera` reads, the players still
- * in by seat, two by two — server/match/finalAssault.js pairPlayers) through the fight (the boss field listing the
+ * in the server's saved pairs — server/match/finalAssault.js pairPlayers) through the fight (the boss field listing the
  * viewer). Empty for a lone player, an eliminated player or a spectator seat (no pair of its own) and in every other
  * round. PR #191 framed the partner alone, in gold (not merged).
  * @param {any} pub m.public @param {string|null} myId
@@ -51,9 +60,7 @@ export function teamFrameIds(pub, myId) {
     return f && f.players.length > 1 ? new Set(f.players) : none;
   }
   if (!bossRound || !BOSS_PREP_PHASES.has(pub.phase)) return none;
-  const alive = players.filter((p) => p.alive !== false).sort((a, b) => int(a.seat, 99) - int(b.seat, 99)).map((p) => p.playerId);
-  const idx = alive.indexOf(myId);
-  const pair = alive.slice(idx - (idx % 2), idx - (idx % 2) + 2);
+  const pair = prepPair(pub, myId);
   return pair.length > 1 ? new Set(pair) : none;
 }
 

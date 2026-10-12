@@ -200,7 +200,13 @@ describe('GitHub issue #8 item 1: 本局信息 in the strategy draft (real serve
     const arcane = await centre(page, '.minfo-dlg .brief-bond[data-bond="arcaneShip"] .bond__disc');
     await page.mouse.move(arcane.x, arcane.y);
     await page.waitForSelector('.tooltip.is-shown', { visible: true, timeout: 3000 });
-    assert.equal(await page.$eval('.tooltip.is-shown', (el) => el.textContent), '奥术：本局禁用（该盟约不会激活）');
+    assert.equal(await page.$eval('.tooltip.is-shown .tooltip__main', (el) => el.textContent), '奥术：本局禁用（该盟约不会激活）');
+    const listed = await page.$$eval('.tooltip--aside .brief-bantip__txt b', els => els.map(e => e.textContent));
+    const arcaneNames = await page.evaluate(() => {
+      const { store, data } = globalThis.__SP__;
+      return store.get().match.public.bannedChess.map(id => data.lookup('chess', id)).filter(c => c?.bonds?.includes('arcaneShip')).map(c => c.name).sort();
+    });
+    assert.deepEqual(listed.sort(), arcaneNames, 'the aside shows precisely this bond\'s banned members');
     const status = await page.$eval('[data-testid="match-info-status"]', (el) => el.textContent.trim());
     assert.equal(status, '轮到你决策', 'solo: untimed — no seconds');
     const box = await page.$eval('.minfo-dlg', (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; });

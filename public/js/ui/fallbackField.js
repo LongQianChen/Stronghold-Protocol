@@ -61,6 +61,30 @@ export function fallbackTileClass(stage, row, col) {
 }
 
 /**
+ * The simplified board's floating label for one event, or null when that event draws no digits.
+ * Official mode keeps only a marked red integer (including 0) and a yellow MISS. The slot stays above the unit;
+ * the random offset of the Pixi numbers is not repeated here [ASSUMED].
+ * @param {any[]} e
+ * @param {{ damageNumbers?: boolean, officialDamageNumbers?: boolean }} settings
+ * @returns {{ id: any, text: string, type: string }|null}
+ */
+export function fallbackFloat(e, settings) {
+  if (!settings?.damageNumbers || !Array.isArray(e)) return null;
+  if (settings.officialDamageNumbers === true) {
+    if (e[0] === 'fx' && e[1] === 'dodge' && e[4] && e[4].num === 'm') return { id: e[4].id, text: 'MISS', type: 'miss' };
+    if (e[0] !== 'dmg' || e[4] !== 'r') return null;
+    const amount = Math.round(Number(e[2]) || 0);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    return { id: e[1], text: String(amount), type: 'crit' };
+  }
+  if (e[0] !== 'dmg' && e[0] !== 'heal') return null;
+  const amount = Math.round(Number(e[2]) || 0);
+  if (amount <= 0) return null;
+  const type = e[0] === 'heal' ? 'heal' : (e[3] === 'arts' ? 'arts' : e[3] === 'true' ? 'true' : 'phys');
+  return { id: e[1], text: e[0] === 'heal' ? `+${amount}` : String(amount), type };
+}
+
+/**
  * Create the DOM fallback view.
  * @param {HTMLElement} host
  * @param {{ data: any, assets?: any, settings?: any }} opts
@@ -78,7 +102,7 @@ export function createFallbackView(host, opts = {}) {
     stage: null, camera: 'prep', rect: { ...GEO.NORMAL_RECT }, side: 'L', deployField: 'normal',
     mode: 'prep', priv: null, editable: false, canPlace: null,
     field: null, units: new Map(), snapUnits: new Map(), highlight: new Map(), hlGroups: new Map(), held: new Map(), dirs: new Map(),
-    drag: null, hoverTarget: null, floats: [], settings: { damageNumbers: true, ...(opts.settings || {}) },
+    drag: null, hoverTarget: null, floats: [], settings: { damageNumbers: true, officialDamageNumbers: false, ...(opts.settings || {}) },
     size: { w: 0, h: 0 }, destroyed: false, pen: [],
   };
 
@@ -337,7 +361,9 @@ export function createFallbackView(host, opts = {}) {
         const pos = tilePos(L, u.y, u.x);
         const src = tokenAvatarUrl(m(), u.defId);
         pieces.push(html`<div key=${`map:${u.uid}`} class="ff-piece ff-piece--token ff-piece--map-char"
-            style=${`transform:translate(${pos.x}px,${pos.y}px);width:${L.tile}px;height:${L.tile}px;pointer-events:none`}
+            style=${`transform:translate(${pos.x}px,${pos.y}px);width:${L.tile}px;height:${L.tile}px`}
+            onPointerDown=${(e) => { if (e.button === 0) emit('pieceClick', { unit: u, unitId: null, uid: u.uid, prepMapChar: true, button: 0, clientX: e.clientX, clientY: e.clientY }); }}
+            onContextMenu=${(e) => { e.preventDefault(); emit('pieceClick', { unit: u, unitId: null, uid: u.uid, prepMapChar: true, button: 2, detail: true, clientX: e.clientX, clientY: e.clientY }); }}
             title=${u.name || u.defId}>
           <div class="ff-piece__art">${src ? html`<img src=${src} alt="" draggable=${false} />` : html`<span>${[...(u.name || '?')][0]}</span>`}</div>
         </div>`);
@@ -456,11 +482,9 @@ export function createFallbackView(host, opts = {}) {
         if (e[0] === 'spawn' && e[1] && e[1].id != null) {
           st.units.set(e[1].id, e[1]);
           if (!st.snapUnits.has(e[1].id)) st.snapUnits.set(e[1].id, [e[1].id, e[1].x, e[1].y, e[1].maxHp, e[1].maxHp, 0, 0, 0, 6]);
-        } else if ((e[0] === 'dmg' || e[0] === 'heal') && st.settings.damageNumbers && st.floats.length < 60) {
-          const amount = Math.round(Number(e[2]) || 0);
-          if (amount <= 0) continue;
-          const type = e[0] === 'heal' ? 'heal' : (e[3] === 'arts' ? 'arts' : e[3] === 'true' ? 'true' : 'phys');
-          st.floats.push({ key: `${now}:${Math.random()}`, id: e[1], text: e[0] === 'heal' ? `+${amount}` : String(amount), type, at: now });
+        } else if (st.floats.length < 60) {
+          const spec = fallbackFloat(e, st.settings);
+          if (spec) st.floats.push({ key: `${now}:${Math.random()}`, id: spec.id, text: spec.text, type: spec.type, at: now });
         }
       }
       schedule();

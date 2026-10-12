@@ -1566,9 +1566,11 @@ function touchKit(bb, raw, def) {
 
 /**
  * Spawn a band map character (char_605_cmedic 预备干员-医疗 / char_613_acmedc Touch) at its stage position on the
- * player's half (data/stages.json `mapChars`; `_multi_only` positions only with a partner). Returns the unit or null.
+ * player's half (data/stages.json `mapChars`; `_multi_only` positions only with a partner). A prepared character may
+ * supply `preBattleAggroSeq` so its targeting order precedes the ordinary battle-start deployment. Returns the unit
+ * or null.
  */
-export function spawnMapChar(battle, playerId, tokenId, { alias = null } = {}) {
+export function spawnMapChar(battle, playerId, tokenId, { alias = null, preBattleAggroSeq = null } = {}) {
   const list = battle.stage?.raw?.mapChars ?? battle.stage?.mapChars ?? [];
   const ps = battle.getPlayer(playerId);
   const multi = battle.players.length > 1;
@@ -1585,7 +1587,7 @@ export function spawnMapChar(battle, playerId, tokenId, { alias = null } = {}) {
   for (const m of cands) {
     if (!tileFree(battle, m.pos[0], m.pos[1])) continue;
     // stage positions are field tiles: their direction is taken as it is (default RIGHT)
-    const u = battle.spawnToken(playerId, tokenId, m.pos[0], m.pos[1], { dir: normDir(m.dir) });
+    const u = battle.spawnToken(playerId, tokenId, m.pos[0], m.pos[1], { dir: normDir(m.dir), preBattleAggroSeq });
     if (u) return u;
   }
   return null;

@@ -90,8 +90,11 @@ export class MatchInfra {
   }
   humans() { return this.order.filter((p) => !p.isBot && !p.left); }
 
+  /** [ASSUMED] Touch's initial, match-long team grant survives its holder's elimination/quit; focus alone grants none. */
+  teamMedicGranted() { return this.order.some(p => p.bandId === 'band_amedic'); }
+
   /**
-   * The boss-round group of a player (`bossWaves`: the seat pairs of finalAssault.js pairPlayers, planned in startRound
+   * The boss-round group of a player (`bossWaves`: the per-match random pairs, planned in startRound
    * before the players' round start) and its side — 'L', or 'R' for the second player of a pair (the mirrored right
    * half) — or null outside a boss round / for a player without a field.
    * @returns {{ wave: object, players: string[], side: 'L'|'R' } | null}

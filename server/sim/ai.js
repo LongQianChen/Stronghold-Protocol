@@ -171,6 +171,16 @@ export function acquireTargets(b, u, prof) {
   if (u.blocking.length) for (const e of b.blockedTargets(u, prof)) if (!cands.includes(e)) cands.push(e);
   // an ally target (Battle.setAllyTarget: 白铁's 铁钳号·原型机, an enemy-camp summon with 嘲讽等级 −2) after every enemy
   const extra = b._allyTargets && b._allyTargets.size ? b.allyTargetsInKeys(u.rangeKeys, u) : null;
+  // Fortress has an extra melee tile even against enemies it cannot block (PRTS branch / 号角). Its ordinary
+  // ranged targets still take priority; this does not fill the other tiles in its ranged blind spot.
+  if (prof.fortress && !cands.length && !extra?.length) {
+    const here = [u.tileR * COLS + u.tileC];
+    const near = b.enemiesInKeys(here, u, prof);
+    if (!near.length && b._allyTargets?.size) near.push(...b.allyTargetsInKeys(here, u));
+    prof._fortressMelee = near.length > 0;
+    sortEnemyTargets(b, u, near, prof.priority);
+    return near.slice(0, 1);
+  }
   if (extra && extra.length) {
     if (prof.allInRange) return cands.concat(extra);
     sortEnemyTargets(b, u, cands, prof.priority);
@@ -225,7 +235,8 @@ export function performAttack(b, u, prof, targets, opts = null) {
     const t = targets[i];
     b._ev(['atk', u.id, t.id, vis]);
     if (isHeal) { doHeal(b, u, prof, t); continue; }
-    const info = { isSkill, index: i, attackId, energy: i === 0 ? energy : 0 };
+    // Target acquisition mutates the fortress profile. Keep this shot's mode while its shell is in flight.
+    const info = { isSkill, index: i, attackId, fortressMelee: !!prof._fortressMelee, energy: i === 0 ? energy : 0 };
     const foe = t.side === 'enemy' || b.isAllyTarget(t);
     if (ranged && foe && prof.projectile === 'boomerang') {
       throwBoomerang(b, u, prof, t, info);
@@ -307,13 +318,29 @@ export function resolveHit(b, u, prof, target, info, x, y) {
   if (target && target.alive) {
     let mulT = skillMul;
     if (prof.dmgMul) { const m = typeof prof.dmgMul === 'function' ? prof.dmgMul(b, u, target) : prof.dmgMul; if (Number.isFinite(m)) mulT *= m; }
+    const funnelMul = prof.funnelMul ? prof.funnelMul(b, u, target) : 1;
+    // Unreleased drones are additional damage on the caster's attack (PRTS 驭械术师), including a skill that only
+    // buffs or retargets that attack. `info.isSkill` is set for every attack or targeting override, so it must not
+    // decide this. `funnelBodyHits === 0` is the drone-only opt-out (the ramp stays inside the hits, no body).
+    // A volley shares one talent roll and attackId; extra drones never duplicate the body.
+    // [ASSUMED] Body instances precede additions at the existing projectile impact; a multi-hit volley keeps one ramp.
+    const attachedFunnel = !!prof.funnelMul && prof.funnelBodyHits !== 0;
+    if (!attachedFunnel) mulT *= funnelMul;
     const hits = prof.hitsFn ? prof.hitsFn(b, u, info) : Math.max(1, prof.hits || 1);
     // `hitDmgMul` (professions.js header): each instance's 伤害倍率 — the DamageInfo `mul`, after DEF / RES — and only the
     // first instance may give 受击回复 (砾's two 50 % hits, PRTS 砾 特性备注)
     const split = Number.isFinite(prof.hitDmgMul) && prof.hitDmgMul > 0 ? prof.hitDmgMul : null;
     let dealtMain = 0;
+    if (attachedFunnel && info.index === 0) {
+      const bodyHits = Math.max(1, prof.funnelBodyHits > 0 ? prof.funnelBodyHits : 1);
+      for (let h = 0; h < bodyHits && target.alive; h++) {
+        dealtMain += b.dealDamage(u, target, { amount: atk * scale * mulT, type: baseType,
+          isAttack: true, isSkill: info.isSkill, tags: prof.tags || [], attackId });
+      }
+    }
     for (let h = 0; h < hits && target.alive; h++) {
-      const d = { amount: atk * scale * mulT, type: baseType, isAttack: true, isSkill: info.isSkill, tags: prof.tags || [], attackId };
+      const d = { amount: atk * scale * mulT * (attachedFunnel ? funnelMul : 1), type: baseType,
+        isAttack: !attachedFunnel, isSkill: info.isSkill, tags: attachedFunnel ? [...(prof.tags || []), 'addition', 'funnel'] : (prof.tags || []), attackId };
       if (split != null) { d.mul = split; if (h > 0) d.noSp = true; }
       dealtMain += b.dealDamage(u, target, d);
     }
@@ -323,7 +350,7 @@ export function resolveHit(b, u, prof, target, info, x, y) {
     x = target.x; y = target.y;
   }
   // splash: a 中点判定 radius around the target's position — a huge enemy counts by its 判定中心 (Battle.enemiesInRadius)
-  if (prof.splashRadius > 0) {
+  if (prof.splashRadius > 0 && (!info.fortressMelee || prof.fortressMeleeSplash)) {
     const r = prof.splashRadius;
     const sc = prof.splashScale ?? 1;
     for (const e of b.foesInRadius(x, y, r, true)) {

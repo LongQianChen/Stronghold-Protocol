@@ -43,8 +43,9 @@ test('multi-round bounties spawn in the Final Assault on the owner\'s half, show
     assert.equal(rt.motion === 'FLY', fly, 'route motion matches the enemy');
     assert.equal(s.count, card.count);
     assert.ok(s.mods.hpMul > 0, 'bounty enemies take the round\'s multipliers');
-    if (s.ownerPlayerId === 'p_0') assert.ok(rt.end[1] < 10, `left player's bounty goes to the left goal (${rt.end})`);
-    else { assert.equal(s.ownerPlayerId, 'p_1'); assert.ok(rt.end[1] > 10, `right player's bounty goes to the right goal (${rt.end})`); }
+    const side = f.opts.players.find(p => p.playerId === s.ownerPlayerId)?.side;
+    assert.ok(side === 'L' || side === 'R', 'bounty has an actual field owner');
+    assert.ok(side === 'L' ? rt.end[1] < 10 : rt.end[1] > 10, `owner's ${side} bounty goes to its own goal (${rt.end})`);
   }
   const pending = p0.pendingFunds;
   const end = h.runToEnd();

@@ -20,6 +20,22 @@ const emitBusy = () => { for (const fn of [...busyListeners]) { try { fn(infligh
 /** Subscribe to the number of in-flight intents (for subtle busy indicators). */
 export function onBusy(fn) { busyListeners.add(fn); return () => busyListeners.delete(fn); }
 
+// Single-flight shop refresh (GitHub #501, single-ptilopsis): under a high RTT the shop has not answered yet while the
+// player taps 刷新 again — every extra g.refresh the client sends is a paid refresh (server/match intents.js → ps.refresh).
+// A tap while the previous request is still on the wire is dropped; the button dims and the R hotkey stays inert (both
+// call actions.refresh) until the request settles (success or failure). This is not server-side cancellation or
+// idempotency: a timed-out request may already have executed. The shop bar receives onRefreshBusy via the game screen.
+let refreshPending = false;
+const refreshBusyListeners = new Set();
+const emitRefreshBusy = () => { for (const fn of [...refreshBusyListeners]) { try { fn(refreshPending); } catch { /* ignore */ } } };
+
+/**
+ * Subscribe to the shop refresh's in-flight state — fires once with the current state.
+ * @param {(busy: boolean) => void} fn
+ * @returns {() => void} unsubscribe
+ */
+export function onRefreshBusy(fn) { refreshBusyListeners.add(fn); try { fn(refreshPending); } catch { /* ignore */ } return () => refreshBusyListeners.delete(fn); }
+
 /**
  * Send an intent. Resolves true on `ok`, false on error (already toasted).
  * @param {string} t
@@ -69,7 +85,13 @@ export const actions = {
   band: (bandId, opts = {}) => act('g.band', { bandId, ...draftRequestScope(opts) }),
   bandSkip: (opts = {}) => act('g.bandSkip', draftRequestScope(opts)),
   buy: (slot) => act('g.buy', { slot }),
-  refresh: () => act('g.refresh'),
+  // a tap while the previous g.refresh is still on the wire is dropped (GitHub #501) — see onRefreshBusy above
+  refresh: () => {
+    if (refreshPending) return Promise.resolve(false);
+    refreshPending = true;
+    emitRefreshBusy();
+    return act('g.refresh').finally(() => { refreshPending = false; emitRefreshBusy(); });
+  },
   freeze: () => act('g.freeze'),
   levelUp: () => act('g.levelUp'),
   sell: (uid) => act('g.sell', { uid }),

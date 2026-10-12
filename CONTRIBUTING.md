@@ -45,6 +45,13 @@ RENDER_E2E=1 node --test 'test/render/*.browser.test.js'         # 渲染
 SIM_E2E=1 node --test 'test/sim/*.browser.test.js'               # 浏览器里的战斗模拟
 ```
 
+改了模拟（`server/sim/`）之后，可以检查各浏览器算出的战斗和服务器是否仍然逐位一致：`node tools/sim-check.mjs`
+在 Node 里记录黄金结果的整套战斗，然后在任意设备（包括手机）的浏览器里打开服务器的 `/dev/sim-check.html` 重放比较；
+加 `--engines chromium,firefox,webkit` 直接在无界面的浏览器里跑（Firefox 和 WebKit 需要先装 playwright）。不一致时
+页面指出首次检测到差异的区间，以及结果、抽样快照或已记录状态的差别。`--diff` 可定位导出的状态向量字段；仅快照或深层状态差异不保证能定位字段。
+参考数据含运行代码、数据与场景内容指纹，修改后必须重新生成；空筛选、未完成或运行异常均不算通过。细节见 docs/SIM.md
+「11. Tools」。
+
 **黄金结果**（[test/golden/README.md](test/golden/README.md)）：只重构、不改玩法的提交不能改变
 `test/golden/*.json`；有意改变玩法时运行 `npm run golden:update`，把新文件和改动放在同一个提交里，并在提交说明里写清
 哪些场景变了、为什么。
@@ -110,6 +117,8 @@ SIM_E2E=1 node --test 'test/sim/*.browser.test.js'               # 浏览器里�
   are opt-in: `SP_E2E=1`, `SP_REAL_E2E=1` (needs downloaded art), `RENDER_E2E=1`, `SIM_E2E=1` (a local Chrome,
   `CHROME_PATH`). A refactor never changes `test/golden/*.json`; an intended gameplay change runs
   `npm run golden:update` and commits the digests with the change, naming the scenarios that moved.
+  After a sim change, `node tools/sim-check.mjs` checks that browsers still give the server's bits: it traces the golden
+  battle corpus in Node; `/dev/sim-check.html` replays it on any device (`--engines chromium,firefox,webkit` headless).
 - **Fidelity**: the official tables (`.cache/gamedata/excel/`) and PRTS (including the 备注 notes) are the sources;
   numbers come from the blackboards. Anything no source settles is marked `[ASSUMED]` in the code and the pull
   request; owner decisions are cited with their date; deliberate deviations are the owner's call and go into the design

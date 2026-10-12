@@ -91,6 +91,29 @@ test('build-i18n matching: exact, blackboard templates, plain from raw, composit
   assert.equal(shapeKey('攻击力<@ba.vup>+{atk:0%}</>'), shapeKey('攻击力+80%'));
 });
 
+test('build-i18n corrections: tried before the official text, the plain twin is stripped from the corrected raw one', () => {
+  const zh = [{ t: { a: '攻击力<@ba.vup>+50%</>' } }];
+  const en = [{ t: { a: 'ATK <@ba.vup>+50%</> flat' } }];
+  const data = { effects: { e1: { descRaw: '攻击力<@ba.vup>+50%</>', desc: '攻击力+50%' } } };
+  const { overlay, report } = buildOverlay({ zh, en, data, corrections: { _about: 'x', '攻击力<@ba.vup>+50%</>': 'ATK <@ba.vup>+50%</> per item' } });
+  const e = applyRecordOverlay(data.effects.e1, overlay.files.effects.e1).value;
+  assert.equal(e.descRaw, 'ATK <@ba.vup>+50%</> per item');
+  assert.equal(e.desc, 'ATK +50% per item');
+  assert.equal(report.coverage.effects.correction, 2);
+  assert.equal(report.coverage.effects.translated, 2);
+  // another language reads its own corrections the same way (build-i18n loads tools/i18n/corrections-<lang>.json)
+  const ko = buildOverlay({ zh, en: [{ t: { a: '공격력 <@ba.vup>+50%</>' } }], data, lang: 'ko', corrections: { '攻击力<@ba.vup>+50%</>': '장비 1개당 공격력 <@ba.vup>+50%</>' } });
+  assert.equal(applyRecordOverlay(data.effects.e1, ko.overlay.files.effects.e1).value.descRaw, '장비 1개당 공격력 <@ba.vup>+50%</>');
+  assert.equal(ko.report.coverage.effects.correction, 2);
+});
+
+test('data/i18n/en.json: the 维多利亚 6-member ATK bonus reads per item, as installVictoria applies it (corrections-en.json)', () => {
+  const en = JSON.parse(readFileSync(path.join(ROOT, 'data', 'i18n', 'en.json'), 'utf8'));
+  for (const t of [en.files.bonds.victoriaShip.effectDesc, en.files.bonds.victoriaShip.effectDescRaw, en.files.effects.bondeffect_victoria.desc]) {
+    assert.match(t, /\+50%(?:<\/>)? ATK per equipment carried, or (?:<@ba\.vup>)?\+80%(?:<\/>)? per upgraded equipment/);
+  }
+});
+
 test('data/i18n/en.json: shape, the 盟约 season of the EN build, coverage and the names map', () => {
   assert.equal(OVERLAY.version, 1);
   assert.equal(OVERLAY.lang, 'en');

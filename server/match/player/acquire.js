@@ -197,7 +197,8 @@ export class PlayerAcquire {
     return np;
   }
 
-  /** Normal item → golden version in place (整备). Trait-fixed pieces carry their identity marker through the upgrade. */
+  /** Normal item → golden version in place (整备). A golden occupies two shared copies and this piece
+   * already occupies one, so the upgrade waits when no second copy is free. The caller keeps its charge. */
   upgradeItem(piece) {
     const rec = this.gd.item(piece.id);
     if (!rec || rec.isGolden) return false;
@@ -285,19 +286,16 @@ export class PlayerAcquire {
    * already equipped is taken off for the fight about to start. Hand and temp both full keeps the 「整备区已满，获得的装备已销毁」
    * outcome. [ASSUMED] every item granted at 休整期结束, not only 维多利亚's 战栗维式重锤 (owner's decision 2026-10-04).
    */
-  acquireItem(itemId, { source = 'grant', toTemp = false, silent = false, deferMerge = false, noPool = false } = {}) {
+  acquireItem(itemId, { source = 'grant', toTemp = false, silent = false, deferMerge = false, noPool = false, requirePool = true } = {}) {
     const rec = this.gd.item(itemId);
     if (!rec) return null;
-    // `noPool` is only a source marker; identity decides whether the stock gate may be bypassed. All owned pieces,
-    // including exempt trait grants, are still counted by SharedItemPool.held().
-    const exempt = noPool === true && this.gd.isTraitFixedItem(itemId);
+    const exempt = (noPool === true && this.gd.isTraitFixedItem(itemId))
+        || (!requirePool && this.gd.isUnlimitedGiftItem(itemId));
     if (!exempt && !this.m.itemPoolFor(this).canGain(itemId)) {
       this.m.toast(this, 'warn', '装备库存不足，未获得该装备');
       return null;
     }
     let piece = this.newPiece('item', itemId, exempt ? { noPool: true } : {});
-    // A prep-end grant may sit beside an identical copy until the next prep; the deferred marker only postpones the
-    // merge and does not change shared-stock accounting.
     if (deferMerge) piece.deferMerge = true;
     if (!deferMerge && this.completesItemMerge(itemId)) {
       piece = this._mergeItem(itemId, piece);

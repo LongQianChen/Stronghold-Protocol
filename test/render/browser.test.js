@@ -96,7 +96,7 @@ describe('render engine in headless Chrome', { skip }, () => {
     } finally { await page.close(); }
   });
 
-  test('外勤医疗 reserve medic is visible but not draggable in normal and right boss preparation', async () => {
+  test('外勤医疗 reserve medic opens its detail from normal and right boss preparation without being draggable', async () => {
     const { page, problems } = await open('scene=prep&panel=0', 1600, 900);
     const first = await page.evaluate(() => {
       const v = window.__demo.view;
@@ -108,8 +108,14 @@ describe('render engine in headless Chrome', { skip }, () => {
       v.setPrep(st, { editable: true });
       const medic = v.debug.views.get('m:-1');
       const p = v.tileScreen(10, 2), rect = v.debug.app.view.getBoundingClientRect();
+      let clicked = null;
+      const off = v.on('pieceClick', (e) => { clicked = e; });
+      v.debug.app.view.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 61, clientX: p.x, clientY: p.y }));
+      off();
       const out = { exists: !!medic, id: medic?.info.defId, x: medic?.x, y: medic?.y,
-        draggable: !!v.debug.pick.pieceAt(p.x - rect.left, p.y - rect.top) };
+        draggable: !!v.debug.pick.pieceAt(p.x - rect.left, p.y - rect.top),
+        clicked: clicked ? { uid: clicked.uid, id: clicked.unit?.defId, row: clicked.unit?.y, col: clicked.unit?.x,
+          prepMapChar: clicked.prepMapChar } : null };
       return out;
     });
     await wait(500);
@@ -118,7 +124,13 @@ describe('render engine in headless Chrome', { skip }, () => {
       const v = window.__demo.view;
       v.setCamera('bossPrep', { side: 'R', instant: true });
       const mirrored = v.debug.views.get('m:-1');
-      return [mirrored?.x, mirrored?.y, mirrored?.dir];
+      const p = v.tileScreen(10, 2);
+      let clicked = null;
+      const off = v.on('pieceClick', (e) => { clicked = e; });
+      v.debug.app.view.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 62, clientX: p.x, clientY: p.y }));
+      off();
+      return { view: [mirrored?.x, mirrored?.y, mirrored?.dir],
+        clicked: clicked ? [clicked.unit?.y, clicked.unit?.x, clicked.unit?.dir, clicked.prepMapChar] : null };
     });
     await wait(500);
     await page.screenshot({ path: path.join(OUT, 'touch-prep-boss-right.png') });
@@ -127,7 +139,8 @@ describe('render engine in headless Chrome', { skip }, () => {
       const st = JSON.parse(JSON.stringify(window.__demo.scene.state));
       st.prepMapChars = [];
       v.setPrep(st, { editable: true });
-      return !v.debug.views.has('m:-1');
+      const p = v.tileScreen(10, 2), rect = v.debug.app.view.getBoundingClientRect();
+      return !v.debug.views.has('m:-1') && !v.debug.pick.mapCharAt(p.x - rect.left, p.y - rect.top);
     });
     const fallback = await page.evaluate(async () => {
       const { createFallbackView } = await import('/js/ui/fallbackField.js');
@@ -138,18 +151,23 @@ describe('render engine in headless Chrome', { skip }, () => {
       ff.setPrep({ board: [], hand: [], temp: [], prepMapChars: [window.__touchPrepChar] }, { editable: true });
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const el = host.querySelector('.ff-piece--map-char');
+      let clicked = null;
+      const off = ff.on('pieceClick', (e) => { clicked = e; });
+      el?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 63 }));
+      off();
       const out = { exists: !!el, name: el?.title, pointerEvents: el ? getComputedStyle(el).pointerEvents : null,
-        movableId: el?.dataset.uid ?? null };
+        movableId: el?.dataset.uid ?? null, clicked: clicked ? [clicked.unit?.defId, clicked.prepMapChar] : null };
       ff.destroy(); host.remove();
       return out;
     });
     await page.close();
     assert.deepEqual(problems, []);
     assert.deepEqual(first, { exists: true, id: 'char_605_cmedic', x: 2, y: 10,
-      draggable: false });
-    assert.deepEqual(boss, [18, 3, 'LEFT']);
+      draggable: false, clicked: { uid: -1, id: 'char_605_cmedic', row: 10, col: 2, prepMapChar: true } });
+    assert.deepEqual(boss, { view: [18, 3, 'LEFT'], clicked: [10, 2, 'RIGHT', true] });
     assert.equal(removed, true);
-    assert.deepEqual(fallback, { exists: true, name: '预备干员-医疗', pointerEvents: 'none', movableId: null });
+    assert.deepEqual(fallback, { exists: true, name: '预备干员-医疗', pointerEvents: 'auto', movableId: null,
+      clicked: ['char_605_cmedic', true] });
   });
 
   test('fx gallery: every sim fx kind, projectile and status renders without errors; board art in use', async () => {

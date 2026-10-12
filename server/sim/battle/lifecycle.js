@@ -50,6 +50,15 @@ export class BattleLifecycle {
       }
     }
     this.emit('battleStart', {});
+    // 联防 restores the previous phase's state after all opening effects have established the new stats. In
+    // particular, Egir rebuilds devour attributes without charging carried targets for its opening damage again.
+    // Keep fractional HP: a legal survivor below 1% (or below 1 HP after max-HP changes) must not be healed by carry.
+    if (this.kind === 'unite') for (const u of this.allyUnits) {
+      const cs = u.carry;
+      if (!cs || cs.down || !u.alive || !u.deployed || u.deploySeq <= seq0) continue;
+      if (u.kind === 'op' && Number.isFinite(cs.hpPct) && cs.hpPct > 0) u.hp = u.s.maxHp * Math.min(1, cs.hpPct);
+      if (Number.isFinite(cs.sp) && u.skill) u.skill.setSpTotal(cs.sp);
+    }
     // redeploy-time effects that start with the battle (机变 征召 "所有干员的再部署时间-50%", added by a battleStart
     // handler) cover the operators forced out above too: their timer is re-read with them, as a later knock-out's is
     for (const u of this.allyUnits) {

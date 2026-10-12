@@ -6,6 +6,7 @@
 import { ROWS, COLS } from '../constants.js';
 import { absoluteRangeKeys, canTargetEnemy, extendedGrid, enemyStealthed } from '../targeting.js';
 import { bodyKeys, bodyInKeys, bodyInRadius } from '../body.js';
+import { roundHalfEven } from '../detmath.js';
 
 export class BattleQueries {
   /**
@@ -21,7 +22,7 @@ export class BattleQueries {
         for (const k of bodyKeys(e)) { const b = this._eb[k]; if (!b.length) this._ebUsed.push(k); b.push(e); }
         continue;
       }
-      const r = Math.round(e.y), c = Math.round(e.x);
+      const r = roundHalfEven(e.y), c = roundHalfEven(e.x); // the tile body.js gives a point enemy
       if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
       const k = r * COLS + c;
       const b = this._eb[k];

@@ -95,7 +95,7 @@
   /* layers */
   --z-screen: 1;
   --z-banner: 40;
-  --z-conn: 60;
+  --z-conn: 75;
   --z-modal: 80;
   --z-toast: 90;
   --z-tooltip: 95;

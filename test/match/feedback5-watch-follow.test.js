@@ -101,6 +101,7 @@ test('client combat: an eliminated human is started on the field of the player i
 test('Final Assault: an eliminated viewer is started on its preference\'s boss field; a shared field records the tapped player only', () => {
   const h = makeMatch({ mode: 'coop', difficulty: 'FUNNY', humans: 4, seed: 54, fake: true, instant: false, script: (b) => (b.kind === 'boss' ? { bossDps: 1 } : {}) }).start();
   const m = h.m;
+  m.bossPairs = [['p_0', 'p_1'], ['p_2', 'p_3']]; // named watcher-role fixture; random assignment has its own tests
   h.drive(() => m.phase === PHASE.PREP && m.round === 14);
   h.ps('p_3').eliminate(13);
   assert.deepEqual(m.handle('p_3', { t: 'g.watch', fieldId: 'n:p_2' }), { ok: true }, 'records the preference in prep');

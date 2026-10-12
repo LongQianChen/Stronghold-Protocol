@@ -17,6 +17,9 @@ import { teamFrameIds } from '../../public/js/ui/gameLogic.js';
 function bossPrep(humans, seed) {
   const h = makeMatch({ mode: 'coop', difficulty: 'FUNNY', humans, seed, fake: true }).start();
   const m = h.m;
+  // Explicit layout fixture: these cases test mirrored metadata, not the random draw (covered separately).
+  const ids = m.order.map(p => p.playerId);
+  m.bossPairs = [ids.slice(0, 2), ids.slice(2)].filter(g => g.length);
   h.drive(() => m.phase === PHASE.PREP && m.round === m.gd.bossRound, { ready: true });
   for (const ps of m.players.values()) { ps.ready = false; for (const k of [...ps.board.keys()]) ps.board.delete(k); ps.recompute(); }
   m.flush(true);

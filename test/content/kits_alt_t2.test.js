@@ -659,9 +659,9 @@ test('modules: removing the elite module changes the trait / talent behaviour th
     const id = 'chess_char_2_10_b';
     const [a, b] = withAndWithout((m) => {
       const h = run({ defs: { enemies: { e: dummy('e') } }, units: [{ chessId: id, row: 10, col: 4, carryState: IDLE, ...mod(m) }], enemies: [{ key: 'e', pos: [10, 6] }] });
-      h.runUntil(() => dealt(h, h.unit(id)).length > 0, 5);
+      h.runUntil(() => dealt(h, h.unit(id), (c) => c.dmg.tags.includes('funnel')).length > 0, 5);
       const u = h.unit(id);
-      const r = dealt(h, u)[0].amount / u.s.atk;
+      const r = dealt(h, u, (c) => c.dmg.tags.includes('funnel'))[0].amount / u.s.atk;
       done(h);
       return r;
     });

@@ -38,8 +38,13 @@ const NUM_LANES = Object.freeze([0, -1, 1, -2, 2]);   // lane order (lane widths
 /** Screen scale of a number's text (24 px font) at `s` px per tile. */
 const numScale = (s, big, style) => clamp(s / 115, 0.42, 1.05) * (big ? 1.35 : 1) * (style === 'heal' ? 0.9 : 1);
 
-/** Characters of a damage number as drawn (heals get a '+'). */
-const numChars = (v, style) => String(Math.round(v)).length + (style === 'heal' ? 1 : 0);
+/** Characters of a damage number as drawn (heals get a '+'; a yellow MISS is four letters). */
+const numChars = (v, style) => (style === 'miss' ? 4 : String(Math.round(v)).length + (style === 'heal' ? 1 : 0));
+
+// [ASSUMED] PRTS says a red number sits at a random spot in a range above the model and gives no pixels.
+const OFFICIAL_JITTER_X = 0.7;   // tiles, full width (±0.35)
+const OFFICIAL_LIFT_MIN = 0.15;  // tiles above the head
+const OFFICIAL_LIFT_SPAN = 0.4;
 
 /** Sub-professions whose attacks splash around the struck target (the 阵法术师 / 轰击术师 strike every enemy in range). */
 const SPLASH_SUBS = new Set(['aoesniper', 'splashcaster', 'bombarder', 'fortress', 'hammer']);
@@ -48,7 +53,7 @@ export class FxNumbers {
   // ---- hits / numbers -----------------------------------------------------------------------------------------
 
   /** b.ev 'dmg' visual: glow + sparks in the hit colour; a melee blow (atk 'none' just before) adds its slash. */
-  damage(view, amount, type, srcView) {
+  damage(view, amount, type, srcView, mark) {
     if (!view) return;
     const style = dmgStyleKey(type);
     const p = this._chest(view);
@@ -66,7 +71,13 @@ export class FxNumbers {
       }
     }
     view.onHit?.();
-    if (this.ctx.settings?.damageNumbers !== false) this.number(view, amount, style, big);
+    if (this.ctx.settings?.damageNumbers === false) return;
+    // Official mode (设置「官方伤害数字」): only a sim-marked red integer. Sparks and the slash stay.
+    if (this.ctx.settings?.officialDamageNumbers) {
+      if (mark === 'r') this.officialNumber(view, amount, 'crit');
+      return;
+    }
+    this.number(view, amount, style, big);
   }
 
   /**
@@ -96,7 +107,42 @@ export class FxNumbers {
         tint: 0x7dffa8, vy: -s * 0.9, life: 0.7, s0: s / 64 * 0.32, s1: s / 64 * 0.2, a0: 0.95, a1: 0, fadeIn: 0.08,
       });
     }
-    if (this.ctx.settings?.damageNumbers !== false) this.number(view, amount, 'heal', false);
+    if (this.ctx.settings?.damageNumbers !== false && !this.ctx.settings?.officialDamageNumbers) this.number(view, amount, 'heal', false);
+  }
+
+  /**
+   * One official popup: a red integer (including 0) or the yellow MISS. It does not join a running total.
+   * Position is client-side only — the sim stays deterministic.
+   */
+  officialNumber(view, amount, style) {
+    if (!view) return;
+    const miss = style === 'miss';
+    const n = miss ? 0 : Math.round(amount);
+    if (!miss && (!Number.isFinite(n) || n < 0)) return;
+    const now = this.time;
+    const cam = this.ctx.cam();
+    const base = (view.z || 0) + (view.hover || 0) + (view._headTiles || 1.2) * 0.8;
+    const a = cam.project(view.x, view.y, base, this._p);
+    const ax = a.x, ay = a.y, s = a.s > 0 ? a.s : 100;
+    const pxPerZ = ay - cam.project(view.x, view.y, base + 1, this._q).y;
+    const tile = pxPerZ > 1e-3 ? pxPerZ : s;
+    const cx = ax + (Math.random() - 0.5) * OFFICIAL_JITTER_X * tile;
+    const cy = ay - (OFFICIAL_LIFT_MIN + Math.random() * OFFICIAL_LIFT_SPAN) * tile;
+    const sc = numScale(s, false, style);
+    const w = numChars(n, style) * NUM_DIGIT_EM * 24 * sc * NUM_POP + NUM_GAP_PX;
+    const h = 24 * NUM_LINE_EM * sc * NUM_POP;
+    const maxNums = this.load >= 2 ? MAX_NUMBERS >> 1 : MAX_NUMBERS;
+    while (this.nums.length >= maxNums) this._releaseNum(this.nums.shift());
+    const t = this._takeNum(style);
+    t.text.visible = true;
+    t.text.alpha = 1;
+    t.text.text = miss ? 'MISS' : String(n);
+    Object.assign(t, {
+      unit: view, style, value: n, life: 0, end: NUM_LIFE, born: now, lastHit: now, pop: 1, big: false, fading: false,
+      official: true, ox: cx - ax, oy: cy - ay, x0: view.x, y0: view.y, z0: base,
+      risePx: NUM_RISE * tile * 0.5, _x: cx, _y: cy, _w: w, _h: h,
+    });
+    this.nums.push(t);
   }
 
   /**
@@ -129,7 +175,7 @@ export class FxNumbers {
     // 1. merge into this unit's running total of the same style
     let mine = 0, youngest = null, oldest = null;
     for (const t of this.nums) {
-      if (t.unit !== view || t.fading) continue;
+      if (t.unit !== view || t.fading || t.official) continue;
       mine++;
       if (!oldest || t.born < oldest.born) oldest = t;
       if (t.style === style && (!youngest || t.born > youngest.born)) youngest = t;

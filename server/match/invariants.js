@@ -217,7 +217,7 @@ export function collectViolations(m, { limit = 25 } = {}) {
       const cap = stock.cap(id);
       if (!Number.isInteger(cap)) continue;
       const h = stock.held(id);
-      if (h > cap && !gd.isTraitFixedItem(id)) fail(`item group ${group.id}/${id}: held ${h} > cap ${cap}`);
+      if (h > cap && !gd.isUnlimitedGiftItem(id)) fail(`item group ${group.id}/${id}: held ${h} > cap ${cap}`);
     }
   }
 

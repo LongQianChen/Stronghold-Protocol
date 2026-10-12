@@ -1,6 +1,6 @@
 // test/render/board3d-extract.test.js — the local-client exports behind the official 3D board (DESIGN §13/§15):
 // tools/local-extract/extract.py's board jobs (gate / objective effects, blower texture, water & noise maps), the
-// derived three.js maps (BC5 normal → RGB normal, Unity metallic/gloss → roughness), the WebP copies of the textures
+// derived three.js maps (BC5 / DXT5nm normal → RGB normal, Unity metallic/gloss → roughness), the WebP copies of the textures
 // the renderer downloads (extract.py WEBP), the prefab mesh keys, and —
 // when a client was extracted here — the files and manifest entries the renderer loads (render/board3d/load.js).
 
@@ -63,6 +63,23 @@ print(json.dumps({'n': [list(rn.getpixel((i, 0))) for i in range(3)], 'm': [list
     assert.ok(Math.abs(out.n[1][2] - 128) <= 1, 'x = 1 → z = 0 (byte 128)');
     assert.deepEqual(out.n[0].slice(0, 2), [128, 128], 'XY kept');
     assert.deepEqual(out.m, [[255, 255, 0], [255, 55, 0]]);
+  });
+
+  test('derived normal map: the DXT5nm layout (R = 1, G = Y, A = X) gives the same normals as BC5 (R = X, G = Y)', { skip: !HAS_PIL && 'no Pillow' }, () => {
+    const out = py(`
+from PIL import Image
+xy = [(128, 128), (255, 128), (128, 20), (90, 200), (0, 128), (37, 37)]
+bc5 = Image.new('RGB', (len(xy), 1)); nm = Image.new('RGBA', (len(xy), 1)); opaque = Image.new('RGBA', (len(xy), 1))
+for i, (x, y) in enumerate(xy):
+    bc5.putpixel((i, 0), (x, y, 0)); nm.putpixel((i, 0), (255, y, y, x)); opaque.putpixel((i, 0), (x, y, 0, 255))
+px = lambda im: [list(im.getpixel((i, 0))) for i in range(len(xy))]
+print(json.dumps({'bc5': px(e.derive_normal_rg(bc5)), 'nm': px(e.derive_normal_rg(nm)), 'opaque': px(e.derive_normal_rg(opaque)),
+                  'mode': e.derive_normal_rg(nm).mode, 'xy': xy}))`);
+    assert.equal(out.mode, 'RGB');
+    assert.deepEqual(out.nm, out.bc5, 'X read from A when R is 1');
+    assert.deepEqual(out.opaque, out.bc5, 'a BC5 map decoded with an opaque alpha');
+    assert.deepEqual(out.nm.map((p) => p.slice(0, 2)), out.xy, 'XY kept');
+    assert.ok(out.nm[0][2] >= 254 && out.nm[3][2] > 128, 'z rebuilt, not the 128 of x = 1');
   });
 
   test('WebP copies: exactly the board textures the renderer downloads; normal and data maps stay lossless', () => {
@@ -182,7 +199,7 @@ describe('extracted board files (when a local client was extracted)', { skip: !m
     const n = decodePng(readFileSync(onDisk(pngOf(g.TX_autochessi_N_rgb.path))));
     let zSum = 0, cnt = 0;
     for (let i = 0; i < n.rgba.length; i += 4 * 97) { zSum += n.rgba[i + 2]; cnt++; }
-    assert.ok(zSum / cnt > 230, `mean z ${zSum / cnt}`);
+    assert.ok(zSum / cnt > 230, `mean z ${zSum / cnt} (128 = made by an extract.py that read a DXT5nm map as BC5: re-extract with --only map/autochess)`);
     const m = decodePng(readFileSync(onDisk(g.TX_autochessi_M.path)));
     const r = decodePng(readFileSync(onDisk(pngOf(g.TX_autochessi_M_rough.path))));
     assert.deepEqual([r.w, r.h], [m.w, m.h]);

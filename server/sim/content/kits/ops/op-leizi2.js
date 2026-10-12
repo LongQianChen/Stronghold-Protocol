@@ -294,6 +294,17 @@ export default {
       ],
       install(battle, unit) {
         const id = unit.skill?.id;
+        if (id === S2) {
+          // The owner's larger-range auto-cast rule also covers this terrain-dependent range (no static rangeId).
+          // Keep SEARCH when the actual running area does not strictly contain her initial range.
+          unit.skill.addTriggerRange(() => {
+            const extend = unit.s.baseRangeExtend || 0;
+            const keys = absoluteRangeKeys(floodGrid(battle, unit), unit.tileR, unit.tileC, unit.dir, extend);
+            const initial = absoluteRangeKeys(unit.def.rangeGrid, unit.tileR, unit.tileC, unit.dir, extend);
+            const set = new Set(keys);
+            return set.size > initial.length && initial.every(k => set.has(k)) ? [{ keys, profile: AIR }] : [];
+          });
+        }
         if (id === S1) {
           // 充能耗尽前特性不重置: the trait resets the ramp on skillEnd (priority 0) — keep it while a charge remains
           battle.on('skillEnd', (c) => {

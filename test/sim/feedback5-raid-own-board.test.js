@@ -177,14 +177,23 @@ for (const kind of ['boss', 'hidden']) for (const side of ['L', 'R']) {
   });
 }
 
-test('#475: even buildable hand, temporary-storage, side-margin and off-rect tiles remain invalid Raid landings', () => {
-  for (const pos of [[0, 3], [1, 3], [0, 17], [1, 17], [3, 1], [3, 19], [6, 17]]) {
+test('#475: even buildable hand, temporary-storage and side-margin tiles remain invalid Raid landings', () => {
+  for (const pos of [[0, 3], [1, 3], [0, 17], [1, 17], [3, 1], [3, 19]]) {
     const h = emptyHalfLanding({ pos, ranged: true });
     const u = h.unit('probe'), home = [u.tileR, u.tileC];
     h.run(11);
     assert.deepEqual([u.tileR, u.tileC], home, `excluded tile ${pos}`);
     checkInvariants(h.b);
   }
+});
+
+test('#475: no Raid lands off the rectangle — an enemy spawned on (6,17) is held on the edge row and stands on (5,17)', () => {
+  // Battle._clampPos keeps an enemy FIELD_EDGE_INSET inside the field, so its tile is the edge tile (body.js).
+  const h = emptyHalfLanding({ pos: [6, 17], ranged: true });
+  const u = h.unit('probe');
+  h.run(11);
+  assert.deepEqual([u.tileR, u.tileC], [5, 17]);
+  checkInvariants(h.b);
 });
 
 test('#475: empty-half Raid still respects melee/high-ground, water and occupied/downed-unit reservations', () => {

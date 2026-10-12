@@ -10,6 +10,8 @@
 // How a text is matched (no id table to keep up to date — the official tables are walked side by side):
 //   1. the zh_CN and the EN tables are walked in parallel (same keys; arrays of keyed records by their key), giving
 //      pairs  Chinese source → English source  with the ids on their path as "scope";
+//   0. tools/i18n/corrections-<lang>.json first, when the language has one: an official translation that contradicts
+//      the Chinese text and the engine (exact match on the data text, each entry with a `_why:` note) (correction);
 //   2. a data text equal to a Chinese source takes its English source (exact);
 //   3. a data text whose blackboard placeholders were resolved by build-data ({atk:0%} → 80%) is matched against the
 //      Chinese templates of the same shape: the numbers are read back into a blackboard, the Chinese template must
@@ -463,11 +465,14 @@ class Translator {
   /**
    * @param {PairIndex} index
    * @param {{ name: string, map: Map<string, string> }[]} fallbacks in order of preference
+   * @param {{ composites?: boolean, corrections?: Map<string, string> }} [opts] corrections: tried before the official
+   *   texts (an official translation that contradicts the Chinese and the engine, tools/i18n/corrections-<lang>.json)
    */
-  constructor(index, fallbacks, { composites = true } = {}) {
+  constructor(index, fallbacks, { composites = true, corrections = new Map() } = {}) {
     this.index = index;
     this.fallbacks = fallbacks;
     this.composites = composites;
+    this.corrections = corrections;
   }
 
   /**
@@ -476,6 +481,8 @@ class Translator {
    * @returns {{ en: string, how: string } | null}
    */
   translate(zh, ctx) {
+    const fix = this.corrections.get(zh);
+    if (fix) return { en: fix, how: 'correction' };
     const ex = this.index.exact.get(zh);
     if (ex) return { en: bestVariant(ex, ctx).en, how: 'exact' };
     // a plain text (build-data strips the markup of `desc`, `text`, card / device descriptions) against stripped sources
@@ -626,7 +633,7 @@ function translateScalar(file, id, text, tr, stats, samples) {
 
 class Stats {
   constructor() { this.kinds = {}; this.missing = new Map(); }
-  row(kind) { return this.kinds[kind] || (this.kinds[kind] = { texts: 0, exact: 0, template: 0, composite: 0, remake: 0, pr70: 0, ui: 0, dict: 0, missing: 0, notes: 0 }); }
+  row(kind) { return this.kinds[kind] || (this.kinds[kind] = { texts: 0, exact: 0, template: 0, composite: 0, correction: 0, remake: 0, pr70: 0, ui: 0, dict: 0, missing: 0, notes: 0 }); }
   hit(kind, how) { const r = this.row(kind); r.texts++; r[how]++; }
   miss(kind, text) {
     const r = this.row(kind);
@@ -645,10 +652,10 @@ const dictMap = (d, untranslated = (zh, t) => hasCjk(t)) => new Map(Object.entri
 
 /**
  * Build the overlay. Exported for tests (they pass in-memory tables).
- * @param {{ zh: object[], en: object[], data: Record<string, any>, fallback?: { remake?: object, pr70?: object, ui?: object }, source?: object }} input
- *   zh / en: the picked sub-trees of TABLES, in order
+ * @param {{ zh: object[], en: object[], data: Record<string, any>, fallback?: { remake?: object, pr70?: object, ui?: object }, corrections?: object, source?: object }} input
+ *   zh / en: the picked sub-trees of TABLES, in order; corrections: { zh: en } tried before the official texts
  */
-export function buildOverlay({ zh, en, data, fallback = {}, source = null, lang = 'en' }) {
+export function buildOverlay({ zh, en, data, fallback = {}, corrections = {}, source = null, lang = 'en' }) {
   const untranslated = untranslatedTest(lang, LANG_SOURCES[lang]?.untranslated === 'native' ? nativeCharset(zh, en) : null);
   const index = new PairIndex(untranslated);
   for (let i = 0; i < zh.length; i++) index.walk(zh[i], en[i], []);
@@ -657,7 +664,7 @@ export function buildOverlay({ zh, en, data, fallback = {}, source = null, lang 
     { name: 'remake', map: dictMap(fallback.remake, untranslated) },
     { name: 'pr70', map: dictMap(fallback.pr70, untranslated) },
     { name: 'ui', map: dictMap(fallback.ui, untranslated) },
-  ], { composites: LANG_SOURCES[lang]?.composite ?? false });
+  ], { composites: LANG_SOURCES[lang]?.composite ?? false, corrections: dictMap(corrections, untranslated) });
   const stats = new Stats();
   const samples = {};
   const files = {};
@@ -695,7 +702,7 @@ export function buildOverlay({ zh, en, data, fallback = {}, source = null, lang 
   const coverage = {};
   let total = 0, translated = 0, official = 0;
   for (const [kind, r] of Object.entries(stats.kinds).sort()) {
-    const ok = r.exact + r.template + r.composite + r.remake + r.pr70 + r.ui + r.dict;
+    const ok = r.exact + r.template + r.composite + r.correction + r.remake + r.pr70 + r.ui + r.dict;
     coverage[kind] = { ...r, translated: ok, pct: r.texts ? Math.round((ok / r.texts) * 1000) / 10 : 100 };
     total += r.texts; translated += ok; official += r.exact + r.template + r.composite;
   }
@@ -706,8 +713,8 @@ export function buildOverlay({ zh, en, data, fallback = {}, source = null, lang 
       generator: 'tools/build-i18n.mjs',
       source: source || null,
       fallback: lang === 'en'
-        ? 'tools/i18n/fallback-remake.json (the remake), tools/i18n/fallback-pr70.json (PR #70 by @YuriRestia), public/i18n/en.json'
-        : `public/i18n/${lang}.json (the pack's UI strings)`,
+        ? 'tools/i18n/corrections-en.json (before the official texts), tools/i18n/fallback-remake.json (the remake), tools/i18n/fallback-pr70.json (PR #70 by @YuriRestia), public/i18n/en.json'
+        : `${Object.keys(corrections).some((k) => !k.startsWith('_')) ? `tools/i18n/corrections-${lang}.json (before the official texts), ` : ''}public/i18n/${lang}.json (the pack's UI strings)`,
       coverage: Object.fromEntries(Object.entries(coverage).map(([k, v]) => [k, { texts: v.texts, translated: v.translated, official: v.exact + v.template + v.composite, pct: v.pct }])),
       totals: { texts: total, translated, official, pct: total ? Math.round((translated / total) * 1000) / 10 : 100 },
     },
@@ -758,7 +765,9 @@ async function main() {
     ui: await readDict(join(ROOT, 'public', 'i18n', 'en.json')),
   } : { ui: await readDict(join(ROOT, 'public', 'i18n', `${opts.lang}.json`)) };
   if (opts.dict) fallback.dict = JSON.parse(await readFile(opts.dict, 'utf8'));
-  const { overlay, report } = buildOverlay({ zh, en, data, fallback, lang: opts.lang, source: client ? { id: opts.source, label: src.label, home: src.home, season: seasonEn } : { id: 'dict', label: src.label } });
+  // corrections of the language's own official texts (none for a language without a file)
+  const corrections = await readDict(join(ROOT, 'tools', 'i18n', `corrections-${opts.lang}.json`));
+  const { overlay, report } = buildOverlay({ zh, en, data, fallback, corrections, lang: opts.lang, source: client ? { id: opts.source, label: src.label, home: src.home, season: seasonEn } : { id: 'dict', label: src.label } });
 
   // self-check: applying the overlay keeps every record's shape (strings replace strings only)
   let applied = 0;
@@ -774,7 +783,7 @@ async function main() {
   if (client) log(`  season in the ${opts.lang} build: ${seasonEn}${version ? ` · ${version.replace(/\s+/g, ' ')}` : ''}`);
   log(`  ${report.pairs} zh→${opts.lang} source pairs; coverage per kind (translated / texts):`);
   for (const [kind, c] of Object.entries(report.coverage)) {
-    const fb = [c.remake && `remake ${c.remake}`, c.pr70 && `PR #70 ${c.pr70}`, c.ui && `UI ${c.ui}`, c.dict && `dictionary ${c.dict}`].filter(Boolean).join(' · ');
+    const fb = [c.correction && `corrections ${c.correction}`, c.remake && `remake ${c.remake}`, c.pr70 && `PR #70 ${c.pr70}`, c.ui && `UI ${c.ui}`, c.dict && `dictionary ${c.dict}`].filter(Boolean).join(' · ');
     log(`    ${kind.padEnd(10)} ${String(c.translated).padStart(5)} / ${String(c.texts).padEnd(5)} ${String(c.pct).padStart(5)} %   official ${c.exact + c.template + c.composite} (exact ${c.exact} · template ${c.template} · composite ${c.composite})${fb ? ` · ${fb}` : ''}${c.notes ? ` · notes skipped ${c.notes}` : ''}`);
   }
   log(`  total ${report.totals.translated} / ${report.totals.texts} (${report.totals.pct} %), official ${report.totals.official}; ${Object.keys(overlay.names).length} names (${report.nameConflicts.length} with several ${opts.lang} forms)`);

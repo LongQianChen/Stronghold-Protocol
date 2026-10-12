@@ -94,8 +94,9 @@ export default {
           battle.on('damaged', (ctx) => {
             const e = ctx.target;
             if (busy || ctx.source !== unit || e.side !== 'enemy' || ctx.type === 'element' || ctx.dmg?.tags?.includes('vulpisHunt')) return;
-            const t = marks.get(e.id);
-            if (t == null) { marks.set(e.id, battle.time); return; }
+            let t = marks.get(e.id);
+            // PRTS talent remarks: the first damage instance also receives the arts addition.
+            if (t == null) { t = battle.time; marks.set(e.id, t); }
             if (battle.time - t <= num(t0.interval, 10) + 1e-9 && e.alive) {
               busy = true;
               // PRTS 备注 "伤害类型为法术附加伤害": tag addition (no 叙拉古 6 roll)

@@ -1,13 +1,14 @@
 // render/board3d/materials.js — three.js materials of the official board scene (DESIGN §15). THREE is injected
 // (the renderer loads /vendor/three.module.js; Node tests pass the npm package).
 //
-//   MT_autochess        → MeshStandardMaterial: albedo TX_autochessi_D (sRGB), normal TX_autochessi_N (BC5 → RGB,
-//                         tools/local-extract DERIVED), roughness 1 − smoothness of TX_autochessi_M (DERIVED), metal 0,
+//   MT_autochess        → MeshStandardMaterial: albedo TX_autochessi_D (sRGB), normal TX_autochessi_N (BC5 / DXT5nm →
+//                         RGB, tools/local-extract DERIVED), roughness 1 − smoothness of TX_autochessi_M (DERIVED), metal 0,
 //                         emission TX_autochessi_E (_EmissionColor white), vertex colours = baked AO / tints
 //   MT_autochess_common → device plates of TX_autochessi_common_D, alpha test 0.408, emission _E × 0.559
 //   MT_autochessi_BG    → unlit TX_autochessi_BG × 0.713 (Torappu/Unlit/Texture, _Color)
 //   MT_wind_device      → unlit TX_wind_device (the blower mesh)
 //   [opt]start_end_add / _ab → the gate / objective boxes: Torappu/Particles/Additive (2 · tint · tex) / AlphaBlend
+//   the materials of an official battlefield scene (load.js loadScenePack) → sceneMaterial / sceneWaterMaterial
 // Every lit material gets the "focus" spotlight: fragments outside the camera's field rect fade towards `dim`
 // (a soft world-space falloff), so the active field reads like the original's lit board without re-building
 // geometry when the camera moves.
@@ -340,6 +341,132 @@ export function smogMaterial(THREE, tex, focus) {
       '}',
     ].join('\n'),
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+}
+
+/**
+ * Tuning of the official scene materials (sceneMaterial). The official shader (Torappu/Scene/StandardRealtimeShadow) is
+ * not reproduced: the albedo is lit by the baked indirect light of the scene's lightmap plus the scene's key light
+ * masked by its baked shadow, in linear light (Unity's Shadowmask lighting mode). `range` — the linear light a lightmap
+ * texel of 1.0 stands for when scene.json has no lightRange; [ASSUMED] `ambient` — the light of a mesh without a
+ * lightmap page; `direct` / `indirect` — gains of the two terms (1 = the scene's own values).
+ */
+export const SCENE_LIGHT = Object.freeze({ range: 8.0, ambient: 0.2, direct: 0.8, indirect: 0.4 });
+
+const colorOf = (info, key, fallback = [1, 1, 1, 1]) => {
+  const c = info && info.colors && Array.isArray(info.colors[key]) ? info.colors[key] : fallback;
+  return [0, 1, 2, 3].map((i) => (Number.isFinite(c[i]) ? c[i] : fallback[i]));
+};
+const floatOf = (info, key, fallback) => (info && info.floats && Number.isFinite(info.floats[key]) ? info.floats[key] : fallback);
+const hasKeyword = (info, kw) => !!(info && Array.isArray(info.keywords) && info.keywords.includes(kw));
+
+/** Blend class of a scene material record (scene.json materials[name]): 'opaque' | 'cutout' | 'blend'. */
+export function sceneBlend(info) {
+  if (hasKeyword(info, '_ALPHABLEND_ON') || hasKeyword(info, '_ALPHAPREMULTIPLY_ON')) return 'blend';
+  return hasKeyword(info, '_ALPHATEST_ON') ? 'cutout' : 'opaque';
+}
+
+/**
+ * A lit material of an official scene: albedo (`map`, × _Color) × (the lightmap's baked light + key light · N·L ·
+ * baked shadow (lightmap A, by _ShadowStrength)), alpha test / blend by the material's keywords, the focus falloff of
+ * the other board materials. `map` is an sRGB texture; `lightMap` holds (light / lightRange)^(1/2.2) in RGB (no colour
+ * space). Geometry attributes: position, normal, uv, aLm (lightmap uv), aColor.
+ * @param {{ map?: any, lightMap?: any, info?: object, lightRange?: number, light?: { dir: number[], color: number[], intensity: number } }} o
+ */
+export function sceneMaterial(THREE, o, focus) {
+  const info = o.info || null;
+  const blend = sceneBlend(info);
+  const L = o.light || { dir: [0.36, 0.45, 0.82], color: [1, 1, 1], intensity: 1 };
+  const k = (Number.isFinite(L.intensity) ? L.intensity : 1) * SCENE_LIGHT.direct;
+  const lin = (v) => Math.pow(Math.max(0, v), 2.2);   // the scene's colours are authored in gamma space
+  const col = colorOf(info, '_Color');
+  const uniforms = {
+    uMap: { value: o.map || null }, uLm: { value: o.lightMap || null },
+    uColor: { value: new THREE.Vector4(lin(col[0]), lin(col[1]), lin(col[2]), col[3]) },
+    uCutoff: { value: blend === 'cutout' ? floatOf(info, '_Cutoff', 0.5) : 0 },
+    uLmScale: { value: o.lightMap ? (o.lightRange > 0 ? o.lightRange : SCENE_LIGHT.range) * SCENE_LIGHT.indirect : 0 },
+    uAmbient: { value: o.lightMap ? 0 : SCENE_LIGHT.ambient },
+    uShadow: { value: floatOf(info, '_ShadowStrength', 1) },
+    uLightDir: { value: new THREE.Vector3(...L.dir).normalize() },
+    uLightColor: { value: new THREE.Vector3(lin(L.color[0]) * k, lin(L.color[1]) * k, lin(L.color[2]) * k) },
+    ...focus,
+  };
+  const m = new THREE.ShaderMaterial({
+    uniforms,
+    defines: { ...(o.map ? { SCENE_MAP: 1 } : {}), ...(o.lightMap ? { SCENE_LM: 1 } : {}) },
+    vertexShader: [
+      'attribute vec2 aLm;',
+      'varying vec2 vUv; varying vec2 vLm; varying vec3 vN; varying vec3 vWorld;',
+      'void main() {',
+      '  vUv = uv; vLm = aLm;',
+      '  vN = normalize(mat3(modelMatrix) * normal);',
+      '  vec4 w = modelMatrix * vec4(position, 1.0);',
+      '  vWorld = w.xyz;',
+      '  gl_Position = projectionMatrix * viewMatrix * w;',
+      '}',
+    ].join('\n'),
+    fragmentShader: [
+      'uniform sampler2D uMap; uniform sampler2D uLm; uniform vec4 uColor; uniform float uCutoff;',
+      'uniform float uLmScale; uniform float uAmbient; uniform float uShadow; uniform vec3 uLightDir; uniform vec3 uLightColor;',
+      FOCUS_GLSL,
+      'varying vec2 vUv; varying vec2 vLm; varying vec3 vN; varying vec3 vWorld;',
+      'void main() {',
+      '  vec4 a = uColor;',
+      '  #ifdef SCENE_MAP',
+      '    a *= texture2D(uMap, vUv);',
+      '  #endif',
+      '  if (a.a < uCutoff) discard;',
+      '  vec3 light = vec3(uAmbient); float shade = 1.0;',
+      '  #ifdef SCENE_LM',
+      '    vec4 lm = texture2D(uLm, vLm);',
+      '    light += pow(lm.rgb, vec3(2.2)) * uLmScale; shade = mix(1.0, lm.a, uShadow);',
+      '  #endif',
+      '  vec3 n = normalize(gl_FrontFacing ? vN : -vN);',
+      '  light += uLightColor * max(dot(n, uLightDir), 0.0) * shade;',
+      '  gl_FragColor = vec4(a.rgb * light * focusMask(vWorld.xy), a.a);',
+      '  #include <colorspace_fragment>',
+      '}',
+    ].join('\n'),
+    transparent: blend === 'blend', depthWrite: blend !== 'blend',
+  });
+  m.userData.blend = blend;
+  return m;
+}
+
+/** A water surface of an official scene (Torappu/Scene/StylizedWater): the board's water shader in the material's colours. */
+export function sceneWaterMaterial(THREE, tex, focus, info) {
+  const deep = colorOf(info, '_DeepWaterColor', [0.03, 0.2, 0.27, 0.7]), shallow = colorOf(info, '_ShallowWaterColor', [0.09, 0.46, 0.55, 0.5]);
+  const uniforms = {
+    uTime: { value: 0 }, uNormal: { value: tex.waterN || null }, uCaustics: { value: tex.caustics || null },
+    uDeep: { value: new THREE.Vector4(...deep) }, uShallow: { value: new THREE.Vector4(...shallow) }, ...focus,
+  };
+  return new THREE.ShaderMaterial({
+    uniforms,
+    defines: tex.waterN && tex.caustics ? { WATER_MAPS: 1 } : {},
+    vertexShader: TERRAIN_VERT,
+    fragmentShader: [
+      'uniform float uTime; uniform sampler2D uNormal; uniform sampler2D uCaustics; uniform vec4 uDeep; uniform vec4 uShallow;',
+      FOCUS_GLSL,
+      'varying vec2 vUv; varying vec3 vWorld;',
+      'void main() {',
+      '  float diff = 0.5, spec = 0.0, ca = 0.0;',
+      '  #ifdef WATER_MAPS',
+      '    vec2 p = vWorld.xy * 0.45;',
+      '    vec3 n1 = texture2D(uNormal, p + vec2(uTime * 0.03, uTime * 0.021)).xyz * 2.0 - 1.0;',
+      '    vec3 n2 = texture2D(uNormal, p * 1.7 - vec2(uTime * 0.025, -uTime * 0.017)).xyz * 2.0 - 1.0;',
+      '    vec3 n = normalize(vec3(n1.xy + n2.xy, 2.2));',
+      '    vec3 L = normalize(vec3(-0.45, -0.3, 0.84));',
+      '    diff = clamp(dot(n, L), 0.0, 1.0);',
+      '    spec = pow(clamp(dot(reflect(-L, n), normalize(vec3(0.0, -0.5, 0.866))), 0.0, 1.0), 40.0);',
+      '    ca = texture2D(uCaustics, vWorld.xy * 0.6 + n.xy * 0.08 + vec2(uTime * 0.02, 0.0)).r;',
+      '  #endif',
+      '  vec4 w = mix(uDeep, uShallow, 0.08 + 0.2 * diff);',
+      '  vec3 c = pow(w.rgb, vec3(2.2)) + ca * vec3(0.03, 0.05, 0.05) + spec * vec3(0.5, 0.6, 0.65);',
+      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), clamp(w.a + 0.2, 0.0, 1.0));',
+      '  #include <colorspace_fragment>',
+      '}',
+    ].join('\n'),
+    transparent: true, depthWrite: false,
   });
 }
 

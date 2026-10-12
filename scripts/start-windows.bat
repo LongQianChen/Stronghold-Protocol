@@ -10,7 +10,7 @@ cd /d "%~dp0.."
 
 where node >nul 2>nul
 if errorlevel 1 goto :nonode
-node -e "process.exit(Number(process.versions.node.split('.')[0])>=22?0:1)"
+node -e "process.exit(Math.max(0, Math.sign(22 - parseInt(process.versions.node))))"
 if errorlevel 1 goto :oldnode
 
 if not exist "node_modules\ws\package.json" (

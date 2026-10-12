@@ -61,6 +61,8 @@ test('special values follow ECMA-262', () => {
   for (const [y, x, want] of table) same(atan2(y, x), want, `atan2(${y}, ${x})`);
   same(powi(2, 0), 1, 'x^0'); same(powi(0, 0), 1, '0^0'); same(powi(0, 3), 0, '0^3'); same(powi(-2, 3), -8, '(-2)^3');
   same(powi(2, -2), 0.25, 'x^-n'); same(powi(Infinity, 2), Infinity, '∞²'); same(powi(NaN, 0), 1, 'NaN^0');
+  // a zero base: Math.pow's exact results, the sign of −0 kept by odd powers
+  for (const z of [0, -0]) for (let n = -3; n <= 3; n++) same(powi(z, n), Math.pow(z, n), `(${Object.is(z, -0) ? '-0' : '0'})^${n}`);
 });
 
 // exact references: x = M·2^E with M an integer
