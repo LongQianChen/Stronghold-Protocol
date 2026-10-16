@@ -23,7 +23,8 @@ export default {
           const src = ctx.source;
           if (s2 && unit.skill?.active && src.alive) {
             battle.dealDamage(unit, src, { amount: unit.s.def * num(bb.atk_scale), type: 'phys', isSkill: true, canDodge: false, tags: ['counter'] });
-            battle.fx('counter', { x: src.x, y: src.y, id: unit.id });
+            // (`target`: display only — the official bubble_skill_02_hit plays on the attacker, render/vfx/skills.js FX_BINDINGS)
+            battle.fx('counter', { x: src.x, y: src.y, id: unit.id, target: src.id });
           }
           if (num(t.atk) < 0 && src.alive) battle.addBuff(src, { key: 'bubble:spike', duration: num(t.duration, 5), mods: { atkPct: num(t.atk) }, refresh: 'extend', source: unit });
         });

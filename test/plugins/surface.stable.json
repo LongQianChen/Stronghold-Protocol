@@ -1,0 +1,1766 @@
+[
+  {
+    "name": "manifest.field.$schema",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.api",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.app",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.assets",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.authors",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.base",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.class",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.complete",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.conflicts",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.credits",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.data",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.description",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.dsl",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.enemies",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.englishName",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.entry",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.fallback",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.files",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.homepage",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.i18n",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.id",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.lang",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.license",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.loadAfter",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.loadBefore",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.machineTranslated",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.manifest",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.modes",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.name",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.numberUnits",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.operators",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.optional",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.permissions",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.priority",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.requires",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.scope",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.settings",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.slots",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.sourceLang",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.stages",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.theme",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "manifest.field.version",
+    "anchor": "shared/plugins/manifest.js#MANIFEST_FIELDS"
+  },
+  {
+    "name": "permission.assets.override",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.assets.add",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.theme",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.data.patch",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.data.add",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.dsl",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "permission.ui.frame",
+    "anchor": "shared/plugins/manifest.js#PERMISSIONS"
+  },
+  {
+    "name": "class.lang",
+    "anchor": "shared/plugins/manifest.js#PLUGIN_CLASSES"
+  },
+  {
+    "name": "class.cosmetic",
+    "anchor": "shared/plugins/manifest.js#PLUGIN_CLASSES"
+  },
+  {
+    "name": "class.content",
+    "anchor": "shared/plugins/manifest.js#PLUGIN_CLASSES"
+  },
+  {
+    "name": "class.ui",
+    "anchor": "shared/plugins/manifest.js#PLUGIN_CLASSES"
+  },
+  {
+    "name": "patch.op.set",
+    "anchor": "shared/plugins/patch.js#PATCH_OPS"
+  },
+  {
+    "name": "patch.op.merge",
+    "anchor": "shared/plugins/patch.js#PATCH_OPS"
+  },
+  {
+    "name": "patch.op.add",
+    "anchor": "shared/plugins/patch.js#PATCH_OPS"
+  },
+  {
+    "name": "patch.op.append",
+    "anchor": "shared/plugins/patch.js#PATCH_OPS"
+  },
+  {
+    "name": "patch.op.remove",
+    "anchor": "shared/plugins/patch.js#PATCH_OPS"
+  },
+  {
+    "name": "record.operator.op",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.charId",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.name",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.appellation",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.profession",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.subProfessionId",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.subProfessionName",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.position",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.rarity",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.as",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.forms",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.skills",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.chess",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.kit",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.talentMods",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.talents",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.trait",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.art",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.nationId",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.powers",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.dmgType",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.attackKind",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.projectile",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.canHitFly",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.operator.targetPriority",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.file",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.id",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.base",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.set",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.value",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.special",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.kind",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "record.generic.effect",
+    "anchor": "shared/plugins/recordsSchema.js#RECORD_SCHEMA"
+  },
+  {
+    "name": "overlay.chars.avatar",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.chars.avatarE2",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.chars.portrait",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.chars.portraitE2",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.chars.spine.front",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.chars.spine.back",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.enemies.icon",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.enemies.spine",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.tokens.avatar",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.tokens.spine",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.bonds.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.items.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.bands.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.skills.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.modules.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.ui.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.prof.icon.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.prof.large.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.prof.battlecard.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.prof.sub.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bgm.lobby",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bgm.prep",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bgm.combat",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bgm.unite",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bgm.boss",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.bossBgm.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.voice.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.voiceJp.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.voiceEn.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.voiceKr.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.voiceNative.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.ui.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.battle.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.attack",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.hit",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.skill",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.die",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.born",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.skills.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.attacks.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "overlay.audio.sfx.units.hits.*",
+    "anchor": "shared/plugins/visual.js#ASSET_CONTAINERS"
+  },
+  {
+    "name": "dsl.trigger.always",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.deploy",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.battleStart",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.attack",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.hitDealt",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.hitTaken",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.kill",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.allyDeath",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.skillStart",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.skillEnd",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.every",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.trigger.hpBelow",
+    "anchor": "server/sim/content/dsl/vocab.js#TRIGGERS"
+  },
+  {
+    "name": "dsl.condition.chance",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.condition.targetHas",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.condition.selfHpBelow",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.condition.enemiesInRange",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.condition.bondActive",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.condition.skillActive",
+    "anchor": "server/sim/content/dsl/vocab.js#CONDITIONS"
+  },
+  {
+    "name": "dsl.action.buff",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.status",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.damage",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.heal",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.sp",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.dp",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.push",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.pull",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.spawnToken",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.layers",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.shield",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.action.fx",
+    "anchor": "server/sim/content/dsl/vocab.js#ACTIONS"
+  },
+  {
+    "name": "dsl.target.self",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.target",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.source",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.alliesInRange",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.enemiesInRange",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.enemiesInRadius",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.lowestHpAlly",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.target.allAllies",
+    "anchor": "server/sim/content/dsl/vocab.js#TARGETS"
+  },
+  {
+    "name": "dsl.metaTrigger.roundStart",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.income",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.buy",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.sell",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.refresh",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.merge",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.levelUp",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaTrigger.battleResult",
+    "anchor": "server/sim/content/dsl/vocab.js#META_TRIGGERS"
+  },
+  {
+    "name": "dsl.metaAction.funds",
+    "anchor": "server/sim/content/dsl/vocab.js#META_ACTIONS"
+  },
+  {
+    "name": "dsl.metaAction.layers",
+    "anchor": "server/sim/content/dsl/vocab.js#META_ACTIONS"
+  },
+  {
+    "name": "dsl.metaAction.gainItem",
+    "anchor": "server/sim/content/dsl/vocab.js#META_ACTIONS"
+  },
+  {
+    "name": "dsl.value.bb",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.talent",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.trait",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.stat",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.batMod",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.mul",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.add",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.sub",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.div",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.min",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.value.max",
+    "anchor": "server/sim/content/dsl/vocab.js#VALUE_OPS"
+  },
+  {
+    "name": "dsl.skillKind.instant",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.skillKind.duration",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.skillKind.ammo",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.skillKind.charges",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.skillKind.toggle",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.skillKind.passive",
+    "anchor": "server/sim/content/dsl/vocab.js#SKILL_KINDS"
+  },
+  {
+    "name": "dsl.stat.atk",
+    "anchor": "server/sim/content/dsl/vocab.js#STAT_NAMES"
+  },
+  {
+    "name": "dsl.stat.maxHp",
+    "anchor": "server/sim/content/dsl/vocab.js#STAT_NAMES"
+  },
+  {
+    "name": "dsl.stat.hp",
+    "anchor": "server/sim/content/dsl/vocab.js#STAT_NAMES"
+  },
+  {
+    "name": "dsl.stat.def",
+    "anchor": "server/sim/content/dsl/vocab.js#STAT_NAMES"
+  },
+  {
+    "name": "dsl.stat.res",
+    "anchor": "server/sim/content/dsl/vocab.js#STAT_NAMES"
+  },
+  {
+    "name": "ui.message.plugin.ready",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.plugin.slot",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.plugin.resize",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.plugin.storage",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.plugin.notice",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.plugin.stats",
+    "anchor": "shared/plugins/ui.js#UI_PLUGIN_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.welcome",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.state",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.battle",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.stats",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.storage",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.limit",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.slot",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.message.host.rejected",
+    "anchor": "shared/plugins/ui.js#UI_HOST_MESSAGES"
+  },
+  {
+    "name": "ui.slot.hud.right",
+    "anchor": "shared/plugins/manifest.js#UI_SLOT_IDS"
+  },
+  {
+    "name": "ui.slot.result.tab",
+    "anchor": "shared/plugins/manifest.js#UI_SLOT_IDS"
+  },
+  {
+    "name": "ui.slot.stats.tab",
+    "anchor": "shared/plugins/manifest.js#UI_SLOT_IDS"
+  },
+  {
+    "name": "ui.slot.room.panel",
+    "anchor": "shared/plugins/manifest.js#UI_SLOT_IDS"
+  },
+  {
+    "name": "studio.route.GET /studio/api/info",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/trial-options",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/trial",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/authoring",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/dsl-example",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/validate-dsl",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/authoring",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/targets",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/slots",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/suggest-id",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/authors",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/events",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/remove",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins/:id",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins/:id/preview",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins/:id/zip",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins/:id/f/:hash8/*",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.GET /studio/api/plugins/:id/files/*",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.PUT /studio/api/plugins/:id/manifest",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.PUT /studio/api/plugins/:id/files/*",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.DELETE /studio/api/plugins/:id/files/*",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/slot",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/meta",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/sections",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/ref",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/clear",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/fix",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/plugins/:id/pack",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/catalog",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/catalog/install",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/forge/preview",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "studio.route.POST /studio/api/forge/import",
+    "anchor": "server/studio/index.js#STUDIO_ROUTES"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_CHANGED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TRIAL_BUSY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TRIAL_TIMEOUT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TRIAL_FAILED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TRIAL_LIMIT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TRIAL_SCENARIO",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CONSENT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_TRUST_PUBLIC",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_TRUST_PIN",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SCRIPTS_DISABLED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SCRIPT_CHECK",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SCRIPT_OVERRIDE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SCRIPT_CONFLICT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_WORKER_TIMEOUT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_WORKER_FAILED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_WORKER_STOPPED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_UNAVAILABLE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_DISABLED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_CLASS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_HASH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_IMPORT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_SYNTAX",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_LIMIT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SANDBOX_MATH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_UNKNOWN",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_BLOCKED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DEPENDENCY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CONFLICT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LIMIT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INCOMPATIBLE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_BUSY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_NO_MANIFEST",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_JSON",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_JSON_LIMIT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_MANIFEST_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_MANIFEST_VERSION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ID_MISMATCH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FIELD_UNKNOWN",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CLASS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_TEXT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LANG_CODE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_VERSION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_APP",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_APP_MISMATCH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_API",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SCOPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_HOMEPAGE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DEPS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ORDER_HINTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SETTING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SETTING_FIELD",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PART_CLASS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PART_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ASSET_FILE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_THEME_URL",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_THEME_UNUSED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ENTRY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LANG_ONLY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PERMISSION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PERMISSION_MISSING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PERMISSION_UNUSED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_EMPTY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_LINK",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_NAME",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_TYPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_FRAME",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_SIZE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_MISSING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FILE_OUTSIDE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LANG",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LANG_FILES",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PACK",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ASSETS_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ASSET_KEY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_ASSET_IGNORED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_REF",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SPINE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SPINE_PAGES",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SPINE_NOTE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SPINE_PARSE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LOCK",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LOCK_MISSING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_LOCK_STALE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DUPLICATE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_UNREADABLE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_REQUIRES_MISSING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_PATH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_SIZE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_EXISTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TEMPLATE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_TARGET",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_FILE_KIND",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_REQUEST",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_KEY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_IN_USE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STUDIO_REMOVE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CONTENT_FILE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CONTENT_FORMAT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CONTENT_PERMISSION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_LIMIT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_NUMBER",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_TYPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_PATH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_BOUND",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_REQUIRED",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_REFERENCE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DATA_PAIR",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PATCH_OP",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PATCH_PATH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PATCH_TYPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PATCH_SETTING",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_PATCH_OVERRIDE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RECORD_EXISTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RECORD_DELETE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RECORD_ID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RECORD_TYPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RECORD_SKILLS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_KIT_REF",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SKILL_SPEC",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_EFFECT_REF",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_I18N",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_UI_SLOTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_UI_NO_SLOT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SLOT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_RATE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_STORAGE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INTENT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_VERSION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_PLUGIN_ID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_BUDGET",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_LOOP",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_TRIGGER",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_CONDITION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_ACTION",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_TARGET",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_EVERY",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_NUMBER",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_DIV0",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_VALUE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_SKILL",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_META",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_DSL_TALENT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_SHAPE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_URL",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_HASH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_ID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_FIELD",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_SIZE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_CATALOG_FETCH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_URL",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_HASH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_SIZE",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_TIMEOUT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_FETCH",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_REDIRECT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_ZIP",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_CHECK",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INSTALL_EXISTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_INPUT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_ZIP",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_JSON",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_ID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_EXISTS",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_FORGE_SCRIPT",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "error.PLUGIN_INVALID",
+    "anchor": "shared/plugins/errors.js#PLUGIN_ERRORS"
+  },
+  {
+    "name": "catalog.field.$schema",
+    "anchor": "shared/plugins/catalog.js#CATALOG_FIELDS"
+  },
+  {
+    "name": "catalog.field.catalog",
+    "anchor": "shared/plugins/catalog.js#CATALOG_FIELDS"
+  },
+  {
+    "name": "catalog.field.name",
+    "anchor": "shared/plugins/catalog.js#CATALOG_FIELDS"
+  },
+  {
+    "name": "catalog.field.plugins",
+    "anchor": "shared/plugins/catalog.js#CATALOG_FIELDS"
+  },
+  {
+    "name": "catalog.entry.id",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.name",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.version",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.class",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.description",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.url",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.sha256",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.bytes",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.homepage",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.license",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.authors",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "catalog.entry.app",
+    "anchor": "shared/plugins/catalog.js#CATALOG_ENTRY_FIELDS"
+  },
+  {
+    "name": "api.PLUGIN_API.min",
+    "anchor": "shared/constants.js#PLUGIN_API"
+  },
+  {
+    "name": "api.PLUGIN_API.current",
+    "anchor": "shared/constants.js#PLUGIN_API"
+  }
+]

@@ -138,7 +138,7 @@ export default {
             if (!sh) return;
             const iv = Math.max(0.05, num(b2.interval, 0.5));
             sh.acc += dt;
-            while (sh.acc + 1e-9 >= iv && unit.mem.hsShield === sh) { sh.acc -= iv; shieldPulse(battle, unit, shieldAt(unit, sh)); }
+            while (sh.acc + 1e-9 >= iv && unit.mem.hsShield === sh) { sh.acc -= iv; shieldPulse(battle, unit, shieldAt(unit, sh)); } // loop-cap: interval floored before the loop
             if (unit.mem.hsShield !== sh) return;
             const slowed = touching(battle, unit, shieldAt(unit, sh)).length > 0;
             sh.turned += SHIELD_SPEED * (slowed ? 1 - SHIELD_SLOW : 1) * dt;

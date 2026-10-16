@@ -210,15 +210,18 @@ for (const elite of [false, true]) test(`风暴潮 splash uses the published 1.1
   const { h, u } = field({ skill: 1, elite }); start(u); h.run(1.6); h.b.rng = () => 0.99;
   const main = h.spawn('dummy', { pos: [10, 4] });
   const near = h.spawn('dummy', { pos: [10, 5] });
-  const outside = h.spawn('dummy', { pos: [10, 5.2] });
+  // 0.3.0: the collision test takes an enemy's 0.1 collider — a centre 1.15 away is splashed, 1.25 away is not
+  const edge = h.spawn('dummy', { pos: [10, 5.15] });
+  const outside = h.spawn('dummy', { pos: [10, 5.25] });
   const body = h.spawn('dummy', { pos: [10, 5.8] });
   body.hitArea = { w: 1.6, h: 1, dx: 0, dy: 0 };
-  const hp = [main, near, outside, body].map(e => e.hp);
+  const hp = [main, near, outside, body, edge].map(e => e.hp);
   performAttack(h.b, u, effectiveProfile(u), [main]);
   approx(hp[0] - main.hp, u.s.atk * u.skill.bb['attack@aoe_atk_scale']);
   approx(hp[1] - near.hp, u.s.atk);
-  assert.equal(outside.hp, hp[2], 'a point outside radius 1.1 is not splashed');
+  assert.equal(outside.hp, hp[2], 'a collider outside radius 1.1 is not splashed');
   approx(hp[3] - body.hp, u.s.atk, 'a large collision body overlapping radius 1.1 is splashed');
+  approx(hp[4] - edge.hp, u.s.atk, 'a 0.1 collider overlapping radius 1.1 is splashed');
   done(h);
 });
 

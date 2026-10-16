@@ -1,14 +1,14 @@
 // server/sim/content/kits/ops/chess_char_6_15-qiubai.js — 仇白 (char_4082_qiubai) kit, tier 6.
 // Conventions of the tier-6 kits: ../shared/tier6.js; kit contract and rules: ../README.md.
 
-import { num, tbb, parseN, enemiesIn, skillGridOf, aura } from '../shared/tier6.js';
+import { num, tbb, textCount, enemiesIn, skillGridOf, aura } from '../shared/tier6.js';
 
 // ------------------------------------------------------------------------------------------------------------------
 // 仇白 chess_char_6_15 (领主) — S3 问雪; 入隙; 落英; module 雪浸过的斗笠
 
 function qiubai(bb, chess, def) {
   const t0 = tbb(def, 0), t1 = tbb(def, 1), tb = def?.traitBb || {};
-  const extraTargets = parseN(def?.skill?.description, /额外攻击(\d+)个目标/, 0);
+  const extraTargets = textCount(def?.skill?.description, /额外攻击(\d+)个目标/, 0, 'extra-targets');
   const skillGrid = def?.skill?.rangeGrid?.length ? def.skill.rangeGrid : null;
   const gapScale = t0.atk_scale_t != null ? num(t0.atk_scale_t) : num(t0.atk_scale), bothMul = t0.atk_scale_t != null ? num(t0.value, 1) : 1;
   const modArts = num(tb.atk_scale_m);

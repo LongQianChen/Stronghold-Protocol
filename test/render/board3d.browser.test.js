@@ -131,11 +131,12 @@ describe('3D board in headless Chrome', { skip }, () => {
     await page.close();
     assert.deepEqual(problems, []);
     assert.equal(keys[0], keys[3], 'back to the normal area');
-    // user playtest #2 item 6: the prep board no longer builds the enemy pen block (only the pen camera does), so the
-    // union while flying is the prep field + the boss field; the field takes its separator row 13 (user playtest #5
-    // item 6: act2 m01's blowers stand on it)
-    assert.equal(keys[0], '6,13,0,10', 'prep: the board without the pen block');
-    assert.equal(keys[1], '0,6,0,20;6,13,0,10', `union while flying: ${keys[1]}`);
+    // the prep board builds the enemy pen block (the maintainer's decision of 2026-10-15: the pen shows in 休整期; user
+    // playtest #2 item 6 had kept it to the pen camera), with the field's separator row 13 (user playtest #5 item 6:
+    // act2 m01's blowers stand on it); a flight from the prep camera into a battle camera drops the pen at once, so the
+    // union while flying is the prep field + the boss field
+    assert.equal(keys[0], '13,18,6,14;6,13,0,10', 'prep: the board with the pen block');
+    assert.equal(keys[1], '0,6,0,20;6,13,0,10', `union while flying, without the pen: ${keys[1]}`);
     assert.equal(keys[2], '0,6,0,20');
   });
 
@@ -177,7 +178,7 @@ describe('3D board in headless Chrome', { skip }, () => {
     assert.equal(r.faArea, '0,6,0,20', 'FA prep builds the boss field');
     assert.deepEqual(r.faBand, [0, 13]);
     assert.ok(r.faCamTx > 10, `right-hand boss prep camera (tx ${r.faCamTx})`);
-    assert.equal(r.prepArea, '6,13,0,10', 'prep board without the pen block (user playtest #2 item 6), with the row-13 wall');
+    assert.equal(r.prepArea, '13,18,6,14;6,13,0,10', 'prep board with the pen block (the decision of 2026-10-15) and the row-13 wall');
     assert.equal(r.bossArea, '0,6,0,20');
     assert.equal(r.devices, 2);
     assert.equal(r.attached, 2, 'both crate meshes still in the scene after the flight');

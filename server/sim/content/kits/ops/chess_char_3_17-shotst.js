@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_3_17-shotst.js — 流星 (char_126_shotst) kit, tier 3.
 // Conventions of the tier-3 kits: ../shared/tier3.js; kit contract and rules: ../README.md.
 
-import { num, defOf, talentBb, altSkills, instantKindOf, fx, textNum, enemiesOn } from '../shared/tier3.js';
+import { num, defOf, talentBb, altSkills, instantKindOf, fx, textCount, enemiesOn } from '../shared/tier3.js';
 
 export default {
   // ---- 3_17 流星 · 速射手 — S2 碎甲击·扩散: instant ATK% phys on ≤5 enemies in range + DEF shred for `duration` s;
@@ -9,7 +9,7 @@ export default {
   chess_char_3_17_a: (bb, chess, def) => {
     const d = defOf(chess, def);
     const t0 = talentBb(d, 0);
-    const n = textNum(d.skill?.description, /至多(\d+)个/, 5);
+    const n = textCount(d.skill?.description, /至多(\d+)个/, 5, 'at-most');
     const flyMul = (unit, t) => (t.isFlying ? (unit.profile.flyScale ?? 1) * num(t0.atk_scale, 1) : 1);
     return {
       trait: { dmgMul: (battle, unit, target) => flyMul(unit, target) },

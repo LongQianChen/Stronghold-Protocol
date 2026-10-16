@@ -152,11 +152,16 @@ export function unlitMaterial(THREE, map, color = 0xffffff, opts = {}) {
 }
 
 /**
- * Gate / objective box material ([opt]start_end_add: additive; [opt]start_end_ab: alpha blend). `uniforms.uPulse`
- * animates the intensity (the clip's _TintColor.a curve).
+ * Gate / objective box material, after the client's Torappu/Particles/Additive and /AlphaBlend (GLES source in
+ * [uc]shaders.ab): colour = 2 · vertex colour · _TintColor · tex, alpha clamped to [0, 1]; Additive blends SrcAlpha One,
+ * AlphaBlend SrcAlpha OneMinusSrcAlpha. The client renders in gamma space, so this works on the texture's stored
+ * (display) values: `map` must be a non-sRGB texture, and the result is written without a colour-space conversion.
+ * `tint` = _TintColor.rgb, `uniforms.uAlpha` = _TintColor.a (animated by the box's clip). The box meshes carry no
+ * vertex colours.
+ * [ASSUMED] a mesh without vertex colours reads them as white (1, 1, 1, 1).
  */
 export function gateMaterial(THREE, map, { additive = true, tint = [1, 1, 1] } = {}) {
-  const uniforms = { map: { value: map }, uTint: { value: new THREE.Color(tint[0], tint[1], tint[2]) }, uPulse: { value: 1 }, uFlash: { value: new THREE.Color(0, 0, 0) } };
+  const uniforms = { map: { value: map }, uTint: { value: new THREE.Vector3(tint[0], tint[1], tint[2]) }, uAlpha: { value: 1 }, uFlash: { value: new THREE.Color(0, 0, 0) } };
   const m = new THREE.ShaderMaterial({
     uniforms,
     vertexShader: [
@@ -173,17 +178,17 @@ export function gateMaterial(THREE, map, { additive = true, tint = [1, 1, 1] } =
     fragmentShader: [
       'uniform sampler2D map;',
       'uniform vec3 uTint;',
-      'uniform float uPulse;',
+      'uniform float uAlpha;',
       'uniform vec3 uFlash;',
       'varying vec2 vUv;',
       '#include <common>',
       '#include <fog_pars_fragment>',
       'void main() {',
       '  vec4 t = texture2D(map, vUv);',
-      '  vec3 c = t.rgb * uTint;',
+      '  vec3 c = 2.0 * uTint * t.rgb;',
+      '  float a = clamp(2.0 * uAlpha * t.a, 0.0, 1.0);',
       '  c = mix(c, uFlash * max(max(t.r, t.g), t.b) * 1.6, clamp(length(uFlash), 0.0, 1.0));',
-      additive ? '  gl_FragColor = vec4(c * t.a * uPulse, 1.0);' : '  gl_FragColor = vec4(c, t.a * clamp(uPulse, 0.0, 1.0));',
-      '  #include <colorspace_fragment>',
+      additive ? '  gl_FragColor = vec4(c * a, 1.0);' : '  gl_FragColor = vec4(c, a);',
       '}',
     ].join('\n'),
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
@@ -218,36 +223,7 @@ const FOCUS_GLSL = [
   'float focusMask(vec2 q) { vec2 d = max(vec2(0.0), max(uFocus.xy - q, q - uFocus.zw)); return mix(uFocusDim, 1.0, 1.0 - smoothstep(0.0, uFocusSoft, length(d))); }',
 ].join('\n');
 
-/** Deep sea: teal water with the official water normal map (two scrolling layers) and caustics. */
-export function waterMaterial(THREE, tex, focus) {
-  const uniforms = { uTime: { value: 0 }, uNormal: { value: tex.waterN || null }, uCaustics: { value: tex.caustics || null }, ...focus };
-  return new THREE.ShaderMaterial({
-    uniforms,
-    vertexShader: TERRAIN_VERT,
-    fragmentShader: [
-      'uniform float uTime; uniform sampler2D uNormal; uniform sampler2D uCaustics;',
-      FOCUS_GLSL,
-      'varying vec2 vUv; varying vec3 vWorld;',
-      'void main() {',
-      '  vec2 p = vWorld.xy * 0.45;',
-      '  vec3 n1 = texture2D(uNormal, p + vec2(uTime * 0.03, uTime * 0.021)).xyz * 2.0 - 1.0;',
-      '  vec3 n2 = texture2D(uNormal, p * 1.7 - vec2(uTime * 0.025, -uTime * 0.017)).xyz * 2.0 - 1.0;',
-      '  vec3 n = normalize(vec3(n1.xy + n2.xy, 2.2));',
-      '  vec3 L = normalize(vec3(-0.45, -0.3, 0.84));',
-      '  float diff = clamp(dot(n, L), 0.0, 1.0);',
-      '  vec3 V = normalize(vec3(0.0, -0.5, 0.866));',
-      '  float spec = pow(clamp(dot(reflect(-L, n), V), 0.0, 1.0), 40.0);',
-      '  float ca = texture2D(uCaustics, vWorld.xy * 0.6 + n.xy * 0.08 + vec2(uTime * 0.02, 0.0)).r;',
-      '  vec3 deep = vec3(0.03, 0.2, 0.27), shallow = vec3(0.09, 0.46, 0.55);',
-      '  vec3 c = mix(deep, shallow, 0.35 + 0.45 * diff) + ca * vec3(0.18, 0.32, 0.34) + spec * vec3(0.8, 0.95, 1.0);',
-      '  c *= focusMask(vWorld.xy);',
-      '  gl_FragColor = vec4(c, 0.9);',
-      '  #include <colorspace_fragment>',
-      '}',
-    ].join('\n'),
-    transparent: true, depthWrite: false,
-  });
-}
+// Board water and StylizedWater surfaces share waterMaterial below (GitHub #549).
 
 /** Mire: slow brown-green sludge (cloud noise), sticky bubbles. */
 export function mireMaterial(THREE, tex, focus) {
@@ -345,15 +321,63 @@ export function smogMaterial(THREE, tex, focus) {
 }
 
 /**
- * Tuning of the official scene materials (sceneMaterial). The official shader (Torappu/Scene/StandardRealtimeShadow) is
- * not reproduced: the albedo is lit by the baked indirect light of the scene's lightmap plus the scene's key light
- * masked by its baked shadow, in linear light (Unity's Shadowmask lighting mode). `range` — the linear light a lightmap
- * texel of 1.0 stands for when scene.json has no lightRange; [ASSUMED] `ambient` — the light of a mesh without a
- * lightmap page; `direct` / `indirect` — gains of the two terms, both 1: the scene's own values (the key light's
- * `light.intensity`, and the lightmap's baked linear light, whose texel is (L / lightRange)^(1/2.2)). Anything below 1
- * darkens the board against the official render — 0.2.5 had 0.8 / 0.4 tuned by eye (GitHub #549, PR #554 by @xcdoge).
+ * Lighting of the official scene materials (sceneMaterial), after the official GLES program of
+ * Torappu/Scene/StandardRealtimeShadow (shaders/standardrealtimeshadow.ab): Unity's mobile Standard BRDF in gamma
+ * colour space (PlayerSettings m_ActiveColorSpace 0, LDR camera), all in display values —
+ *   diffuse  = albedo × 0.779 · (1 − metallic)          specular = mix(0.221, albedo, metallic)
+ *   colour   = (diffuse + specular · highlight) × key light × N·L × baked shadow
+ *            + diffuse × lightmap (RGBM: 5 · A · RGB)
+ *            + reflection cubemap (mip by roughness) × (1 − 0.28 · (1 − smoothness)³) × Fresnel(specular)
+ * with N bent by the normal map. `direct` / `indirect` — gains of the key light and of the lightmap (1 = the scene's
+ * own values). `range` — the display-space light a lightmap texel of 1.0 stands for when scene.json has no
+ * lightRange. Not drawn: the realtime shadow map of the units (_ShadowStrength scales only that one), emission, the
+ * vertex-colour blend.
+ * [ASSUMED] (inferred, not read from the client):
+ *   - `ambient` — the light of a mesh without a lightmap page;
+ *   - SCENE_LM_V1 — a scene extracted before scene.json `lightEncoding` stores (L_linear / 8)^(1/2.2) per channel; the
+ *     shader rebuilds the display value by un-gamma-ing each channel's ratio to the brightest one, an approximation
+ *     (a few percent bright), exact only after the scene is extracted again;
+ *   - the tangent frame of the normal map — built from screen-space derivatives with t along +u and b along +v
+ *     (scene.bin has no tangents); the sign of the bump was not checked against the client surface by surface;
+ *   - reflection probes — one cubemap per scene, chosen at the board's anchor: the baked cubemap of the
+ *     ReflectionProbe whose box holds the board (act2autochess_m01 / m03, at the probe's intensity), else the
+ *     scene's default reflection; a renderer outside that box and the blend at its edge are not reproduced;
+ *   - the vertex-colour blend is left out on the reading that it is a tile buried in sand
+ *     (mix(albedo, _BlendColor, smoothstep(colour.r) · _BlendStrength) in the program) which the client uncovers at
+ *     run time by a rule not found yet; drawn as written it covers every patterned tile of the field.
  */
-export const SCENE_LIGHT = Object.freeze({ range: 8.0, ambient: 0.2, direct: 1, indirect: 1 });
+export const SCENE_LIGHT = Object.freeze({ range: 3.0, ambient: 0.5, direct: 1, indirect: 1 });
+
+/**
+ * Cube texture of a scene's decoded reflection atlas (scenes.py env_atlas: mip m in the row at y = Σ sizes of the
+ * mips before it, face f at x = f · (size >> m); texels in display values / env.range). The faces keep the client's
+ * layout, so the shader looks it up with the Unity-space direction (board z negated). Null without a DOM canvas.
+ * @param {{ size: number, mips: number }} env  scene.json `env`
+ */
+export function sceneEnvTexture(THREE, image, env) {
+  const size = env && env.size | 0, mips = env && env.mips | 0;
+  if (!image || !(size > 0) || !(mips > 0) || typeof document === 'undefined') return null;
+  const levels = [];
+  for (let m = 0, y = 0; m < mips; m++) {
+    const s = Math.max(1, size >> m), faces = [];
+    for (let f = 0; f < 6; f++) {
+      const cv = document.createElement('canvas');
+      cv.width = s; cv.height = s;
+      cv.getContext('2d').drawImage(image, f * s, y, s, s, 0, 0, s, s);
+      faces.push(cv);
+    }
+    levels.push(faces);
+    y += s;
+  }
+  const t = new THREE.CubeTexture(levels[0]);
+  t.mipmaps = levels.slice(1).map((faces) => ({ image: faces }));   // the client's pre-filtered mips, not generated ones
+  t.colorSpace = THREE.NoColorSpace;
+  t.generateMipmaps = false;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.needsUpdate = true;
+  return t;
+}
 
 const colorOf = (info, key, fallback = [1, 1, 1, 1]) => {
   const c = info && info.colors && Array.isArray(info.colors[key]) ? info.colors[key] : fallback;
@@ -369,33 +393,47 @@ export function sceneBlend(info) {
 }
 
 /**
- * A lit material of an official scene: albedo (`map`, × _Color) × (the lightmap's baked light + key light · N·L ·
- * baked shadow (lightmap A, by _ShadowStrength)), alpha test / blend by the material's keywords, the focus falloff of
- * the other board materials. `map` is an sRGB texture; `lightMap` holds (light / lightRange)^(1/2.2) in RGB (no colour
- * space). Geometry attributes: position, normal, uv, aLm (lightmap uv), aColor.
- * @param {{ map?: any, lightMap?: any, info?: object, lightRange?: number, light?: { dir: number[], color: number[], intensity: number } }} o
+ * A lit material of an official scene, lit in display (gamma) space like the client (SCENE_LIGHT has the formula):
+ * albedo `map` × _Color, the lightmap's baked light, the key light masked by the baked shadow (lightmap A), the
+ * reflection of `env`, the normal and metallic-gloss maps; alpha test / blend by the material's keywords; the focus
+ * falloff of the other board materials. Without `env` (a scene extracted before the reflection atlas) the material
+ * is the plain sum albedo × (lightmap + key light · N·L · shadow), which lands within about 10 % of the full formula.
+ * `map` is an sRGB texture; `normalMap` (RGB = xyz · 0.5 + 0.5), `glossMap` (R = metallic, A = smoothness) and `env`
+ * (sceneEnvTexture, texels / `envRange`) carry no colour space. `lightMap` holds Unity's gamma-space RGBM value
+ * (5 · A · RGB) / lightRange in RGB when `lightEncoding` is 'gamma'; a page of an older extraction holds
+ * (5^2.2 · A^2.2 · RGB / lightRange)^(1/2.2), from which the same value is read back to within a few percent (the
+ * brightest channel of RGB is taken as 1). Geometry attributes: position, normal, uv, aLm (lightmap uv), aColor.
+ * @param {{ map?: any, lightMap?: any, normalMap?: any, glossMap?: any, env?: any, envRange?: number, info?: object, lightRange?: number, lightEncoding?: string, light?: { dir: number[], color: number[], intensity: number } }} o
  */
 export function sceneMaterial(THREE, o, focus) {
   const info = o.info || null;
   const blend = sceneBlend(info);
   const L = o.light || { dir: [0.36, 0.45, 0.82], color: [1, 1, 1], intensity: 1 };
   const k = (Number.isFinite(L.intensity) ? L.intensity : 1) * SCENE_LIGHT.direct;
-  const lin = (v) => Math.pow(Math.max(0, v), 2.2);   // the scene's colours are authored in gamma space
   const col = colorOf(info, '_Color');
+  const gamma = o.lightEncoding === 'gamma';
+  const range = o.lightRange > 0 ? o.lightRange : (gamma ? SCENE_LIGHT.range : 8);
+  const pbs = !!o.env;
   const uniforms = {
     uMap: { value: o.map || null }, uLm: { value: o.lightMap || null },
-    uColor: { value: new THREE.Vector4(lin(col[0]), lin(col[1]), lin(col[2]), col[3]) },
+    uColor: { value: new THREE.Vector4(col[0], col[1], col[2], col[3]) },   // display values, like the texture's stored ones
     uCutoff: { value: blend === 'cutout' ? floatOf(info, '_Cutoff', 0.5) : 0 },
-    uLmScale: { value: o.lightMap ? (o.lightRange > 0 ? o.lightRange : SCENE_LIGHT.range) * SCENE_LIGHT.indirect : 0 },
+    uLmScale: { value: o.lightMap ? (gamma ? range : Math.pow(range, 1 / 2.2)) * SCENE_LIGHT.indirect : 0 },
     uAmbient: { value: o.lightMap ? 0 : SCENE_LIGHT.ambient },
-    uShadow: { value: floatOf(info, '_ShadowStrength', 1) },
     uLightDir: { value: new THREE.Vector3(...L.dir).normalize() },
-    uLightColor: { value: new THREE.Vector3(lin(L.color[0]) * k, lin(L.color[1]) * k, lin(L.color[2]) * k) },
+    uLightColor: { value: new THREE.Vector3(L.color[0] * k, L.color[1] * k, L.color[2] * k) },
+    uEnv: { value: o.env || null }, uEnvScale: { value: pbs ? (o.envRange > 0 ? o.envRange : 1) : 0 },
+    uNormal: { value: pbs ? o.normalMap || null : null }, uGlossMap: { value: pbs ? o.glossMap || null : null },
+    // _BumpScale, metallic, smoothness (the gloss map's scale with a map, else the material's own two values)
+    uSurface: { value: new THREE.Vector3(floatOf(info, '_BumpScale', 1), floatOf(info, '_Metallic', 0), floatOf(info, o.glossMap ? '_GlossMapScale' : '_Glossiness', o.glossMap ? 1 : 0)) },
     ...focus,
   };
   const m = new THREE.ShaderMaterial({
     uniforms,
-    defines: { ...(o.map ? { SCENE_MAP: 1 } : {}), ...(o.lightMap ? { SCENE_LM: 1 } : {}) },
+    defines: {
+      ...(o.map ? { SCENE_MAP: 1 } : {}), ...(o.lightMap ? { SCENE_LM: 1 } : {}), ...(o.lightMap && !gamma ? { SCENE_LM_V1: 1 } : {}),
+      ...(pbs ? { SCENE_PBS: 1 } : {}), ...(pbs && o.normalMap ? { SCENE_NORMAL: 1 } : {}), ...(pbs && o.glossMap ? { SCENE_GLOSS: 1 } : {}),
+    },
     vertexShader: [
       'attribute vec2 aLm;',
       'varying vec2 vUv; varying vec2 vLm; varying vec3 vN; varying vec3 vWorld;',
@@ -409,23 +447,68 @@ export function sceneMaterial(THREE, o, focus) {
     ].join('\n'),
     fragmentShader: [
       'uniform sampler2D uMap; uniform sampler2D uLm; uniform vec4 uColor; uniform float uCutoff;',
-      'uniform float uLmScale; uniform float uAmbient; uniform float uShadow; uniform vec3 uLightDir; uniform vec3 uLightColor;',
+      'uniform float uLmScale; uniform float uAmbient; uniform vec3 uLightDir; uniform vec3 uLightColor;',
+      'uniform samplerCube uEnv; uniform float uEnvScale; uniform sampler2D uNormal; uniform sampler2D uGlossMap; uniform vec3 uSurface;',
       FOCUS_GLSL,
       'varying vec2 vUv; varying vec2 vLm; varying vec3 vN; varying vec3 vWorld;',
+      // linear light ↔ display values (sRGB): the inverses of the texture decode and of <colorspace_fragment>
+      'vec3 toDisplay(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }',
+      'vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }',
       'void main() {',
       '  vec4 a = uColor;',
       '  #ifdef SCENE_MAP',
-      '    a *= texture2D(uMap, vUv);',
+      '    vec4 t = texture2D(uMap, vUv);',
+      '    a *= vec4(toDisplay(t.rgb), t.a);',
       '  #endif',
       '  if (a.a < uCutoff) discard;',
       '  vec3 light = vec3(uAmbient); float shade = 1.0;',
       '  #ifdef SCENE_LM',
       '    vec4 lm = texture2D(uLm, vLm);',
-      '    light += pow(lm.rgb, vec3(2.2)) * uLmScale; shade = mix(1.0, lm.a, uShadow);',
+      // [ASSUMED] pages of an earlier extraction (linear reading, range 8): an approximate read-back, see SCENE_LIGHT
+      '    #ifdef SCENE_LM_V1',
+      '      float mx = max(max(lm.r, lm.g), max(lm.b, 1e-4));',
+      '      lm.rgb = mx * pow(lm.rgb / mx, vec3(2.2));',
+      '    #endif',
+      '    light += lm.rgb * uLmScale; shade = lm.a;',
       '  #endif',
       '  vec3 n = normalize(gl_FrontFacing ? vN : -vN);',
-      '  light += uLightColor * max(dot(n, uLightDir), 0.0) * shade;',
-      '  gl_FragColor = vec4(a.rgb * light * focusMask(vWorld.xy), a.a);',
+      '  #ifdef SCENE_PBS',
+      '    float metallic = uSurface.y, smoothness = uSurface.z;',
+      '    #ifdef SCENE_GLOSS',
+      '      vec4 mg = texture2D(uGlossMap, vUv);',
+      '      metallic = mg.r; smoothness = mg.a * uSurface.z;',
+      '    #endif',
+      '    #ifdef SCENE_NORMAL',
+      // [ASSUMED] tangent frame from the screen-space derivatives (scene.bin has no tangents): t along +u, b along +v
+      '      vec3 q0 = dFdx(vWorld), q1 = dFdy(vWorld); vec2 s0 = dFdx(vUv), s1 = dFdy(vUv);',
+      '      float det = s0.x * s1.y - s1.x * s0.y;',
+      '      vec3 tu = (q0 * s1.y - q1 * s0.y) * sign(det), bv = (q1 * s0.x - q0 * s1.x) * sign(det);',
+      '      tu -= n * dot(n, tu); bv -= n * dot(n, bv);',
+      '      if (dot(tu, tu) > 0.0 && dot(bv, bv) > 0.0) {',
+      '        vec3 nt = texture2D(uNormal, vUv).xyz * 2.0 - 1.0;',
+      '        nt.xy *= uSurface.x;',
+      '        n = normalize(normalize(tu) * nt.x + normalize(bv) * nt.y + n * nt.z);',
+      '      }',
+      '    #endif',
+      '    float omr = 0.779083729 * (1.0 - metallic);',
+      '    vec3 diff = a.rgb * omr, spec = mix(vec3(0.220916301), a.rgb, metallic);',
+      '    vec3 view = normalize(vWorld - cameraPosition);',
+      '    float rough = 1.0 - smoothness, r2 = rough * rough;',
+      '    vec3 hv = normalize(uLightDir - view);',
+      '    float nl = clamp(dot(n, uLightDir), 0.0, 1.0), nh = clamp(dot(n, hv), 0.0, 1.0);',
+      '    float nv = clamp(dot(n, -view), 0.0, 1.0), lh = clamp(dot(uLightDir, hv), 0.0, 1.0);',
+      '    float d = nh * nh * (r2 * r2 - 1.0) + 1.00001;',
+      '    float highlight = clamp(r2 / (d * max(lh, 0.32) * (r2 + 1.5)) - 1e-4, 0.0, 100.0);',
+      '    vec3 rd = reflect(view, n);',
+      '    vec3 env = textureLod(uEnv, vec3(rd.x, rd.y, -rd.z), rough * (1.7 - 0.7 * rough) * 6.0).rgb * uEnvScale;',
+      '    float fres = 1.0 - nv; fres *= fres; fres *= fres;',
+      '    vec3 lit = (diff + spec * highlight) * uLightColor * (shade * nl) + diff * light',
+      '      + env * (1.0 - 0.28 * r2 * rough) * mix(spec, vec3(clamp(smoothness + 1.0 - omr, 0.0, 1.0)), fres);',
+      '  #else',
+      '    vec3 lit = a.rgb * (light + uLightColor * max(dot(n, uLightDir), 0.0) * shade);',
+      '  #endif',
+      '  vec3 c = toLinear(clamp(lit, 0.0, 1.0));',
+      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), a.a);',
       '  #include <colorspace_fragment>',
       '}',
     ].join('\n'),
@@ -435,8 +518,217 @@ export function sceneMaterial(THREE, o, focus) {
   return m;
 }
 
-/** A water surface of an official scene (Torappu/Scene/StylizedWater): the board's water shader in the material's colours. */
-export function sceneWaterMaterial(THREE, tex, focus, info) {
+/**
+ * The official device shader (Torappu/Scene/Trap/Shadow — MT_trap_1106_achplat, the 射击台 model both boards draw):
+ * albedo × (_Ambient + _Diffuse · N·L) in display values, so the model reads nearly flat-lit like in the client.
+ * `info` is the material record (mesh/trap_110/materials.json), `lightDir` the key light direction in board space
+ * (an official scene's own light when it is drawn). [ASSUMED] the formula, inferred from the material's two lighting
+ * parameters (the shader program was not read); the client's realtime shadow on the model is not reproduced.
+ */
+export function trapMaterial(THREE, map, focus, info = null, lightDir = [0.36, 0.45, 0.82]) {
+  const uniforms = {
+    uMap: { value: map || null },
+    uAmbient: { value: floatOf(info, '_Ambient', 0.9) }, uDiffuse: { value: floatOf(info, '_Diffuse', 0.2) },
+    uLightDir: { value: new THREE.Vector3(...lightDir).normalize() },
+    ...focus,
+  };
+  return new THREE.ShaderMaterial({
+    uniforms,
+    vertexShader: [
+      'varying vec2 vUv; varying vec3 vN; varying vec3 vWorld;',
+      'void main() {',
+      '  vUv = uv;',
+      '  vN = normalize(mat3(modelMatrix) * normal);',
+      '  vec4 w = modelMatrix * vec4(position, 1.0);',
+      '  vWorld = w.xyz;',
+      '  gl_Position = projectionMatrix * viewMatrix * w;',
+      '}',
+    ].join('\n'),
+    fragmentShader: [
+      'uniform sampler2D uMap; uniform float uAmbient; uniform float uDiffuse; uniform vec3 uLightDir;',
+      FOCUS_GLSL,
+      'varying vec2 vUv; varying vec3 vN; varying vec3 vWorld;',
+      'vec3 toDisplay(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c)); }',
+      'vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }',
+      'void main() {',
+      '  vec3 a = toDisplay(texture2D(uMap, vUv).rgb);',
+      '  vec3 n = normalize(gl_FrontFacing ? vN : -vN);',
+      '  vec3 lit = a * (uAmbient + uDiffuse * max(dot(n, uLightDir), 0.0));',
+      '  gl_FragColor = vec4(toLinear(clamp(lit, 0.0, 1.0)) * focusMask(vWorld.xy), 1.0);',
+      '  #include <colorspace_fragment>',
+      '}',
+    ].join('\n'),
+  });
+}
+
+/**
+ * [ASSUMED] Procedural-board compatibility defaults. RGB is now in display values: the old linear deep/shallow
+ * colours encoded as sRGB; caustics/specular tints approximate the old output after that encoding. Keep the old
+ * normal tiling, speeds, light, wet blend, exponent and opacity so a missing scene does not darken the metal board.
+ */
+export const WATER_DEFAULTS = Object.freeze({
+  deep: [0.189748, 0.484529, 0.556393, 0.9], shallow: [0.331830, 0.708370, 0.767376, 0.9],
+  tiling: 0.45, normalTiling: 0.765, bumpScale: 1 / 2.2,
+  waterSpeed: [0.03, 0.021], flowSpeed: [-0.025, 0.017],
+  causticsTiling: 0.6, causticsSpeed: 0.02, causticsBrightness: 1,
+  sunDir: [-0.45, -0.3, 0.84], viewDir: [0, -0.5, 0.866], skyStrength: 0, colorIntensity: 1, specPower: 40,
+  wet: [0.35, 0.45], causticsTint: [0.28, 0.25, 0.23], specTint: [0.8, 0.65, 0.6],
+});
+
+/** Missing fields of a surface record: dumped MT_AutochessSand_water, level_act1autochess_m01.ab. */
+export const SCENE_WATER_DEFAULTS = Object.freeze({
+  deep: [0, 0.270538, 0.404412, 0.672], shallow: [0.389706, 1, 0.696957, 0.503],
+  tiling: 0.45, normalTiling: 0.562, bumpScale: 0.55,
+  waterSpeed: [0.73, 0.59], flowSpeed: [0.1, 0.07],
+  causticsTiling: 0.47, causticsSpeed: 0.277, causticsBrightness: 0.377,
+  sunDir: [0.34, 0.64, -0.94], skyStrength: 0.767, colorIntensity: 1.15, glossiness: 0.975,
+});
+
+/**
+ * [ASSUMED] StylizedWater approximations, NOT the official shader formula. Display-space gains, for screenshot
+ * review: reflection replaces part of the base colour, never adds a second sky. With the decoded cubemap reduce
+ * PR #555's sky .22 → .15, specular 1.6 → .6, caustics .35 → .2 to avoid double brightening; without it retain .22,
+ * 1.6, .35 for the gradient approximation. Alpha +.2 stays: it changes coverage, not the light sum.
+ * Smoothness → Phong exponent ×128 (minimum 2), wet = .08 + .2 N·L in lieu of shore depth, fixed tints/distortion
+ * and the gradient stops are estimates. The board's normal/caustics textures stand in for the material's maps;
+ * _SkyCurvatureMask, _CausticCtrl, foam, flow distortion and the separate sun-disc controls are not reproduced.
+ */
+export const WATER_TUNING = Object.freeze({
+  envSkyGain: 0.15, skyGain: 0.22,
+  envSpecGain: 0.6, specGain: 1.6,
+  envCausticsGain: 0.2, causticsGain: 0.35,
+  alphaLift: 0.2, specExponent: 128, minSpecPower: 2,
+  wet: [0.08, 0.2], specTint: [0.5, 0.6, 0.65], causticsTint: [0.55, 0.85, 0.9],
+  causticsDistortion: 0.08, skyLow: [0.10, 0.12, 0.15], skyHigh: [0.30, 0.36, 0.44],
+});
+
+/** One mapping from the record's Unity names to our uniforms, shared by construction and scene changes. */
+function waterParams(info, reflection = {}) {
+  const D = info ? SCENE_WATER_DEFAULTS : WATER_DEFAULTS, K = WATER_TUNING;
+  const env = reflection.env || null;
+  const sun = colorOf(info, '_SunDir', [...D.sunDir, 0]).slice(0, 3);
+  // scene.bin is anchor-local Unity with z negated. [ASSUMED] _SunDir is a direction toward the custom sun in
+  // that same frame; PR #555 left its negative z unchanged, putting the sun below our z-up water.
+  if (info) sun[2] = -sun[2];
+  const len = Math.hypot(...sun);
+  const pair = (key, d) => colorOf(info, key, [...d, 0, 0]).slice(0, 2);
+  const gain = (withEnv, withoutEnv) => info ? (env ? withEnv : withoutEnv) : 1;
+  const rough = Math.max(0, Math.min(1, 1 - floatOf(info, '_Glossiness', info ? D.glossiness : 1)));
+  return {
+    uDeep: colorOf(info, '_DeepWaterColor', D.deep), uShallow: colorOf(info, '_ShallowWaterColor', D.shallow),
+    uTiling: floatOf(info, '_Tiling', D.tiling), uNormalTiling: floatOf(info, '_NormalTiling', D.normalTiling),
+    uBumpScale: floatOf(info, '_BumpScale', D.bumpScale),
+    uWaterSpeed: pair('_WaterSpeed', D.waterSpeed), uFlowSpeed: pair('_FlowSpeed', D.flowSpeed),
+    uCausticsTiling: floatOf(info, '_CausticsTiling', D.causticsTiling),
+    uCausticsSpeed: floatOf(info, '_CausticsSpeed', D.causticsSpeed),
+    uCausticsGain: floatOf(info, '_CausticsBrightness', D.causticsBrightness) * gain(K.envCausticsGain, K.causticsGain),
+    uSunDir: len > 0 ? sun.map((v) => v / len) : [0, 0, 1],
+    uViewDir: info ? [0, 0, 0] : D.viewDir, // fixed old board view; official surfaces use the actual camera
+    uSkyStrength: floatOf(info, '_SkyStrength', D.skyStrength) * gain(K.envSkyGain, K.skyGain),
+    uColorIntensity: floatOf(info, '_WaterColorIntensity', D.colorIntensity),
+    uSpecPower: info ? Math.max(K.minSpecPower, floatOf(info, '_Glossiness', D.glossiness) * K.specExponent) : D.specPower,
+    uWet: info ? K.wet : D.wet, uAlphaLift: info ? K.alphaLift : 0,
+    uSpecTint: (info ? K.specTint : D.specTint).map((v) => v * gain(K.envSpecGain, K.specGain)),
+    uCausticsTint: info ? K.causticsTint : D.causticsTint,
+    uEnv: env, uEnvScale: env ? (reflection.envRange > 0 ? reflection.envRange : 1) : 0,
+    // [ASSUMED] match sceneMaterial's roughness curve; use the extracted mip count (8 today), not a new atlas.
+    uEnvLod: rough * (1.7 - 0.7 * rough) * Math.max(0, (reflection.envMips || 7) - 1),
+  };
+}
+
+/**
+ * One shader for the board's water tiles and StylizedWater surfaces. No record → WATER_DEFAULTS; incomplete
+ * records → SCENE_WATER_DEFAULTS. Reflection is the SAME decoded cube owned by _sceneResources, never disposed
+ * here. Without a cube use PR #555's sky gradient. World-space waves keep board and scene surfaces in phase.
+ *
+ * Colour contract (#571): material RGB and decoded env RGB × envRange are display (Gamma) values. Water colour,
+ * reflection, caustics and highlights combine THERE. Clamp, then exact sRGB toLinear, then the shared linear focus
+ * falloff and <colorspace_fragment>. Do not pow(colour, 2.2) before adding light: that recreates the old mismatch.
+ *
+ * @param {any} THREE
+ * @param {{ waterN?: any, caustics?: any }} tex
+ * @param {object} focus
+ * @param {object|null} [info]
+ * @param {{ env?: any, envRange?: number, envMips?: number }} [reflection]
+ */
+export function waterMaterial(THREE, tex, focus, info = null, reflection = {}) {
+  const uniforms = {
+    uTime: { value: 0 }, uNormal: { value: tex.waterN || null }, uCaustics: { value: tex.caustics || null }, ...focus,
+  };
+  for (const [name, value] of Object.entries(waterParams(info, reflection))) {
+    const Vector = Array.isArray(value) && [null, null, THREE.Vector2, THREE.Vector3, THREE.Vector4][value.length];
+    uniforms[name] = { value: Vector ? new Vector(...value) : value };
+  }
+  const m = new THREE.ShaderMaterial({
+    uniforms,
+    defines: { ...(tex.waterN ? { WATER_NORMAL: 1 } : {}), ...(tex.caustics ? { WATER_CAUSTICS: 1 } : {}), ...(reflection.env ? { WATER_ENV: 1 } : {}) },
+    vertexShader: TERRAIN_VERT,
+    fragmentShader: [
+      'uniform float uTime; uniform sampler2D uNormal; uniform sampler2D uCaustics; uniform vec4 uDeep; uniform vec4 uShallow;',
+      'uniform float uTiling; uniform float uNormalTiling; uniform float uBumpScale; uniform vec2 uWaterSpeed; uniform vec2 uFlowSpeed;',
+      'uniform float uCausticsTiling; uniform float uCausticsSpeed; uniform float uCausticsGain; uniform vec3 uCausticsTint;',
+      'uniform vec3 uSunDir; uniform vec3 uViewDir; uniform float uSkyStrength; uniform float uColorIntensity; uniform float uSpecPower; uniform vec3 uSpecTint;',
+      'uniform vec2 uWet; uniform float uAlphaLift; uniform samplerCube uEnv; uniform float uEnvScale; uniform float uEnvLod;',
+      FOCUS_GLSL,
+      'varying vec2 vUv; varying vec3 vWorld;',
+      'vec3 toLinear(vec3 c) { return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c)); }',
+      'void main() {',
+      '  vec3 n = vec3(0.0, 0.0, 1.0);',
+      '  #ifdef WATER_NORMAL',
+      '    vec3 n1 = texture2D(uNormal, vWorld.xy * uTiling + uTime * uWaterSpeed).xyz * 2.0 - 1.0;',
+      '    vec3 n2 = texture2D(uNormal, vWorld.xy * uNormalTiling + uTime * uFlowSpeed).xyz * 2.0 - 1.0;',
+      '    n = normalize(vec3((n1.xy + n2.xy) * uBumpScale, 1.0));',
+      '  #endif',
+      '  vec3 view = dot(uViewDir, uViewDir) > 0.0 ? -normalize(uViewDir) : normalize(vWorld - cameraPosition);',
+      '  float diff = clamp(dot(n, uSunDir), 0.0, 1.0);',
+      '  float spec = pow(clamp(dot(reflect(-uSunDir, n), -view), 0.0, 1.0), uSpecPower);',
+      '  float ca = 0.0;',
+      '  #ifdef WATER_CAUSTICS',
+      `    ca = texture2D(uCaustics, vWorld.xy * uCausticsTiling + n.xy * ${WATER_TUNING.causticsDistortion} + vec2(uTime * uCausticsSpeed, 0.0)).r;`,
+      '  #endif',
+      '  vec3 rd = reflect(view, n);',
+      '  #ifdef WATER_ENV',
+      '    vec3 sky = textureLod(uEnv, vec3(rd.x, rd.y, -rd.z), uEnvLod).rgb * uEnvScale;',
+      '  #else',
+      `    vec3 sky = mix(${V3(WATER_TUNING.skyLow)}, ${V3(WATER_TUNING.skyHigh)}, clamp(rd.z * 0.5 + 0.5, 0.0, 1.0));`,
+      '  #endif',
+      '  vec4 w = mix(uDeep, uShallow, clamp(uWet.x + uWet.y * diff, 0.0, 1.0));',
+      '  vec3 lit = mix(w.rgb * uColorIntensity, sky, clamp(uSkyStrength, 0.0, 1.0));',
+      '  lit += ca * uCausticsGain * uCausticsTint + spec * uSpecTint;',
+      '  vec3 c = toLinear(clamp(lit, 0.0, 1.0));',
+      '  gl_FragColor = vec4(c * focusMask(vWorld.xy), clamp(w.a + uAlphaLift, 0.0, 1.0));',
+      '  #include <colorspace_fragment>',
+      '}',
+    ].join('\n'),
+    transparent: true, depthWrite: false,
+  });
+  m.userData.water = true;
+  return applyWaterMaterial(m, info, reflection);
+}
+
+/** Update only our water materials; a missing record resets every parameter and a missing cube removes WATER_ENV. */
+export function applyWaterMaterial(material, info, reflection = {}) {
+  if (!material?.userData?.water || !material.uniforms) return material;
+  for (const [name, value] of Object.entries(waterParams(info, reflection))) {
+    const u = material.uniforms[name];
+    if (!u) continue;
+    if (Array.isArray(value) && typeof u.value?.set === 'function') u.value.set(...value);
+    else u.value = value;
+  }
+  const hadEnv = !!material.defines.WATER_ENV;
+  if (reflection.env) material.defines.WATER_ENV = 1; else delete material.defines.WATER_ENV;
+  if (hadEnv !== !!reflection.env) material.needsUpdate = true;
+  return material;
+}
+
+/** Compatibility entry point; surface water always uses the board's shader. */
+export const sceneWaterMaterial = waterMaterial;
+
+/**
+ * Legacy kind:water non-surface records (DynamicWaterTile). Keep their existing rendering outside this water port;
+ * they are platform decals, not StylizedWater, and must not select the board's water parameters or reflections.
+ */
+export function sceneWaterDecalMaterial(THREE, tex, focus, info) {
   const deep = colorOf(info, '_DeepWaterColor', [0.03, 0.2, 0.27, 0.7]), shallow = colorOf(info, '_ShallowWaterColor', [0.09, 0.46, 0.55, 0.5]);
   const uniforms = {
     uTime: { value: 0 }, uNormal: { value: tex.waterN || null }, uCaustics: { value: tex.caustics || null },

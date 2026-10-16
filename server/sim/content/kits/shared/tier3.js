@@ -30,9 +30,10 @@
 // 空弦 MAR-X (fly ×, profession layer). No in-battle effect here: 忍冬 SOL-Y "首次部署时部署费用-4" (the initial
 // deployment is free) and the 集成战略-only ISW-A modules of 琳琅诗怀雅 / 空弦 (their stats and trait cost still apply).
 
+import { textCount, textFinite } from '../../../../../shared/plugins/textNumber.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 import { COLS } from '../../../constants.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { normalizeChess, normalizeSkill } from '../../../simdata.js';
 import { tacticalPoint as sharedTacticalPoint } from '../../tokens.js';
 
@@ -95,17 +96,14 @@ function groundAspd(key, aspd, cnt = 1) {
 const alive = (u) => !!(u && u.alive && u.deployed);
 const tileKeyOf = (u) => (u.side === 'ally' ? u.tileR * COLS + u.tileC : Math.round(u.y) * COLS + Math.round(u.x));
 /** On a tile of `set`: an ally by its tile, an enemy by its body (every tile a huge enemy occupies — sim/body.js). */
-const onTiles = (x, set) => (x.side === 'ally' ? set.has(tileKeyOf(x)) : bodyInKeys(x, set));
+const onTiles = (x, set) => (x.side === 'ally' ? set.has(tileKeyOf(x)) : bodyInRange(x, set));
 const gridKeys = (grid, u, ext = 0) => absoluteRangeKeys(grid || [[0, 0]], u.tileR, u.tileC, u.dir, ext);
 const fx = (battle, kind, u, extra = {}) => battle.fx(kind, { x: u.x, y: u.y, id: u.id, ...extra });
 const copyGrid = (g) => (Array.isArray(g) && g.length ? g.map((p) => [p[0], p[1]]) : null);
 const NINE = [[1, -1], [1, 0], [1, 1], [0, -1], [0, 0], [0, 1], [-1, -1], [-1, 0], [-1, 1]];
-const CN_NUM = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
-/** Number captured by `re` (arabic or a single chinese numeral) in `text`, else `fallback`. */
+/** Finite capture (arabic or one chinese numeral). Counts go through textCount. */
 function textNum(text, re, fallback) {
-  const m = String(text ?? '').match(re);
-  if (!m) return fallback;
-  return /^\d+(\.\d+)?$/.test(m[1]) ? +m[1] : (CN_NUM[m[1]] ?? fallback);
+  return textFinite(text, re, fallback);
 }
 /**
  * A tile a summon may take: inside the field and not reserved (Battle.isReservedTile: nobody on it, no knocked-out
@@ -219,6 +217,6 @@ function installFunnelPrune(battle, unit) {
 
 export {
   num, defOf, talentBb, traitBb, moduleTalentBb, selectedId, altSkills, instantKindOf, statSkill, groundAspd, alive,
-  onTiles, gridKeys, fx, copyGrid, NINE, textNum, freeTile, groundTile, tacticalPoint, enemiesOn, aura, whileTrue,
+  onTiles, gridKeys, fx, copyGrid, NINE, textNum, textCount, freeTile, groundTile, tacticalPoint, enemiesOn, aura, whileTrue,
   isLeader, giveSp, funnelMap, installFunnelPrune,
 };

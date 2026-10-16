@@ -69,6 +69,8 @@ test('fetch-assets shrink guard: the committed manifest minus some audio entries
   assert.equal(parseArgs(['--allow-shrink']).allowShrink, true);
   assert.throws(() => parseArgs(['--allow-shrinks']), /unknown option/);
   // 干员战斗语音: the prep-only slots are opt-in (DESIGN §21.30 — no battle requests them)
+  assert.equal(parseArgs([]).optionalVoice, true, 'a plain run plans the EN / KR / own-language trees');
+  assert.equal(parseArgs(['--no-optional-voice']).optionalVoice, false);
   assert.equal(parseArgs([]).voiceAll, false, 'the battle slots are what a plain run plans');
   assert.equal(parseArgs(['--voice-all']).voiceAll, true);
   assert.equal(parseArgs(['--voice-lang=jp']).voiceLang, 'jp');

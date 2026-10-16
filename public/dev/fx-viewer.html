@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>FX viewer · 卫戍协议：盟约</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230c0f0e'/%3E%3Ccircle cx='12' cy='12' r='6' fill='%234ed8af'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <script src="/vendor/pixi.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0e0d; overflow: hidden; }
+    #board, #field { position: fixed; inset: 0; width: 100%; height: 100%; }
+    #board { z-index: 0; }
+    #field { z-index: 1; }
+    .fv-panel {
+      position: fixed; right: 12px; top: 12px; z-index: 5; display: flex; flex-direction: column; gap: 8px;
+      padding: 10px 12px; width: 360px; max-height: calc(100vh - 48px); overflow: auto; background: rgba(12, 16, 15, .88);
+      border: 1px solid #2f3a35; color: #c3cbc7; font: 13px/1.35 "Noto Sans SC", system-ui, sans-serif;
+    }
+    .fv-panel.is-hidden { display: none; }
+    .fv-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .fv-panel input, .fv-panel select, .fv-panel button {
+      background: #1e2421; color: #f2f2f2; border: 1px solid #3e4b45; padding: 4px 8px; font: inherit;
+    }
+    .fv-panel input[type=text] { flex: 1; min-width: 0; }
+    .fv-panel button { cursor: pointer; }
+    .fv-panel button.is-on { border-color: #4ed8af; color: #4ed8af; }
+    .fv-micro { font: 11px/1 Bender, Oxanium, monospace; letter-spacing: .08em; color: #4ed8af; text-transform: uppercase; }
+    .fv-stats { font: 12px/1.4 ui-monospace, monospace; color: #8a948f; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <canvas id="board"></canvas>
+  <div id="field"></div>
+  <div class="fv-panel" id="panel">
+    <div class="fv-row"><span class="fv-micro">OFFICIAL FX VIEWER</span></div>
+    <div class="fv-row">
+      <input id="key" type="text" list="keys" placeholder="prefab key" spellcheck="false" />
+      <datalist id="keys"></datalist>
+      <button id="play" type="button">▶ 播放</button>
+    </div>
+    <div class="fv-row">
+      <button id="pause" type="button">❚❚</button>
+      <button id="step" type="button">+1 帧</button>
+      <button id="speed1" type="button">1×</button>
+      <button id="speed2" type="button" class="is-on">2×</button>
+      <button id="loop" type="button" class="is-on">循环</button>
+      <button id="stop" type="button">停止</button>
+      <button id="clear" type="button">清空</button>
+    </div>
+    <div class="fv-row">
+      <span class="fv-micro">TIER</span>
+      <button id="full" type="button" class="is-on">完整</button>
+      <button id="lite" type="button">精简</button>
+      <span class="fv-micro">FACE</span>
+      <button id="faceL" type="button">←</button>
+      <button id="faceR" type="button" class="is-on">→</button>
+    </div>
+    <div class="fv-row">
+      <span class="fv-micro">UNIT</span>
+      <select id="unit"><option value="">—</option></select>
+    </div>
+    <div class="fv-stats" id="stats">loading…</div>
+  </div>
+  <script type="module" src="./fx-viewer.js"></script>
+</body>
+</html>

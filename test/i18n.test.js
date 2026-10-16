@@ -133,7 +133,7 @@ test('public/i18n/en.json: valid, English values, placeholders kept, the pilot s
 });
 
 test('the whole client, shared and the server messages: no Chinese literal left unwrapped, every msgid in public/i18n/en.json (extract 0, check --strict)', async () => {
-  // what tools/i18n.mjs scans: public/js (not dev / vendor / assets / fonts), shared, server — server/sim only for the
+  // what tools/i18n.mjs scans: public/js (not dev / vendor / assets / fonts), public/studio, shared, server — server/sim only for the
   // texts it sends (msg() / ctx.toast), its own t() / N_() are other helpers
   const SKIP = new Set(['node_modules', 'vendor', 'assets', 'fonts', 'dev']);
   const files = [];
@@ -145,7 +145,7 @@ test('the whole client, shared and the server messages: no Chinese literal left 
       else if (/\.m?js$/.test(name)) files.push(r);
     }
   };
-  for (const root of ['public/js', 'shared', 'server']) visit(root);
+  for (const root of ['public/js', 'public/studio', 'shared', 'server']) visit(root);
   assert.ok(files.length > 300, `${files.length} files`);
   const missing = [];
   let used = 0;

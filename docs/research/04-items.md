@@ -411,7 +411,7 @@ Pools referenced but NOT defined in client data (server-side) - proposed content
 - `pool_equip_vict` (维多利亚 bond, every 25 layers): {灼燃, 坚固, 加速, 战栗}维式重锤, uniform.
 - `pool_equip_pepe` (佩佩): 盟约之币 45%, 萨尔贡浓茶 45%, 黄沙罗盘 10% (golden 佩佩: 40/40/20).
 - `pool_equip_rockr` (洛洛 "定制品"): {有限加速器, 激光发射器, 护盾无人机, 双模机械臂, 蜂鸣器} uniform.
-- `pool_equip_kathe` (band_cathy 定向投放, on each shop upgrade 3 choose 1): every shop-eligible normal EQUIP, whatever the shop level (0.2.0: players' first-hand report 「原版凯瑟琳1升2都能有6本装备」; tier <= new shop level until then), uniform [ASSUMED]. `pool_equip_narant` (band_narant, every even round 2 choose 1): tier <= shop level normal EQUIP [ASSUMED].
+- `pool_equip_kathe` (band_cathy 定向投放, on each shop upgrade 3 choose 1): every shop-eligible normal EQUIP, whatever the shop level (0.2.0: players' first-hand report 「原版凯瑟琳1升2都能有6本装备」; tier <= new shop level until then), uniform [ASSUMED]. `pool_equip_narant` (band_narant 见者有份, every even round 2 choose 1): every shop-eligible normal EQUIP, whatever the shop level (0.3.0: community report 「给的装备都没有超过当前等级的，正常可以刷出更高等级的装备」; the blackboard has no tier; tier <= shop level until then), uniform [ASSUMED].
 - garrison_45 / 134 / 135 exist but are not referenced by any operator in `charChessDataDict` (unused this season).
 
 ## 9. Status / damage terms used by items

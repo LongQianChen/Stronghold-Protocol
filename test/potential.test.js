@@ -30,6 +30,16 @@ const effects = load('effects');
 const raw = (f) => JSON.parse(readFileSync(join(CACHE, 'excel', `${f}.json`), 'utf8'));
 const talent = (rec, name) => rec.talents.find((t) => t.name === name);
 
+test('potDown does not create dsl or pluginId leaves', () => {
+  const out = atPotential({ atk: 313, potDown: { '4': { dsl: { dsl: 2 }, pluginId: 'victim', atk: 1 } } }, 5);
+  assert.equal(out.dsl, undefined);
+  assert.equal(out.pluginId, undefined);
+  assert.equal(Object.hasOwn(out, 'dsl'), false);
+  assert.equal(Object.hasOwn(out, 'pluginId'), false);
+  assert.equal(out.atk, 1);
+  assert.equal(out.potDown, undefined);
+});
+
 test('刺玫 at every potential: 潜能1 ATK 413 / cost 17 / 70 s and 土壤基肥改良 8%, each step at its rank, 潜能6 = the record itself', () => {
   const v = chess.chess_char_1_06_a;
   const at = (p) => atPotential(v, p);

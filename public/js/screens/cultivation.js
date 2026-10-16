@@ -11,7 +11,8 @@
 import { html, MicroLabel } from '../ui/components.js';
 import { data } from '../data.js';
 import { opsOf } from '../ui/loadoutModel.js';
-import { CULTIVATE_EFFECTS, POTENTIAL_MIN, POTENTIAL_MAX } from '../../../shared/potential.js';
+import { CULTIVATE_EFFECTS, POTENTIAL_MIN, POTENTIAL_MAX, POTENTIAL_DEFAULT, CULTIVATE_DEFAULT } from '../../../shared/potential.js';
+import { charPotentialChanges } from '../../../shared/protocol.js';
 import { t, N_ } from '../../../shared/i18n.js';
 
 const cx = (...p) => p.flat().filter(Boolean).join(' ');
@@ -33,22 +34,50 @@ export function cultivateDesc(n) {
 }
 
 /**
+ * Whether 调配 / 自选 may edit potential. Official ids stay editable. A plugin `char_x_` with no curve does not:
+ * the server accepts only potential 6 (shared/protocol.js charPotentialChanges). `tables` overrides the loaded data.
+ * @param {string} charId
+ * @param {{ chess?: Record<string, any>, backups?: any }|null} [tables]
+ */
+export function potentialEditable(charId, tables = null) {
+  const src = tables ?? { chess: data.get('chess'), backups: data.get('backups') };
+  return charPotentialChanges(src, charId);
+}
+
+/**
+ * The cultivation row the screens draw. A potential the control does not show is not a visible change; 练度 still is.
+ * @param {string} charId
+ * @param {Record<string, any>|null|undefined} ops
+ * @param {{ chess?: Record<string, any>, backups?: any }|null} [tables]
+ */
+export function cultivationView(charId, ops, tables = null) {
+  const cur = opsOf(ops, charId);
+  const potentialOn = potentialEditable(charId, tables);
+  return {
+    potential: cur.potential,
+    cultivate: cur.cultivate,
+    potentialOn,
+    changed: cur.cultivate !== CULTIVATE_DEFAULT || (potentialOn && cur.potential !== POTENTIAL_DEFAULT),
+  };
+}
+
+/**
  * Two compact selects — 潜能 and 练度 — of operator `charId` under the stored settings `ops` (a roster row, a 自选 slot).
  * @param {{ charId: string, ops: Record<string, any>, onSet: (charId: string, patch: { potential?: number, cultivate?: number }) => void,
  *   note?: string|null }} props `note`: why the settings do not apply now (a 补位 stand-in), shown as the tooltip
  */
 export function CultivationSelects({ charId, ops, onSet, note = null }) {
   if (!charId) return null;
-  const cur = opsOf(ops, charId);
+  const cur = cultivationView(charId, ops);
   const set = (patch) => onSet(charId, patch);
   // a setting off the default stands out (mint); the default stays quiet — it is the same on every row
   return html`<span class=${cx('lo-cult', cur.changed && 'is-changed', note && 'is-moot')} data-char=${charId} title=${note || undefined}>
-    <span class=${cx('lo-select', 'lo-cult__sel', 'lo-cult__pot', cur.potential !== 6 && 'is-off')}>
+    ${cur.potentialOn ? html`<span class=${cx('lo-select', 'lo-cult__sel', 'lo-cult__pot', cur.potential !== POTENTIAL_DEFAULT && 'is-off')}>
       <select value=${String(cur.potential)} aria-label=${t('潜能')} data-cult="potential"
         onChange=${(e) => set({ potential: Number(e.currentTarget.value) })}>
         ${POTENTIALS.map((n) => html`<option key=${n} value=${String(n)}>${t('潜能 {n}', { n })}</option>`)}
       </select>
-    </span>
+    </span>` : null}
     <span class=${cx('lo-select', 'lo-cult__sel', 'lo-cult__tier', cur.cultivate !== TIERS.length - 1 && 'is-off')} title=${note ? undefined : cultivateName(cur.cultivate)}>
       <select value=${String(cur.cultivate)} aria-label=${t('练度')} data-cult="cultivate"
         onChange=${(e) => set({ cultivate: Number(e.currentTarget.value) })}>
@@ -65,20 +94,20 @@ export function CultivationSelects({ charId, ops, onSet, note = null }) {
  */
 export function CultivationSection({ charId, ops, onSet, standIn = false }) {
   if (!charId) return null;
-  const cur = opsOf(ops, charId);
+  const cur = cultivationView(charId, ops);
   const set = (patch) => onSet(charId, patch);
   return html`<section class=${cx('lo-sec', 'lo-sec--cult', standIn && 'is-moot')} aria-label=${t('潜能与练度')} data-char=${charId}>
     <header class="lo-sec__head">
       <h3>${t('潜能与练度')}<${MicroLabel}>POTENTIAL<//></h3>
       ${cur.changed ? html`<span class="lo-badge lo-badge--changed">${t('已调整')}</span>` : html`<span class="lo-badge lo-badge--plain">${t('满潜能 · 精英2 Lv.60')}</span>`}
     </header>
-    <div class="lo-cult__row">
+    ${cur.potentialOn ? html`<div class="lo-cult__row">
       <span class="lo-cult__k">${t('潜能')}</span>
       <div class="lo-seg lo-seg--pot" role="radiogroup" aria-label=${t('潜能')}>
         ${POTENTIALS.map((n) => html`<button key=${n} type="button" role="radio" aria-checked=${cur.potential === n ? 'true' : 'false'}
           class=${cx(cur.potential === n && 'is-on')} data-potential=${n} onClick=${() => set({ potential: n })}><span class="num">${n}</span></button>`)}
       </div>
-    </div>
+    </div>` : null}
     <div class="lo-cult__row">
       <span class="lo-cult__k">${t('练度')}</span>
       <div class="lo-seg lo-seg--tier" role="radiogroup" aria-label=${t('练度')}>

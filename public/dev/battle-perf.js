@@ -4,6 +4,8 @@
 // phone and report the numbers (「开始测量」→ a verdict and a copyable report); tools/perfbench.mjs drives it headlessly.
 //
 // Query: ?spec=<name> (default: the first of /dev/perf/index.json) &quality=high|medium|low &panel=0 (hide the panel)
+//        &fx=off|lite|full|auto (设置「官方特效」, render/vfx: the official battle effects when extracted; default off here
+//        so the figures stay comparable with earlier runs)
 //        &board=2d|3d (render/app.js reads it)
 // Puppeteer hook: window.__perf = { ready, error, view, runner, sample(ms) → figures over `ms` of animation frames }
 //
@@ -61,6 +63,7 @@ perf.sample = (ms = 10000) => new Promise((resolve) => {
       longTasks: lt.length, longTaskMs: Math.round(lt.reduce((a, b) => a + b, 0)),
       ticks, simMs: round(r1.stepMs - r0.stepMs), simMsPerTick: ticks > 0 ? round((r1.stepMs - r0.stepMs) / ticks, 3) : null,
       viewCpuMs: v.cpuMs, renderMs: v.renderMs, units: v.units, lod: v.lod, particles: v.particles,
+      officialFx: v.officialFx ? { tier: v.officialFx.tier, effects: v.officialFx.effects, particles: v.officialFx.particles, draws: v.officialFx.draws, textures: v.officialFx.textures, texMB: v.officialFx.texMB } : null,
       board: v.board3d?.on ? '3d' : '2d', done: !!perf.runner.state()?.done,
     });
   };
@@ -215,6 +218,7 @@ async function main() {
     const p = new URLSearchParams(location.search);
     p.set('spec', $('spec').value);
     p.set('quality', $('quality').value);
+    if (q.get('fx')) p.set('fx', q.get('fx'));
     location.search = p.toString();
   };
   $('restart').onclick = reload;
@@ -227,7 +231,8 @@ async function main() {
     if (!r.ok) throw new Error(`战斗数据 ${specName} 加载失败（HTTP ${r.status}）。请确认该文件位于 public/dev/perf/。`);
     return r.json();
   });
-  const view = await createFieldView($('field'), { data, assets, settings: { quality, damageNumbers: true } });
+  const officialFx = ['off', 'lite', 'full', 'auto'].includes(q.get('fx')) ? q.get('fx') : 'off';
+  const view = await createFieldView($('field'), { data, assets, settings: { quality, damageNumbers: true, officialFx } });
   view.setStage(data.lookup('stages', msg.spec.stageId));
   // the runner needs no server here: reports go nowhere, the battle runs from its start
   const net = { on: () => () => {}, send() {}, request: async () => ({ ok: true }) };

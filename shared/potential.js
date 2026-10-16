@@ -82,6 +82,9 @@ function applyPotDown(obj, rank) {
     if (!isObj(step)) continue;
     for (const [path, value] of Object.entries(step)) {
       const keys = path.split('.');
+      // [ASSUMED] Potential and loadout overlays are stat leaves. They cannot attach behavior (`dsl`) or
+      // identity (`pluginId`), and a missing leaf of those names is not created (DESIGN §32.7).
+      if (keys.some((k) => k === 'dsl' || k === 'pluginId')) continue;
       let cur = out;
       for (let i = 0; i < keys.length - 1; i++) {
         const k = Array.isArray(cur) ? Number(keys[i]) : keys[i];

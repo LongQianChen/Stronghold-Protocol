@@ -1,7 +1,8 @@
 // Correctness lint only (npm run lint). No formatter, no stylistic rules, no repo-wide reformat.
 //
 // Node: server, shared, tools, scripts, types.
-// Browser: public/js (also loaded under Node by unit tests, so `process` is a known global).
+// Browser: public/js (also loaded under Node by unit tests, so `process` is a known global) and the plugin studio's page,
+// public/studio.
 // Tests: Node globals plus browser globals (page.evaluate callbacks).
 // Warnings (unused vars, and a few rules that fire on intentional patterns) do not fail the run.
 // `npm run lint` does not pass --max-warnings=0.
@@ -75,7 +76,7 @@ export default [
     rules,
   },
   {
-    files: ['public/js/**/*.js'],
+    files: ['public/js/**/*.js', 'public/studio/**/*.js'],
     languageOptions: {
       ecmaVersion: 2024,
       sourceType: 'module',

@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_3_12-blemsh.js — 瑕光 (char_423_blemsh) kit, tier 3.
 // Conventions of the tier-3 kits: ../shared/tier3.js; kit contract and rules: ../README.md.
 
-import { bodyOnTile } from '../../../body.js';
+import { bodyKeys, bodyOnTile } from '../../../body.js';
 import {
   num, defOf, talentBb, traitBb, altSkills, instantKindOf, alive, onTiles, gridKeys, fx, copyGrid, NINE, isLeader,
   giveSp,
@@ -18,7 +18,9 @@ export default {
   //      included) for heal_scale × ATK; S2 慑敌辉光: ATK +, puts every ground enemy on her own tile and every enemy she
   //      blocks to sleep (PRTS 备注; for the skill's duration: no own value in the data) and gives every ally of the
   //      skill range 生命回复速度 +ATK × ratio while it runs (PRTS 技能2 备注 "生命恢复的提供方式为基于自己的攻击力，增加目标的
-  //      “生命回复速度”属性，不受治疗加成和禁疗影响": an hpRegen buff, no heal — GitHub #137);
+  //      “生命回复速度”属性，不受治疗加成和禁疗影响": an hpRegen buff, no heal — GitHub #137). While S2 runs, a sleeping
+  //      ground enemy on the rotated x-1 is extra attack range; 1-1 itself is unchanged and an awake enemy in the diamond
+  //      is not [ASSUMED] (community 2026-10-14, §32.14.8);
   //      精锐 module GUA-X: her heals on allies under hp_ratio HP × heal_scale
   chess_char_3_12_a: (bb, chess, def) => {
     const d = defOf(chess, def);
@@ -79,6 +81,30 @@ export default {
               battle.addBuff(a, { key: regenKey(unit), duration: REGEN_IV * 2, source: unit, mods: { hpRegen: v } });
             }
           };
+          // [ASSUMED] The skill text does not change her attack range (1-1). rangeId x-1 is the 技能范围 (the ally
+          // 生命回复速度 aura, and — while the skill runs — where a sleeping ground enemy stays hittable). A sleeper she
+          // was blocking stands off her tile; 沉睡 releases the block (§24.9) and 1-1 facing the other way does not
+          // cover that side tile, so 仁慈 could not acquire them (community report 2026-10-14: facing down, the sleeping
+          // enemies on her left and right). Only those sleepers' tiles are extra range — an awake enemy in the diamond
+          // is not. x-1 also contains the tile behind her, so a sleeper there is hittable only during S2.
+          const sleepRange = (battle, unit) => {
+            const area = new Set(gridKeys(grid, unit));
+            const extra = [];
+            const seen = new Set();
+            for (const e of battle.enemies) {
+              if (!e.alive || e.hidden || e.isFlying || !e.s.flags.sleep || e.s.flags.untargetable) continue;
+              for (const k of bodyKeys(e)) {
+                if (!area.has(k) || seen.has(k)) continue;
+                seen.add(k);
+                extra.push(k);
+              }
+            }
+            extra.sort((a, b) => a - b);
+            const sig = extra.join(',');
+            if (sig === (unit.mem.blemshSleepSig ?? '')) return;
+            unit.mem.blemshSleepSig = sig;
+            battle.setExtraRange(unit, extra.length ? extra : null);
+          };
           return {
             kind: 'duration',
             heal: false,
@@ -97,15 +123,20 @@ export default {
               }
               fx(battle, 'aoe', unit, { radius: 0.5, skill: 'blemsh_2', status: 'sleep', n });
               unit.mem.blemshRegen = 0;
+              unit.mem.blemshSleepSig = null;
+              sleepRange(battle, unit);
               regen(battle, unit);
             },
             onTick({ battle, unit, dt }) {
+              sleepRange(battle, unit);
               unit.mem.blemshRegen = (unit.mem.blemshRegen ?? 0) + dt;
               if (unit.mem.blemshRegen < REGEN_IV - 1e-9) return;
               unit.mem.blemshRegen = 0;
               regen(battle, unit);
             },
             onEnd({ battle, unit }) {
+              unit.mem.blemshSleepSig = '';
+              battle.setExtraRange(unit, null);
               for (const a of battle.allyUnits) if (a.findBuff(regenKey(unit))) battle.removeBuff(a, regenKey(unit));
             },
           };

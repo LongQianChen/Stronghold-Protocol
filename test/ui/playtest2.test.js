@@ -1,5 +1,7 @@
 // Regression tests (Node) of user playtest #2, UI items 6–10 + the loadout display (DESIGN §16):
-//   6  the enemy preview pen belongs to the pen camera only: bandFor / boardArea / penShown of render/app.js
+//   6  (superseded by the maintainer's decision of 2026-10-15, from their recording of the official game: the prep camera
+//      shows the pen too) the enemy preview pen with the prep and pen cameras, never with a battle camera or the Final
+//      Assault prep: bandFor / fieldRows / boardArea / showsPen / penShown / flightView of render/app.js
 //   8  the detail card docks on the side away from a selected unit's underframe — for every bench / temp / board tile
 //      at the official prep / Final Assault prep cameras of 10 viewports (16:9, 16:10, 21:9, 32:13.4, 4:3, 1280×720,
 //      1366×768, iPad landscape, 1024×768, 1440×900) the chosen slot never overlaps the underframe
@@ -11,7 +13,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { presetCamera, OFFICIAL_PARAMS, parseCameraParam } from '../../public/js/render/projection.js';
-import { bandFor, boardArea, penShown, viewKind } from '../../public/js/render/app.js';
+import { bandFor, fieldRows, boardArea, showsPen, penShown, flightView, viewKind } from '../../public/js/render/app.js';
 import { AREAS } from '../../public/js/render/board3d/layout.js';
 import { underframeRect } from '../../public/js/ui/underframe.js';
 import { panelSide, panelSlots, chessLoadout, prepCamera, bondPopupPlace, BPOP } from '../../public/js/ui/gameLogic.js';
@@ -22,9 +24,19 @@ import { skillRecordIconUrl } from '../../public/js/ui/assetUrls.js';
 const maxRow = (areas) => Math.max(...areas.map((a) => a.r1));
 const hit = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
-describe('6: the enemy pen only with the pen camera', () => {
-  test('prep / battle / 联防 cameras draw no pen rows and build no pen area; the pen camera does', () => {
-    for (const k of ['prep', 'normal', 'unite']) {
+describe('6 (superseded 2026-10-15): the enemy pen with the prep and pen cameras, never in battle', () => {
+  test('the prep and pen cameras draw the pen rows, build the pen block and show its figures; the battle, 联防, boss and Final Assault prep cameras do not', () => {
+    // the maintainer's decision of 2026-10-15 (their recording of the official 休整期: the next round's enemies and the
+    // red gates at the top right of the prep view) — user playtest #2 item 6 had hidden the pen from every camera but its own
+    for (const k of ['prep', 'pen']) {
+      assert.deepEqual(bandFor(k), [6, 18], `${k}: 2D rows`);
+      assert.deepEqual(fieldRows(k), [6, 18], `${k}: the pen looks the same in both (only the lit rect moves)`);
+      assert.equal(boardArea(k), AREAS.normal, `${k}: the field + pen block`);
+      assert.equal(maxRow(boardArea(k)), 18);
+      assert.equal(showsPen(k), true, k);
+      assert.equal(penShown(k), true, `${k}: pen figures shown`);
+    }
+    for (const k of ['normal', 'unite']) {
       assert.ok(bandFor(k)[1] <= 13, `${k}: 2D rows ${bandFor(k)}`);
       // the field and its separator rows (row 13 carries devices blowing into the field, user playtest #5 item 6)
       assert.ok(maxRow(boardArea(k)) <= 13, `${k}: 3D area rows ≤ 13 (no pen rows 14–18)`);
@@ -33,15 +45,29 @@ describe('6: the enemy pen only with the pen camera', () => {
     for (const k of ['boss', 'hidden', 'bossPrep']) {
       assert.deepEqual(bandFor(k), [0, 13], k);
       assert.ok(maxRow(boardArea(viewKind(k))) <= 6, `${k}: boss field only`);
-      assert.equal(penShown(viewKind(k)), false);
+      assert.equal(penShown(viewKind(k)), false, `${k}: the Final Assault prep frames the boss field, the pen lies beyond its top edge`);
     }
-    assert.deepEqual(bandFor('pen'), [6, 18]);
-    assert.equal(maxRow(boardArea('pen')), 18);
-    assert.equal(boardArea('pen'), AREAS.normal, 'the pen view keeps the field + pen block');
-    assert.equal(penShown('pen'), true);
-    // a camera flight to / from the pen shows it while it lasts
-    assert.equal(penShown('prep', 'pen'), true);
-    assert.equal(penShown('pen', 'prep'), true);
+    // a scouted Final Assault board ('prep' asked for the boss rows) is the boss field too
+    assert.equal(penShown(viewKind('prep', { rect: { r0: 0, r1: 5, c0: 0, c1: 10 } })), false);
+  });
+
+  test('camera flights: the pen shows while either end shows it — a flight from the prep camera into a battle drops it at once', () => {
+    const flight = (a, b) => { const f = flightView(a, b); return { maxRow: maxRow(f.area), band: f.band, pen: f.pen }; };
+    // prep ⇄ pen: the same pen all the way (🔍▶▶ pans to what is already in view)
+    assert.deepEqual(flight('prep', 'pen'), { maxRow: 18, band: [6, 18], pen: true });
+    assert.deepEqual(flight('pen', 'prep'), { maxRow: 18, band: [6, 18], pen: true });
+    // the battle starts: gone with the start of the flight, not at its end
+    for (const b of ['normal', 'unite', 'boss']) assert.deepEqual(flight('prep', b), { maxRow: 13, band: b === 'boss' ? [0, 13] : [6, 13], pen: false }, `prep → ${b}`);
+    // a flight that starts AT the pen keeps it while it lasts (the camera looks there first)
+    assert.equal(flight('pen', 'normal').pen, true);
+    // the next prep: back at once
+    assert.deepEqual(flight('normal', 'prep'), { maxRow: 18, band: [6, 18], pen: true });
+    // the boss round's prep begins: kept while the camera flies down to the boss field (out of view by then)
+    assert.equal(flight('prep', 'bossPrep').pen, true);
+    assert.equal(flightView('prep', 'bossPrep').leader, true);
+    // the camera at rest: restView of the destination
+    assert.equal(flight('bossPrep', 'boss').pen, false);
+    assert.equal(flight('normal', 'unite').pen, false);
   });
 
   test('the field areas are the official ones minus the pen block', () => {

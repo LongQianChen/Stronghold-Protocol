@@ -30,8 +30,11 @@
 // The handler object (implemented by server/lobby.js) receives:
 //   onHello(session, { resumed, repeat })  after `welcome` was sent
 //   welcomeInfo() → object (optional)      extra fields of every `welcome` (never one of its own keys): the lobby's
-//                                          `diyKitted` (0.2.0 自选编队 — which operators a DIY slot may field)
-//   onMessage(session, msg) → { ok: true, reply?: object } | { error: ERR code, detail?: string } | undefined
+//                                          `diyKitted` (0.2.0 自选编队 — which operators a DIY slot may field) and
+//                                          `content` ({ vanilla: <cs> }, the server's content hash — DESIGN §32)
+//   onMessage(session, msg) → { ok: true, reply?: object } | { error: ERR code, detail?: string } | undefined — or a Promise of one
+//                                          (a room whose match runs in a match host worker, DESIGN §32.6: the reply
+//                                          goes out when it settles; a rejection is INTERNAL)
 //   routeGame(session, msg) → same (optional): client-side combat reports `b.progress` / `b.result` (DESIGN §14) go
 //                                          straight to the running match through it; without it they reach onMessage
 //   onDisconnect(session)                  the session's socket closed (session kept for the reconnect window)
@@ -66,11 +69,12 @@ export const NET_DEFAULTS = Object.freeze({
  * Intents that also draw from the per-connection heavy bucket: g.watch (its reply is a large state resend, m.field),
  * room.loadout (a ≤ 160-entry map and ≤ 256 operator settings validated against the game data; the client debounces its
  * edits), room.ownership
- * (a ≤ 160-id list, the same way), room.diy (≤ 8 自选 picks checked against the data, the same way) and room.spectate / lobby.spectate
+ * (a ≤ 160-id list, the same way), room.diy (≤ 8 自选 picks checked against the data, the same way), room.spectate
  * (taking a spectator seat in a running match resends its state like a watcher's g.watch — server/lobby.js spectate),
- * and lobby.watch with on:true/list:true (a paginated room directory, at most 50 rows per reply).
+ * lobby.spectate / lobby.watch with on:true/list:true (a paginated room directory, at most 50 rows per reply), and
+ * room.setPlugins (a new visual set: every member downloads its art manifest — server/plugins/visualSet.js).
  */
-export const HEAVY_TYPES = new Set(['g.watch', 'room.loadout', 'room.ownership', 'room.diy', 'room.spectate', 'lobby.spectate', 'lobby.watch']);
+export const HEAVY_TYPES = new Set(['g.watch', 'room.loadout', 'room.ownership', 'room.diy', 'room.spectate', 'lobby.spectate', 'lobby.watch', 'room.setPlugins']);
 
 /** Close codes (see header). */
 export const CLOSE = Object.freeze({ REPLACED: 4001, HELLO_TIMEOUT: 4002, POLICY: 1008, SHUTDOWN: 1001 });
@@ -729,6 +733,25 @@ export class Network {
       this.log.error(`[net] handler crashed on ${msg.t}`, e);
       res = { error: ERR.INTERNAL };
     }
+    if (res && typeof res.then === 'function') {
+      // an answer that has to wait (DESIGN §32.6: a room whose match runs in a match host worker answers once the worker
+      // has — server/lobby.js keeps each such room's messages in order): sent when it settles; a rejection is INTERNAL.
+      // A vanilla room never answers this way, so its replies go out exactly as before
+      Promise.resolve(res).then((r) => this.answer(conn, msg, rid, r), (e) => {
+        this.log.error(`[net] handler failed on ${msg.t}`, e);
+        this.answer(conn, msg, rid, { error: ERR.INTERNAL });
+      });
+      return;
+    }
+    this.answer(conn, msg, rid, res);
+  }
+
+  /**
+   * The direct reply to a handled message: `error` (with the ERR code) or `ok` when the request carried a rid. Never
+   * throws (a socket closed meanwhile simply gets nothing).
+   * @param {Connection} conn @param {any} msg @param {unknown} rid @param {any} res the handler's result
+   */
+  answer(conn, msg, rid, res) {
     if (res && res.error) {
       // fire-and-forget battle progress (no rid) that reached no running match — the match just ended, the room went
       // back to the lobby — is stale, not a client mistake: never answered (DESIGN §14; a rid-less error frame would

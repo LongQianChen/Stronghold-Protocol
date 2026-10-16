@@ -560,13 +560,16 @@ test('render/app.js renderInfo keeps UnitInfo `form` (it used to drop it: views 
 
 test('render/app.js hands the `form` of a sim fx (shared/protocol.js fxForm) with the fx to the view and keeps the mode on the unit info', () => {
   const src = readFileSync(path.join(ROOT, 'public/js/render/app.js'), 'utf8');
-  assert.match(src, /const form = fxForm\(e\);[\s\S]{0,250}inf\.form = form[\s\S]{0,250}setForm\?\.\(form, x\)/);
+  assert.match(src, /const form = fxForm\(e\);[\s\S]{0,320}inf\.form = form[\s\S]{0,320}setForm\?\.\(form, x\)/);
   // a form fx handed out late (render/interp.js takeEvents `late`) switches the model with its closing clip shortened by
   // the lateness and without replaying its telegraph
   assert.match(src, /const x = late > 0 \? \{ \.\.\.e\[4\], late, \.\.\.\(Number\(e\[4\]\.dur\) > 0 \? \{ dur: Math\.max\(0, Number\(e\[4\]\.dur\) - late\) \} : \{\}\) \} : e\[4\];/);
   // …and UnitView.setForm skips a change clip that would already have ended
   assert.match(readFileSync(path.join(ROOT, 'public/js/render/units.js'), 'utf8'), /!\(late > 0 && late >= \(this\.actor\.dur\?\.\(f\.change\) \?\? Infinity\)\)/);
-  assert.match(src, /if \(!\(late > 0\)\) fx\.simFx\(/);
+  // (a kit fx the official skill / talent effects stand for is not drawn procedurally either: render/vfx/skillfx.js
+  // simFx, talentfx.js fx; nor a 重生's telegraph / revive the talents' rows stand for: wiring.form, talentfx.js form)
+  assert.match(src, /if \(fv\) officialForm = wiring\.form\(fv, form, x\);/);
+  assert.match(src, /const official = !\(late > 0\) && wiring\.simFx\(e\[1\], Number\(e\[2\]\), Number\(e\[3\]\), e\[4\]\);\s*if \(!\(late > 0\) && !official && !officialForm\) fx\.simFx\(/);
   assert.match(src, /interp\.takeEvents\(renderT, EVS, renderT - 1\.5, LATE\);/);
 });
 
@@ -614,4 +617,24 @@ test('every clip FORMS names exists in its model’s manifest', () => {
   }
   assert.ok(checked > 10, `the table was walked (${checked} models)`);
   assert.deepEqual(bad, [], 'clips named by a form set but missing from the manifest');
+});
+
+
+test('镜膜: first silence switches all clips to the stopped B form, including late observers', async () => {
+  const id = 'enemy_9011_acrefr';
+  for (const late of [false, true]) {
+    const v = await enemy(id, late ? { form: 'stopped' } : {});
+    try {
+      v.sync(sample(), 1);
+      assert.equal(clip(v), late ? 'B_Idle' : 'A_Idle');
+      if (!late) v.setForm('stopped');
+      assert.equal(clip(v), 'B_Idle');
+      v.sync(sample(0, ANIM.MOVE), 2);
+      assert.equal(clip(v), 'B_Move');
+      v.onAttack?.(null, 2.1);
+      assert.equal(clip(v), 'B_Attack');
+      v.die();
+      assert.equal(clip(v), 'B_Die');
+    } finally { v.destroy(); }
+  }
 });

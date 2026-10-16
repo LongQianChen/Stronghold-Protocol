@@ -264,6 +264,30 @@ test('S3 延异视阈: enemy shots on his range fly at 5 % of their speed (back 
   }
 });
 
+test('S3 延异视阈 slows a self-destructing 枯朽之种 as a bullet, which 逻各斯 cannot attack', () => {
+  const { h, u } = field({ tier: 6, elite: true, skill: 2 });
+  cast(u);
+  const seed = h.spawn('enemy_1269_nhfly', { pos: [10, 7], routeIndex: 2 });
+  h.step();
+  const shot = h.b.projectiles.list.find((p) => p.source === seed);
+  assert.ok(shot, 'the seed has become a projectile');
+  const attacksAtLaunch = h.hooksOf('attack').length; // Logos may attack before the seed's end-of-frame launch
+  const dummyTarget = h.spawn('enemy_dummy', { pos: [10, 8], routeIndex: 2 });
+  h.step(); // the seed's tick hook launches after the skill tick; Logos slows it on the next frame
+  approx(shot.speed, 10 * 0.05, 'Logos S3 slows the seed');
+  h.run(2);
+  const attacks = h.hooksOf('attack').slice(attacksAtLaunch).filter((c) => c.attacker === u);
+  assert.ok(attacks.length > 0 && attacks.some((c) => c.targets.includes(dummyTarget)), 'Logos keeps attacking another enemy');
+  assert.ok(attacks.every((c) => !c.targets.includes(seed)), 'Logos never selects the flying seed');
+  assert.equal(seed.stats.taken, 0, 'Logos does not hit the self-destructing seed');
+  assert.ok(seed.alive && u.stats.taken === 0, 'the slowed seed remains in flight');
+  u.skill.end('test');
+  assert.ok(!h.b.projectiles.list.includes(shot), 'S3 clears the seed projectile');
+  h.step();
+  assert.ok(!seed.alive, 'the cleared seed model leaves the field');
+  done(h);
+});
+
 test('T1 语汇演化: 40 % per attacked target for an extra 65 % ATK arts hit on a random enemy of his range + 停顿 0.8 s; CCR-Δ stage 3: 60 % and 60 % ATK 元素伤害 on a target in its 凋亡 burst; CCR-Y stage 3: two executions at 70 %', () => {
   for (const f of [[5, false, null], [5, true, CCRD], [6, true, CCRD], [6, true, CCRY]]) {
     const [tier, elite, mod] = f;

@@ -1,13 +1,18 @@
 // server/sim/body.js — where a unit can be hit: the ONE helper behind every range test that targets enemies (user
 // playtest #5 item 10: "大体型的关底boss实际受击判定范围很小…原版是很大的一片区域").
 //
-// Regular units are a point: in a grid range when the tile containing their position is a range tile — the position
-// rounded half to even (detmath roundHalfEven; PRTS 作战机制 "受击方坐标经round函数取整(四舍六入五成双)得到其所属格
-// 坐标") —, in a radius when their position is (DESIGN §3). Huge units (巨型单位 — enemy data `hitArea`, tools/build-data.mjs
+// Regular units are a point with a collider: an operator-side RANGE (an attack range, a skill's or trait's range grid,
+// the skill-range trigger) takes an enemy whose collider circle (constants.js ENEMY_COLLIDER_RADIUS 0.1, the client's
+// CircleCollider2D; PRTS 作战机制 "索敌抬手等均使用碰撞箱") overlaps one of its tiles — colliderKeys / bodyInRange, the
+// owner's decision of 2026-10-14 —; a TILE rule (格子判定: terrain, traps, fields and marks laid on tiles, "所在格"
+// effects) takes the tile containing the position — rounded half to even (detmath roundHalfEven; PRTS 作战机制 "受击方
+// 坐标经round函数取整(四舍六入五成双)得到其所属格坐标"), bodyKeys / bodyInKeys / bodyOnTile —; a radius takes the
+// position (DESIGN §3). Huge units (巨型单位 — enemy data `hitArea`, tools/build-data.mjs
 // HIT_AREAS, from PRTS "巨型单位：受击判定区域为长4.95、宽2.95的长方形，向上偏移1.0") are hit anywhere on a rectangle
 // `w` tiles along the columns × `h` along the rows, centred on their position moved `dx` columns right and `dy` rows
 // up:
-//   * grid ranges / tile rules: the unit occupies every tile its rectangle overlaps (PRTS 作战机制 "巨型BOSS单位的每一个
+//   * grid ranges / tile rules: the unit occupies every tile its rectangle overlaps (the rectangle is its collider —
+//     no 0.1 circle is added; PRTS 作战机制 "巨型BOSS单位的每一个
 //     占据的格子都可以让其本身通过格子判定"; an operator's range — 1×1 tile squares — touches the rectangle exactly then):
 //     a 4.95 × 2.95 area centred on a tile covers that 5 × 3 block;
 //   * radius rules (auras, AoE around a point or a unit): the distance from the point to the rectangle (0 inside it)
@@ -24,7 +29,7 @@
 // Pure functions of (x, y, hitArea); no battle state — also used for the client's picking (render/pick.js mirrors
 // `hitRect`).
 
-import { ROWS, COLS } from './constants.js';
+import { ROWS, COLS, ENEMY_COLLIDER_RADIUS } from './constants.js';
 import { hypot, roundHalfEven } from './detmath.js';
 
 /**
@@ -73,13 +78,69 @@ export function bodyOnTile(u, r, c) {
   return c + 0.5 > R.x0 + 1e-9 && c - 0.5 < R.x1 - 1e-9 && r + 0.5 > R.y0 + 1e-9 && r - 0.5 < R.y1 - 1e-9;
 }
 
-/** Does the unit occupy any tile of `keys` (tile keys: a Set / Map — anything with `has` — or an array)? */
+/**
+ * Does the unit occupy any tile of `keys` (tile keys: a Set / Map — anything with `has` — or an array)? The TILE rule
+ * (格子判定: its position's tile, a huge unit's rectangle); a range test uses bodyInRange.
+ */
 export function bodyInKeys(u, keys) {
   if (!u || !keys) return false;
   const has = typeof keys.has === 'function' ? (k) => keys.has(k) : (k) => keys.includes(k);
   if (!u.hitArea) { const k = posKey(u); return k >= 0 && has(k); }
   for (const k of bodyKeys(u)) if (has(k)) return true;
   return false;
+}
+
+/**
+ * Tile keys a RANGE test sees the unit on: a huge unit its rectangle's tiles (bodyKeys); a point enemy every tile its
+ * collider circle — radius ENEMY_COLLIDER_RADIUS around its position — overlaps (open: a tile the circle only touches is
+ * not overlapped; one to four tiles, off-grid tiles dropped), so an enemy within 0.1 of a range tile's edge is in range.
+ * An ally (allies stand on their tile, never tested against an enemy-search range) gets the tile of its position.
+ */
+export function colliderKeys(u) {
+  if (u.hitArea || u.side === 'ally') return bodyKeys(u);
+  const rho = ENEMY_COLLIDER_RADIUS, x = u.x, y = u.y;
+  const r0 = Math.max(0, Math.floor(y - rho + 0.5 + 1e-9)), r1 = Math.min(ROWS - 1, Math.ceil(y + rho - 0.5 - 1e-9));
+  const c0 = Math.max(0, Math.floor(x - rho + 0.5 + 1e-9)), c1 = Math.min(COLS - 1, Math.ceil(x + rho - 0.5 - 1e-9));
+  const out = [];
+  for (let r = r0; r <= r1; r++) {
+    const dy = y < r - 0.5 ? r - 0.5 - y : y > r + 0.5 ? y - r - 0.5 : 0;
+    for (let c = c0; c <= c1; c++) {
+      const dx = x < c - 0.5 ? c - 0.5 - x : x > c + 0.5 ? x - c - 0.5 : 0;
+      // a diagonal tile only when the circle reaches past its corner (the side tiles are within rho by the bounds)
+      if (dx > 0 && dy > 0 && dx * dx + dy * dy >= rho * rho) continue;
+      out.push(r * COLS + c);
+    }
+  }
+  return out;
+}
+
+/**
+ * Is the unit in a RANGE of tile `keys` (a Set / Map — anything with `has` — or an array)? Its collider overlaps one of
+ * them (colliderKeys): an attack range, a skill's or trait's range grid. Tile rules use bodyInKeys.
+ */
+export function bodyInRange(u, keys) {
+  if (!u || !keys) return false;
+  const has = typeof keys.has === 'function' ? (k) => keys.has(k) : (k) => keys.includes(k);
+  if (u.hitArea || u.side === 'ally') { for (const k of bodyKeys(u)) if (has(k)) return true; return false; }
+  // colliderKeys without its array (kits call this per enemy on every aura tick)
+  const rho = ENEMY_COLLIDER_RADIUS, x = u.x, y = u.y;
+  const r0 = Math.max(0, Math.floor(y - rho + 0.5 + 1e-9)), r1 = Math.min(ROWS - 1, Math.ceil(y + rho - 0.5 - 1e-9));
+  const c0 = Math.max(0, Math.floor(x - rho + 0.5 + 1e-9)), c1 = Math.min(COLS - 1, Math.ceil(x + rho - 0.5 - 1e-9));
+  for (let r = r0; r <= r1; r++) {
+    const dy = y < r - 0.5 ? r - 0.5 - y : y > r + 0.5 ? y - r - 0.5 : 0;
+    for (let c = c0; c <= c1; c++) {
+      const dx = x < c - 0.5 ? c - 0.5 - x : x > c + 0.5 ? x - c - 0.5 : 0;
+      if (dx > 0 && dy > 0 && dx * dx + dy * dy >= rho * rho) continue;
+      if (has(r * COLS + c)) return true;
+    }
+  }
+  return false;
+}
+
+/** Is the unit in the range of the single tile (r, c) — its collider overlaps it (bodyInRange)? False off the grid. */
+export function bodyInRangeTile(u, r, c) {
+  if (!u || r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
+  return colliderKeys(u).includes(r * COLS + c);
 }
 
 /** Distance (tiles) from point (x, y) to the unit's body: its position, or its rectangle (0 inside). */

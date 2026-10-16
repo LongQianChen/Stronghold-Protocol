@@ -41,7 +41,7 @@
 
 import { num, up, traitBb, skillRec, batMod } from '../shared/tier1.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyKeys, bodyInKeys } from '../../../body.js';
+import { bodyKeys, bodyInRange } from '../../../body.js';
 import { toLocal } from '../../../dir.js';
 import { hasHp } from '../../../damage.js';
 import { COLS } from '../../../constants.js';
@@ -211,7 +211,7 @@ export default {
           battle.on('hit', (ctx) => {
             const d = ctx.dmg, t = ctx.target;
             if (ctx.source !== unit || !t || t.side !== 'enemy' || !d.isAttack || !unit.skill?.active) return;
-            if (bodyInKeys(t, absoluteRangeKeys(FRONT_3, unit.tileR, unit.tileC, unit.dir, 0))) d.amount *= s3Front / s3Scale;
+            if (bodyInRange(t, absoluteRangeKeys(FRONT_3, unit.tileR, unit.tileC, unit.dir, 0))) d.amount *= s3Front / s3Scale;
           }, { owner: unit });
         }
         // ARC-Y 打字机色带: 攻击正前方的敌人时攻击力提升至105%且无视其物理闪避

@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_2_06-papyrs.js — 莎草 (char_4139_papyrs) kit, tier 2.
 // Conventions of the tier-2 kits: ../shared/tier2.js; kit contract and rules: ../README.md.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { num, talentBb, up, alliesInGridOf, instantKind, batMod } from '../shared/tier1.js';
 
 export default {
@@ -44,7 +44,7 @@ export default {
             unit.mem.papyrsHook = battle.on('beforeAttack', (ctx) => {
               if (ctx.attacker !== unit || !skill.active) return;
               const L = unit.mem.papyrsLock;
-              if (L && up(L) && bodyInKeys(L, unit.rangeKeySet)) ctx.targets = [L];
+              if (L && up(L) && bodyInRange(L, unit.rangeKeySet)) ctx.targets = [L];
             }, { owner: unit, priority: 10 });
             battle.fx('buff', { x: lock.x, y: lock.y, id: lock.id, kind: 'lock' });
           },

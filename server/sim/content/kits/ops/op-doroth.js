@@ -59,6 +59,7 @@ import { absoluteRangeKeys, canTargetEnemy } from '../../../targeting.js';
 import { bodyOnTile } from '../../../body.js';
 import { COLS } from '../../../constants.js';
 import { atPotential } from '../../../../../shared/potential.js';
+import { textCount } from '../../../../../shared/plugins/textNumber.js';
 
 const S1 = 'skchr_doroth_1';
 const S2 = 'skchr_doroth_2';
@@ -117,8 +118,8 @@ export default {
       const mod = unit.def?.loadout?.moduleId;
       const n = num(v?.byModule?.[mod]?.stats?.deployLimit, num(v?.stats?.deployLimit, num(raw?.deployLimit, 0)));
       if (n > 0) return n;
-      const m = String(chess?.talents?.find((t) => t && t.index === 0)?.desc ?? '').match(/最多拥有(\d+)个/);
-      return m ? +m[1] : Infinity;
+      const owned = textCount(String(chess?.talents?.find((t) => t && t.index === 0)?.desc ?? ''), /最多拥有(\d+)个/, NaN, 'own-max');
+      return Number.isFinite(owned) && owned > 0 ? owned : Infinity; // loop-cap: textCount own-max
     }
 
     /** Free melee tiles of her range (or of `grid` around her) with no ground enemy: enemy paths first, then random. */
@@ -190,7 +191,7 @@ export default {
         battle.fx('explode', { x: t.x, y: t.y, r: S2_RADIUS, id: t.id, consumed: true, kind: 'doroth:quicksand' });
       } else if (s3) {
         const keys = absoluteRangeKeys(sk?.rangeGrid ?? X6, t.tileR, t.tileC, t.dir, 0);
-        for (const x of battle.enemiesInKeys(keys, t, GROUND)) {
+        for (const x of battle.enemiesOnTiles(keys, t, GROUND)) {
           battle.dealDamage(t, x, { amount: atk * num(tb2.atk_scale), type: 'arts', isSkill: true, tags });
           if (x.alive && num(tb2.sluggish) > 0) battle.applyStatus(x, 'sluggish', { duration: num(tb2.sluggish), source: t });
         }

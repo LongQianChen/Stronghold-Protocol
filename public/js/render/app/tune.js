@@ -5,6 +5,14 @@ const CAMERA_MS = 750;
 /** Camera pan to / from the enemy preview pen (configBlackBoard move_time 0.25). */
 export const PEN_CAMERA_MS = 250;
 
+/**
+ * The quick zoom between the shop camera and the shop-collapsed prep camera (收起/展开, 准备就绪, and the temporary
+ * deploy fold of public issue #602): shorter than the ordinary camera flight — the board should be big to aim on the
+ * moment a piece is picked up. [ASSUMED] the duration: no source gives the official timing, tuned to feel snappy
+ * without a visible cut (the pen's pan is 250 ms, a generic flight 750 ms).
+ */
+export const FOLD_CAMERA_MS = 350;
+
 /** Recovery of a lost 3D board context: delays of the rebuild attempts (ms) and how soon a new loss counts as failure. */
 const BOARD3D_RETRY_MS = [1200, 4000, 12000];
 

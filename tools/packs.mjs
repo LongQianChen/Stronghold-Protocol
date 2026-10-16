@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // tools/packs.mjs — the content packs of a checkout (docs/PACKS.md; server/packs.js is the registry the server runs,
-// shared/packs.js the format):
+// shared/packs.js the format). It reads the language folders and packs/ as in 0.2.0, not plugins/: the plugins have
+// their own tool, tools/plugin.mjs (docs/PLUGINS.md), and a static host could not serve a lang plugin's files at
+// /packs/<id>/ (only the live server lists lang plugins in its /packs/index.json):
 //
 //   node tools/packs.mjs list [--json]          the packs by type (folder packs in packs/, the language packs of
 //                                                public/i18n/), what was skipped and why, the warnings

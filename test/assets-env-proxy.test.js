@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { connect as netConnect } from 'node:net';
 import { Downloader } from '../tools/assets/downloader.mjs';
 import { cachedJson } from '../tools/assets/cache.mjs';
@@ -223,9 +223,18 @@ test('built-in fetch tunnels through HTTP_PROXY only when NODE_USE_ENV_PROXY was
   const hits = [];
   const sockets = new Set();
   const proxy = createServer((req, res) => {
-    hits.push(`REQ ${req.method}`);
-    res.writeHead(500);
-    res.end();
+    hits.push(`REQ ${req.method} ${req.url ?? ''}`);
+    // Node >= 26 tunnels a plain-http target by forwarding the request itself in absolute-form
+    // (older Node opens a CONNECT tunnel); relay it to the origin so both shapes end at the target.
+    const absolute = /^http:\/\/[^/]+(?:\/.*)?$/.exec(req.url || '');
+    if (!absolute) { res.writeHead(500); res.end(); return; }
+    const relay = httpRequest(absolute[0], { method: req.method, headers: req.headers });
+    relay.on('response', (ures) => {
+      res.writeHead(ures.statusCode, ures.headers);
+      ures.pipe(res);
+    });
+    relay.on('error', () => { res.writeHead(502); res.end(); });
+    req.pipe(relay);
   });
   proxy.on('connect', (req, client, head) => {
     hits.push(`CONNECT ${req.url}`);
@@ -295,11 +304,15 @@ test('built-in fetch tunnels through HTTP_PROXY only when NODE_USE_ENV_PROXY was
 
   const tunneled = await run({ http_proxy: proxyUrl, NODE_USE_ENV_PROXY: '1' });
   assert.deepEqual(tunneled.body, { status: 200, body: 'from-target' });
-  assert.deepEqual(tunneled.hits, [`CONNECT 127.0.0.1:${targetPort}`, 'TARGET /x']);
+  // How the proxy hop looks depends on the Node line: a CONNECT tunnel (22.21 – 25) or the request
+  // itself forwarded in absolute-form (>= 26). Either way it is exactly one hop, then the origin answers.
+  assert.match(tunneled.hits[0], /^(CONNECT |REQ GET http:\/\/)/, JSON.stringify(tunneled.hits));
+  assert.deepEqual(tunneled.hits.slice(1), ['TARGET /x']);
 
   const both = await run({ HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, NODE_USE_ENV_PROXY: '1' });
   assert.equal(both.body.body, 'from-target');
-  assert.deepEqual(both.hits, [`CONNECT 127.0.0.1:${targetPort}`, 'TARGET /x']);
+  assert.match(both.hits[0], /^(CONNECT |REQ GET http:\/\/)/, JSON.stringify(both.hits));
+  assert.deepEqual(both.hits.slice(1), ['TARGET /x']);
 
   const bypass = await run({ HTTP_PROXY: proxyUrl, HTTPS_PROXY: proxyUrl, NO_PROXY: '127.0.0.1', NODE_USE_ENV_PROXY: '1' });
   assert.equal(bypass.body.body, 'from-target');

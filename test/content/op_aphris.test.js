@@ -275,3 +275,18 @@ test('链路协议: her 中继器 leaves the field with her (die_to_kill_token) 
   assert.ok(r.tileR === 9 && r.tileC === 4 && r.dir === 'UP', 'on its tile');
   done(h);
 });
+
+test('谬因 searches by the tile of an enemy\'s position (PRTS 链路协议 备注 "索敌与攻击始终采用格子判定"), not by its 0.1 collider', () => {
+  for (const [x, hit] of [[7.55, false], [7.45, true]]) {
+    const { h, u } = field();
+    assert.equal(u.profile.rangeTiles, true);
+    const e = h.spawn('enemy_dummy', { pos: [9, 7] });
+    e.x = x; e.y = 9;   // 7.55: on (9, 8), past her 5-1, while its collider overlaps (9, 7); 7.45: on (9, 7)
+    h.step();
+    e.x = x; e.y = 9;
+    assert.equal(h.b.enemiesInKeys(u.rangeKeys, u, u.profile).includes(e), hit, `x ${x}`);
+    h.run(3);
+    assert.equal(atkHits(h, u).some((c) => c.target === e), hit, `x ${x}: attacked`);
+    done(h);
+  }
+});

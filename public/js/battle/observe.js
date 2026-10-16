@@ -154,6 +154,17 @@ export function layerCamera(field, layer, mySide = 'L') {
 }
 
 /**
+ * The one occupied half ('L' | 'R') of a 联防 field with a lone helper, else null. That field
+ * (act1autochess_escaped_single) routes every enemy through the helper's half and the other half holds no player, so
+ * the camera starts on the helper's half and the ‹ › pill keeps 全景 (GitHub #635, PR #637).
+ */
+export function loneHalf(field) {
+  if (field?.kind !== 'unite') return null;
+  const occupied = ['L', 'R'].filter((side) => Object.values(sidesOf(field)).includes(side));
+  return occupied.length === 1 ? occupied[0] : null;
+}
+
+/**
  * The watched player's effects column for a battle watched as a display replica (user playtest #2: while spectating,
  * the right column shows the spectated player's effects, not one's own). The spec's raw playerEffects (Battle spec:
  * `{ id, source = iconKind, counter, … }`) resolved client-side — a band effect through bands.json (its effectId),

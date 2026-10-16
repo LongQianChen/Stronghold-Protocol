@@ -1,7 +1,8 @@
 // server/sim/content/kits/ops/chess_char_3_19-vigil.js — 伺夜 (char_427_vigil) kit, tier 3.
 // Conventions of the tier-3 kits: ../shared/tier3.js; kit contract and rules: ../README.md.
 
-import { num, defOf, talentBb, selectedId, altSkills, alive, fx, textNum, tacticalPoint } from '../shared/tier3.js';
+import { num, defOf, talentBb, selectedId, altSkills, alive, fx, textCount, tacticalPoint } from '../shared/tier3.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { installWolfTacticalPoint, wolfReturnNow, wolfShadowInterval, wolfTacticalPoint } from '../../tokens.js';
 
 /** Tokens `tokenId` summoned by / placed for `owner` (board pieces included). */
@@ -27,9 +28,9 @@ export default {
     const sel = selectedId(chess, d);
     const t0 = d.talents?.[0] ?? {}, t1 = talentBb(d, 1);
     const wolfId = t0.tokenKey ?? (d.tokens || []).find((t) => /wolf/.test(String(t))) ?? 'token_10028_vigil_wolf';
-    const initial = textNum(t0.description, /初始(\d+|[一二两三四五])只/, 2);
-    const maxWolves = textNum(t0.description, /至多(\d+|[一二两三四五])只/, 3);
-    const hits = textNum(d.skill?.description, /(\d+|[一二两三四五])连击/, 3);
+    const initial = textCount(t0.description, /初始(\d+|[一二两三四五])只/, 2, 'initial-pack');
+    const maxWolves = textCount(t0.description, /至多(\d+|[一二两三四五])只/, 3, 'at-most-pack');
+    const hits = textCount(d.skill?.description, /(\d+|[一二两三四五])连击/, 3, 'combo');
     const bonus = num(bb['attack@vigil_s_3.atk_scale'], 0);
     const pen = num(t1.def_penetrate_fixed, 0);
     /** The standing pack (狼群天性, S3, the TAC-Y mark, S2). */
@@ -230,10 +231,11 @@ export default {
         attack: { hits },
         onStart({ unit }) { unit.mem.vigilAcc = 0; unit.mem.vigilDp = 0; },
         onTick({ battle, unit, dt }) {
-          const iv = num(bb.interval, 1.5), step = num(bb.cost, 1), cap = num(bb.value, 0);
+          const iv = stepOf('interval', num(bb.interval, 1.5), 1.5), step = stepOf('cost', num(bb.cost, 1), 1), cap = num(bb.value, 0);
           if (!(iv > 0) || !(step > 0)) return; // (junk blackboard: never spin)
           unit.mem.vigilAcc += dt;
-          while (unit.mem.vigilAcc >= iv - 1e-9 && unit.mem.vigilDp + step <= cap + 1e-9) {
+          let guard = 0;
+          while (unit.mem.vigilAcc >= iv - 1e-9 && unit.mem.vigilDp + step <= cap + 1e-9 && guard++ < STEP_PER_TICK) { // loop-cap: stepOf interval/cost
             unit.mem.vigilAcc -= iv;
             unit.mem.vigilDp += step;
             battle.addDp(unit.ownerId, step);

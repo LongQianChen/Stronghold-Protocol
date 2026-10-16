@@ -3,40 +3,97 @@
 // rebuild of an ally (current, base and extra range keys).
 // Installed on Battle.prototype by server/sim/Battle.js (a method container: never instantiated; `this` is the battle).
 
-import { ROWS, COLS } from '../constants.js';
+import { ROWS, COLS, ENEMY_COLLIDER_RADIUS } from '../constants.js';
 import { absoluteRangeKeys, canTargetEnemy, extendedGrid, enemyStealthed } from '../targeting.js';
-import { bodyKeys, bodyInKeys, bodyInRadius } from '../body.js';
+import { bodyKeys, bodyInKeys, bodyInRadius, bodyInRange } from '../body.js';
 import { roundHalfEven } from '../detmath.js';
 
 export class BattleQueries {
   /**
-   * Tile buckets of the living enemies: a regular enemy on the tile of its position, a huge one (body.js) on every tile
-   * it occupies.
+   * The per-tick tile buckets of the living enemies. Range buckets (`_eb`, body.js colliderKeys): a regular enemy on every
+   * tile its 0.1 collider overlaps — the tile of its position and, within 0.1 of an edge, the neighbours —, a huge one
+   * on every tile its rectangle occupies; `_ebMulti` marks an enemy listed on more than one (enemiesInKeys lists it
+   * once). Tile buckets (`_et`, body.js bodyKeys — 格子判定): a regular enemy on the tile of its position, a huge one on
+   * its rectangle's tiles.
    */
   _buildEnemyIndex() {
-    for (const k of this._ebUsed) this._eb[k].length = 0;
-    this._ebUsed.length = 0;
+    const eb = this._eb, et = this._et, ebUsed = this._ebUsed, etUsed = this._etUsed;
+    for (const k of ebUsed) eb[k].length = 0;
+    ebUsed.length = 0;
+    for (const k of etUsed) et[k].length = 0;
+    etUsed.length = 0;
+    const rho = ENEMY_COLLIDER_RADIUS, rho2 = rho * rho;
     for (const e of this.enemies) {
       if (!e.alive || e.hidden) continue;
       if (e.hitArea) {
-        for (const k of bodyKeys(e)) { const b = this._eb[k]; if (!b.length) this._ebUsed.push(k); b.push(e); }
+        const keys = bodyKeys(e);
+        e._ebMulti = keys.length > 1;
+        for (const k of keys) {
+          if (!eb[k].length) ebUsed.push(k);
+          eb[k].push(e);
+          if (!et[k].length) etUsed.push(k);
+          et[k].push(e);
+        }
         continue;
       }
-      const r = roundHalfEven(e.y), c = roundHalfEven(e.x); // the tile body.js gives a point enemy
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
-      const k = r * COLS + c;
-      const b = this._eb[k];
-      if (!b.length) this._ebUsed.push(k);
-      b.push(e);
+      // every tick for every enemy: colliderKeys / bodyKeys inlined without their arrays (the same tiles, same order)
+      const x = e.x, y = e.y;
+      const tr = roundHalfEven(y), tc = roundHalfEven(x);
+      if (tr >= 0 && tr < ROWS && tc >= 0 && tc < COLS) { const k = tr * COLS + tc; if (!et[k].length) etUsed.push(k); et[k].push(e); }
+      const r0 = Math.max(0, Math.floor(y - rho + 0.5 + 1e-9)), r1 = Math.min(ROWS - 1, Math.ceil(y + rho - 0.5 - 1e-9));
+      const c0 = Math.max(0, Math.floor(x - rho + 0.5 + 1e-9)), c1 = Math.min(COLS - 1, Math.ceil(x + rho - 0.5 - 1e-9));
+      let n = 0;
+      for (let r = r0; r <= r1; r++) {
+        const dy = y < r - 0.5 ? r - 0.5 - y : y > r + 0.5 ? y - r - 0.5 : 0;
+        for (let c = c0; c <= c1; c++) {
+          const dx = x < c - 0.5 ? c - 0.5 - x : x > c + 0.5 ? x - c - 0.5 : 0;
+          if (dx > 0 && dy > 0 && dx * dx + dy * dy >= rho2) continue;
+          const k = r * COLS + c;
+          if (!eb[k].length) ebUsed.push(k);
+          eb[k].push(e);
+          n++;
+        }
+      }
+      e._ebMulti = n > 1;
     }
   }
 
-  /** Targetable enemies whose body is on any of `keys` (absolute tile keys; a huge enemy is listed once). */
+  /**
+   * Targetable enemies in the RANGE of tile `keys` (absolute tile keys — an attack range, a skill's or trait's range
+   * grid): those whose collider overlaps one of them (body.js colliderKeys, the owner's decision of 2026-10-14), each
+   * listed once. A tile rule (格子判定) uses enemiesOnTiles — and so does every search of an attacker whose profile is
+   * `rangeTiles` (谬因: PRTS 备注 "索敌与攻击始终采用格子判定").
+   */
   enemiesInKeys(keys, attacker, profile) {
+    if (attacker && attacker.profile && attacker.profile.rangeTiles) return this.enemiesOnTiles(keys, attacker, profile);
+    const out = [];
+    if (!keys) return out;
+    let seen = null;   // the enemies listed on more than one tile (`_ebMulti`) already looked at in this call
+    for (let i = 0; i < keys.length; i++) {
+      const b = this._eb[keys[i]];
+      if (!b || !b.length) continue;
+      for (const e of b) {
+        if (e._ebMulti) {
+          if (seen === null) seen = new Set();
+          else if (seen.has(e)) continue;
+          seen.add(e);
+        }
+        if (e.alive && canTargetEnemy(attacker, e, profile)) out.push(e);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Targetable enemies standing ON tile `keys` (格子判定 — the tile of the position, a huge enemy's rectangle tiles:
+   * body.js bodyKeys; a huge enemy is listed once): the tile rules — terrain, traps, fields and marks laid on tiles,
+   * "所在格" effects —, which the 0.1 collider does not widen. Until 0.3.0 enemiesInKeys did this for every caller.
+   */
+  enemiesOnTiles(keys, attacker, profile) {
     const out = [];
     if (!keys) return out;
     for (let i = 0; i < keys.length; i++) {
-      const b = this._eb[keys[i]];
+      const b = this._et[keys[i]];
       if (!b || !b.length) continue;
       for (const e of b) if (e.alive && (!e.hitArea || !out.includes(e)) && canTargetEnemy(attacker, e, profile)) out.push(e);
     }
@@ -88,13 +145,15 @@ export class BattleQueries {
   }
 
   /**
-   * A living enemy whose body is on any of `keys` — targetable or not (stealthed, untargetable, asleep, flying): the
-   * 技能范围 trigger "技能范围内存在敌人（无视其不可选中）" (skills.js SKILL_RANGE).
+   * A living enemy in the range of `keys` (its collider, as enemiesInKeys; the tile of its position for a `rangeTiles`
+   * `unit`) — targetable or not (stealthed, untargetable, asleep, flying): the 技能范围 trigger "技能范围内存在敌人（无视其
+   * 不可选中）" (skills.js SKILL_RANGE).
    */
-  anyEnemyInKeys(keys) {
+  anyEnemyInKeys(keys, unit = null) {
     if (!keys) return false;
+    const idx = unit && unit.profile && unit.profile.rangeTiles ? this._et : this._eb;
     for (let i = 0; i < keys.length; i++) {
-      const b = this._eb[keys[i]];
+      const b = idx[keys[i]];
       if (b && b.length) for (const e of b) if (e.alive && e.deployed) return true;
     }
     return false;
@@ -127,16 +186,20 @@ export class BattleQueries {
     return l[0] ?? null;
   }
 
-  /** Units of the opposite side (or `side`) whose tile is inside `grid` offsets relative to `unit`. */
+  /**
+   * Units of the opposite side (or `side`) inside `grid` offsets relative to `unit` — a range: an enemy whose collider
+   * overlaps one of its tiles (body.js bodyInRange), an ally on one of them.
+   */
   unitsInGrid(unit, grid, { side = null, extend = 0 } = {}) {
     const keys = absoluteRangeKeys(grid || unit.rangeGrid || [[0, 0]], Math.round(unit.y), Math.round(unit.x), unit.dir, extend);
     const want = side ?? (unit.side === 'ally' ? 'enemy' : 'ally');
     const set = new Set(keys);
     const out = [];
     const list = want === 'enemy' ? this.enemies : this.allyUnits;
+    const tiles = !!(unit.profile && unit.profile.rangeTiles);
     for (const x of list) {
       if (!x.alive || !x.deployed || x.hidden) continue;
-      if (bodyInKeys(x, set)) out.push(x);
+      if (tiles ? bodyInKeys(x, set) : bodyInRange(x, set)) out.push(x);
     }
     return out;
   }
@@ -196,6 +259,20 @@ export class BattleQueries {
       if (f.untargetable || (f.stealth && enemyStealthed(e))) continue;
       out[n++] = e;
     }
+    out.length = n;
+    return out;
+  }
+
+  /**
+   * foesInRadius by the enemies' colliders — a radius effect PRTS marks 碰撞判定 / 碰撞箱判定 (机械师's S1 splash and
+   * 结构性原理's stop, 提丰's S3 mark, 蕾缪安's shells, 克莱门莎's S2 splash): a regular enemy whose 0.1 circle (ENEMY_COLLIDER_RADIUS) overlaps
+   * the circle — centre distance ≤ r + 0.1 —, a huge one whose rectangle does (its rectangle is its collider). Other
+   * radius effects keep foesInRadius (the centre of a regular enemy) [ASSUMED where PRTS names neither].
+   */
+  foesInColliderRadius(x, y, r) {
+    const out = this.foesInRadius(x, y, r + ENEMY_COLLIDER_RADIUS);
+    let n = 0;
+    for (const e of out) if (!e.hitArea || bodyInRadius(e, x, y, r)) out[n++] = e;
     out.length = n;
     return out;
   }

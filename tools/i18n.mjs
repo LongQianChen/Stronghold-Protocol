@@ -29,7 +29,8 @@
 //       fill public/i18n/<lang>.json from a flat { msgid: translation } map for the msgids the code uses (--all: also
 //       for the Chinese literals not wrapped yet, under the msgid the codemod would give them). Existing entries win.
 //
-// Default paths: public/js, shared, server (extract / seed skip server/sim, whose strings are game logic; check reads
+// Default paths: public/js, public/studio (the plugin studio's page), shared, server (extract / seed skip server/sim, whose
+// strings are game logic; check reads
 // its msg() and ctx.toast texts too). Server texts: a Chinese literal passed to m.toast / ctx.toast / tickerText is a
 // msgid (the client translates the text it receives), as is the first argument of msg(). Message ids: the Chinese text itself; a template literal's expressions become named params (paramName()).
 // Needs the dev dependencies (acorn, which eslint brings).
@@ -45,7 +46,7 @@ import { scanPacks, LANG_DIR } from '../server/packs.js';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CJK = /[\u3400-\u9fff\uf900-\ufaff\u3000-\u303f\uff01-\uff60]/;
 const HAN = /[\u3400-\u9fff\uf900-\ufaff]/;
-const DEFAULT_ROOTS = ['public/js', 'shared', 'server'];
+const DEFAULT_ROOTS = ['public/js', 'public/studio', 'shared', 'server'];
 const SKIP_DIRS = new Set(['node_modules', 'vendor', 'assets', 'fonts', 'dev']);
 /** Calls whose first argument is a msgid (tc: the second, keyed `context::msgid`). */
 const MSGID_CALLS = new Set(['t', 'tParts', 'N_', 'msg']);

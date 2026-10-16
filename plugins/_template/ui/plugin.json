@@ -1,0 +1,18 @@
+{
+  "manifest": 2,
+  "name": { "zh": "伤害统计", "en": "Damage tally" },
+  "description": {
+    "zh": "示例：在沙箱里把本局画面上的伤害数字加总。只读，不能替你操作对局。",
+    "en": "Example: a sandboxed tally of the damage numbers on the battle in front of you. Read-only — it cannot play the match."
+  },
+  "version": "0.1.0",
+  "app": ">=0.3.0 <0.4.0",
+  "api": 1,
+  "class": "ui",
+  "scope": ["personal"],
+  "authors": ["your name"],
+  "license": "CC0-1.0",
+  "permissions": ["ui.frame"],
+  "entry": { "client": "ui/index.html" },
+  "slots": ["hud.right"]
+}

@@ -61,6 +61,7 @@
 import { gameData, num, buffsOf, passiveBuff, effectRecord, directMods } from './support/index.js';
 import { isShopItem } from '../simdata.js';
 import { isHpLoss } from '../damage.js';
+import { PLUGIN_GAIN_COUNT_MAX } from '../../../shared/plugins/limits.js';
 
 // =====================================================================================================================
 // data helpers
@@ -230,7 +231,8 @@ function applyTactic(ctx, ev) {
     const count = Math.max(0, int(p.count, 1));
     switch (b.key) {
       case KEY.gainEquip: {
-        for (let i = 0; i < count; i++) {
+        const gain = Math.min(PLUGIN_GAIN_COUNT_MAX, count);
+        for (let i = 0; i < gain; i++) {
           const r = typeof p.pool === 'string' ? ctx.rollPool(p.pool) : null;
           const itemId = r && r.kind === 'item' ? r.id : ctx.rollItem({ tier: 1 });
           if (itemId) ctx.grantItem(itemId, { source: 'choice' });
@@ -257,7 +259,8 @@ function applyTactic(ctx, ev) {
       case KEY.bondChess: {
         const bond = typeof p.bond === 'string' ? p.bond : null;
         if (!bond) break;
-        for (let i = 0; i < count; i++) {
+        const gain = Math.min(PLUGIN_GAIN_COUNT_MAX, count);
+        for (let i = 0; i < gain; i++) {
           const chessId = ctx.rollChess({ bond, maxTier: Math.max(1, ctx.shopLevel()) }) ?? ctx.rollChess({ bond });
           if (chessId) ctx.grantChess(chessId, { source: 'choice' });
         }

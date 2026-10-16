@@ -26,7 +26,8 @@ test('the settings screen, the field view and the simplified board follow the sa
   assert.match(settings, /officialDamageNumbers/);
   const app = read('public/js/render/app.js');
   assert.match(app, /officialDamageNumbers/);
-  assert.match(app, /fx\.damage\(v, amt, e\[3\], src, e\[4\]\)/);
+  // (an official hit drawn by the official battle effects passes NO_SPARK as well: render/vfx/wiring.js damage)
+  assert.match(app, /fx\.damage\(v, amt, e\[3\], src, e\[4\](, official \? NO_SPARK : undefined)?\)/);
   assert.deepEqual(fallbackFloat(['dmg', 7, 40, 'phys'], { damageNumbers: true }), { id: 7, text: '40', type: 'phys' });
   assert.deepEqual(fallbackFloat(['heal', 7, 12], { damageNumbers: true, officialDamageNumbers: false }), { id: 7, text: '+12', type: 'heal' });
   assert.equal(fallbackFloat(['dmg', 7, 40, 'phys'], { damageNumbers: true, officialDamageNumbers: true }), null);

@@ -41,7 +41,7 @@
 
 import { num, talentBb, moduleBb, skillRec, statBuff, up } from '../shared/tier1.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { isHpLoss } from '../../../damage.js';
 import { acquireTargets, effectiveProfile } from '../../../ai.js';
 
@@ -140,7 +140,7 @@ export default {
             }
             const around = new Set(absoluteRangeKeys(X4, unit.tileR, unit.tileC, unit.dir, 0));
             let n = 0;
-            for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInKeys(e, around)) n++;
+            for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInRange(e, around)) n++;
             const k = n === alone ? 2 : 1;
             const cur = unit.findBuff(selfKey);
             if (self && (!cur || cur.mods?.aspd !== self * k)) battle.addBuff(unit, { key: selfKey, mods: { aspd: self * k }, tags: ['talent'] });
@@ -222,7 +222,7 @@ export default {
               const d = ctx.dmg;
               if (ctx.target !== unit || !unit.skill?.active || !d || d.cancel || !d.canDodge || (d.type !== 'phys' && d.type !== 'arts')) return;
               const src = ctx.source;
-              if (src && bodyInKeys(src, unit.rangeKeySet ?? new Set(unit.rangeKeys ?? []))) return;
+              if (src && bodyInRange(src, unit.rangeKeySet ?? new Set(unit.rangeKeys ?? []))) return;
               if (battle.rng() >= p) return;
               d.cancel = true;
               battle.fx('dodge', { x: unit.x, y: unit.y, id: unit.id });

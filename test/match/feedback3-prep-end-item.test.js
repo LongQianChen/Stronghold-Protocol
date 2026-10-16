@@ -1,6 +1,8 @@
 // An item that arrives at 休整期结束 waits in the hand and merges at the next prep start (owner's decision 2026-10-04).
-// 维多利亚 pays 战栗维式重锤 on onPrepEnd; merging in that call used to detach the equipped copy before the fight.
-// [ASSUMED] every grant while that dispatch is on the stack, not only this hammer.
+// 维多利亚 pays 战栗维式重锤 when a <休整期结束时> layer gain (刺玫 / 薄绿 / 维娜, 助力) crosses a milestone while it is active;
+// merging in that call used to detach the equipped copy before the fight. [ASSUMED] every grant while that dispatch is
+// on the stack, not only this hammer. (Milestones owed while it was inactive pay as soon as it lights up — onActiveBonds,
+// DESIGN §32.14.31, test/match/bond-light-up.test.js — so a prep-end payment is one that a prep-end gain crosses.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRegistry } from '../../server/match/effectsMeta.js';
@@ -26,6 +28,10 @@ function copies(ps, id) {
 function fresh() {
   const reg = createRegistry({ content: false });
   coreRegisterMeta(reg);
+  // a <休整期结束时> gain of 已激活的【维多利亚】: `test:prepEndLayers` layers on onPrepEnd
+  reg.global('test_prep_end_layers', {
+    onPrepEnd(ctx) { const n = ctx.counter('test:prepEndLayers'); if (n > 0) ctx.addLayers('victoriaShip', n, { requireActive: true }); },
+  });
   const h = makeMatch({ mode: 'solo', seed: 5, registry: reg, fake: true }).start();
   h.toPrep(1);
   const orig = h.m.rollItemId.bind(h.m);
@@ -33,7 +39,7 @@ function fresh() {
   return h;
 }
 
-/** Bond inactive while the layers land, then three 维多利亚 operators. One wears the hammer when `equip`. */
+/** Three 维多利亚 operators (the bond active, no milestone owed); `layers` land at the prep end. One wears the hammer when `equip`. */
 function arm(h, { layers, equip = true, fill = false } = {}) {
   const ps = h.ps('p_0');
   assert.equal(ps.setReady(false).ok, true);
@@ -46,8 +52,6 @@ function arm(h, { layers, equip = true, fill = false } = {}) {
   ps._tempDue.clear();
   ps.recompute();
   assert.equal(ps.bonds.victoriaShip?.active ?? false, false);
-  if (layers > 0) assert.equal(ps.addLayers('victoriaShip', layers), layers);
-  assert.equal(ps.counters['bond:victoria:hammers'] || 0, 0, 'inactive: the milestones are owed, not paid');
   const used = new Set();
   const ops = OPS.map((id) => {
     const t = legalTileFor(h.m, ps, id, used);
@@ -55,6 +59,8 @@ function arm(h, { layers, equip = true, fill = false } = {}) {
     return give(h.m, ps, id, 'board', t);
   });
   assert.equal(ps.bonds.victoriaShip.active, true);
+  assert.equal(ps.counters['bond:victoria:hammers'] || 0, 0, 'no milestone yet');
+  ps.counters['test:prepEndLayers'] = layers;
   let equipped = null;
   if (equip) {
     equipped = giveItem(h.m, ps, HAMMER);
@@ -70,7 +76,7 @@ function arm(h, { layers, equip = true, fill = false } = {}) {
   return { ps, carrier: ops[0], equipped };
 }
 
-test('维多利亚 pays a 战栗维式重锤 at prep end: the equipped copy stays for the fight, and they merge at the next prep', () => {
+test('维多利亚 pays a 战栗维式重锤 for a milestone crossed at prep end: the equipped copy stays for the fight, and they merge at the next prep', () => {
   const h = fresh();
   const { ps, carrier, equipped } = arm(h, { layers: 25 });
   assert.equal(ps.setReady(true).ok, true);
@@ -107,22 +113,23 @@ test('two milestones owed at prep end both wait: no golden before the fight; the
   h.m.dispose();
 });
 
-test('hand and temp full at prep end: the new hammer is destroyed, the equipped one stays, and the next prep does not put a golden in the slot', () => {
+test('full visible bench at prep end: new hammers queue, then merge next prep without removing the equipped one', () => {
   const h = fresh();
   const { ps, carrier, equipped } = arm(h, { layers: 50, fill: true });
+  ps.ready = true; // Model late overflow after Ready, before the prep-end grant dispatch.
   h.m.endPrep();
   assert.equal(carrier.items.length, 1);
   assert.equal(carrier.items[0].uid, equipped.uid);
   assert.equal(carrier.items[0].id, HAMMER);
   assert.equal(copies(ps, GOLDEN), 0);
-  assert.equal(copies(ps, HAMMER), 1);
+  assert.equal(copies(ps, HAMMER), 3);
   const toasts = h.sent.filter(([, msg]) => msg.t === 'm.toast').map(([, msg]) => msg.text);
-  assert.equal(toasts.filter((t) => t === '整备区已满，获得的装备已销毁').length, 2);
+  assert.equal(toasts.filter((t) => t === '整备区已满，获得的装备已销毁').length, 0);
   const input = FakeBattle.instances.at(-1).opts.players[0];
   assert.ok(input.units.find((u) => u.uid === carrier.uid).items.includes(HAMMER));
   h.toPrep(2);
   assert.equal(carrier.items[0].uid, equipped.uid, 'nothing was merged into the slot');
-  assert.equal(copies(ps, GOLDEN), 0);
+  assert.equal(copies(ps, GOLDEN), 1);
   assert.equal(copies(ps, HAMMER), 1);
   h.m.dispose();
 });

@@ -44,6 +44,7 @@ node\node.exe            官方 Windows x64 便携版 Node（版本与 sha256 �
 node\LICENSE-node.txt    Node 自己的许可证（MIT，与 node.exe 出自同一个官方归档）
 app\                     游戏本体：代码 + 生产依赖 + public（全部素材）+ data，完全离线
 启动游戏.bat             app\scripts\launch.mjs --no-setup
+启动游戏-插件沙箱.bat    同上，加 --scripts sandbox（脚本插件在沙箱里运行）
 README-开箱即用.md       给玩家看的说明（含非官方 / 严禁盈利 / 素材版权声明）
 LICENSE / NOTICE.md / THIRD-PARTY-NOTICES.md
 ```

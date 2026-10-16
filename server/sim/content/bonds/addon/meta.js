@@ -10,7 +10,10 @@
 //   调和            +1 member count for core bonds: server/match/bondsMeta.js.
 //
 // Milestones read the persistent layers and pay only while the bond is active; payouts owed for layers gained while it
-// was inactive ("无需激活" sources) are caught up the next time a hook sees it active (research 02 §8 Q7 [ASSUMED]).
+// was inactive ("无需激活" sources) are caught up as soon as it lights up (research 02 §8 Q7 [ASSUMED]): the onActiveBonds
+// hook of the recompute that activated it — a hand gain, a temp → hand move, an effect — like 维多利亚's hammers (the
+// maintainer's report of 2026-10-15 for the hammer; [ASSUMED] the same timing for these funds and 远见's discount latch,
+// which share its rule), and the other hooks below catch up anything a capped nested dispatch skipped.
 // Funds earned after the prep phase ended (助力 / 寒檀 / 号角 … prep-end layers — the match wipes leftover funds right
 // after onPrepEnd) are paid as pending funds, credited at the next round start, so "获得…资金" is never silently lost
 // [ASSUMED]; `global:bondaddon_prepend` (first in every dispatch) marks the round whose prep has ended.
@@ -25,8 +28,8 @@ const C_VISI_PAID = 'bondaddon:visi:paid';
 const C_VISI_DISC = 'bondaddon:visi:disc';
 const C_MIRA_PAID = 'bondaddon:mira:paid';
 const C_PREP_ENDED = 'bondaddon:prepEndedRound';
-/** Hooks on which owed milestones are caught up (besides the bond's own onLayers). */
-const SETTLE_HOOKS = Object.freeze(['onRoundStart', 'onPrepStart', 'onPrepEnd', 'onBuy', 'onGain', 'onSold', 'onMerge']);
+/** Hooks on which owed milestones are caught up (besides the bond's own onLayers): onActiveBonds when the bond lights up. */
+const SETTLE_HOOKS = Object.freeze(['onActiveBonds', 'onRoundStart', 'onPrepStart', 'onPrepEnd', 'onBuy', 'onGain', 'onSold', 'onMerge']);
 
 const n = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 

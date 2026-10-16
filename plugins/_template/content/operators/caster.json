@@ -1,0 +1,19 @@
+{
+  "op": 1,
+  "charId": "char_x_data_demo_caster",
+  "name": "演示术师",
+  "profession": "CASTER",
+  "subProfessionId": "corecaster",
+  "position": "RANGED",
+  "rarity": 3,
+  "as": "both",
+  "chess": { "tier": 1, "bonds": ["deputShip"] },
+  "forms": {
+    "normal": { "stats": { "maxHp": 2000, "atk": 200, "def": 50, "bat": 1.2, "blockCnt": 1 }, "rangeGrid": [[0, 0], [0, 1]] },
+    "elite": { "stats": { "maxHp": 3000, "atk": 300, "def": 80, "bat": 1.2, "blockCnt": 1 }, "rangeGrid": [[0, 0], [0, 1]] }
+  },
+  "skills": [{ "skillId": "skx_data_demo_caster_1", "name": "施术", "duration": 10, "spCost": 10, "initSp": 10, "default": true }],
+  "trait": { "desc": "远程法术" },
+  "kit": { "dsl": { "dsl": 1, "pluginId": "data-demo", "skill": { "kind": "passive", "mods": { "atkPct": 0.5 } } } },
+  "art": { "ref": "char_199_yak" }
+}

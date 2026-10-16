@@ -107,10 +107,12 @@ export class PlayerPlacement {
    * Range-bound summons left outside their owner's attack range (the owner re-oriented in place, promoted, its loadout
    * changed, moved with no room to take its summons back) go back onto their stack — a summon still inside stays
    * [ASSUMED: the official moves every summon of a MOVED owner back, PRTS 卫戍协议/帮助 "移动干员时，其所属召唤物全部退场
-   * 并重置至手牌区"; an in-place re-orientation keeps the ones it can]. One with no stack and no free hand / temp slot
-   * leaves the board: its stack comes back at the next round start like a summon stack removed from temp at a prep
-   * deadline (startRound → grantTokensFor, "干员所属召唤物会于下一回合返还"), so no illegal placement reaches the
-   * battle. Returns the number taken off the board; a toast names them.
+   * 并重置至手牌区"; an in-place re-orientation keeps the ones it can]. A passive lift (`allowTemp`) with no stack
+   * joins the expandable temp queue, including past the five visible slots (PRTS 卫戍协议/帮助 §手牌区); it does not
+   * wait until the next round. The player's own in-place re-orientation still refuses with `HAND_FULL` when a lifted
+   * summon would need a free null slot (`_roomForOutOfRange`). A summon stack that does sit in temp when its prep
+   * deadline arrives is still removed and comes back at the next round start (startRound → grantTokensFor,
+   * "干员所属召唤物会于下一回合返还"). Returns the number taken off the board; a toast names them.
    */
   _liftOutOfRange() {
     const back = [], gone = [], backOut = [], goneOut = [], backAdjacent = [], goneAdjacent = [];

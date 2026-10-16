@@ -2,7 +2,7 @@
 // Conventions of the tier-6 kits: ../shared/tier6.js; kit contract and rules: ../README.md.
 
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import {
   num, tbb, live, hasBond, onDefaultSkill, selectedSkill, N4, bstate, freeTiles, bestTile,
 } from '../shared/tier6.js';
@@ -28,7 +28,7 @@ function nearl2(bb, chess, def) {
     const keys = new Set(absoluteRangeKeys(N4, r, c, 1, 0));
     battle.fx('sunBurst', { x: c, y: r, id: unit.id });
     for (const e of battle.enemies) {
-      if (!e.alive || e.hidden || !bodyInKeys(e, keys)) continue;
+      if (!e.alive || e.hidden || !bodyInRange(e, keys)) continue;
       battle.dealDamage(unit, e, { amount: unit.s.atk * scale, type: 'true', isSkill: true, tags: ['skill'] });
       if (stun > 0 && e.alive) battle.applyStatus(e, 'stun', { duration: stun, source: unit });
     }

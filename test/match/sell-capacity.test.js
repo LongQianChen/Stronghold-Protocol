@@ -1,6 +1,5 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ERR } from '../../shared/constants.js';
 import { makeMatch, legalTileFor, checkInvariants } from './harness.js';
 
 const SILENCE = 'chess_char_2_02_a';
@@ -40,13 +39,6 @@ function swapIntoTemp(m, ps, piece) {
   assert.ok(idx >= 0 && filler);
   assert.deepEqual(m.handle(ps.playerId, { t: 'g.move', uid: filler.uid, to: { area: 'hand', idx } }), { ok: true });
   assert.equal(ps.find(piece.uid).area, 'temp');
-}
-
-function snapshot(ps) {
-  return structuredClone({
-    hand: ps.hand, temp: ps.temp, board: ps.board, funds: ps.funds, pendingFunds: ps.pendingFunds,
-    stats: ps.stats, round: ps.round, tempDue: ps._tempDue,
-  });
 }
 
 const inventory = (ps) => [...ps.hand, ...ps.temp, ...ps.board.values()].filter(Boolean);
@@ -99,7 +91,7 @@ for (const { name, ownerId, area, itemCount, stackCount } of [
   { name: 'a two-summon stack frees only one slot', ownerId: CATHY, area: 'hand', itemCount: 2, stackCount: 2 },
   { name: 'board summons and foreign stacks free no usable slot', ownerId: SILENCE, area: 'board', itemCount: 1, stackCount: 1 },
 ]) {
-  test(`sale rejects atomically when ${name}`, (t) => {
+  test(`sale retains returned equipment when ${name}`, (t) => {
     const { m, ps } = setup(t);
     const owner = ps.acquireChess(ownerId, { silent: true });
     deploy(m, ps, owner);
@@ -112,20 +104,15 @@ for (const { name, ownerId, area, itemCount, stackCount } of [
     fillStorage(ps);
     if (area === 'temp') swapIntoTemp(m, ps, stack);
     assert.equal(ps.find(stack.uid).area, area);
-    const before = snapshot(ps);
+    const funds = ps.funds;
     const poolBefore = m.pool.left(ownerId);
-    assert.equal(m.handle(ps.playerId, { t: 'g.sell', uid: owner.uid }).error, ERR.HAND_FULL);
-    assert.deepEqual(snapshot(ps), before, 'pieces, equipment, funds, and bookkeeping remain unchanged');
-    assert.equal(m.pool.left(ownerId), poolBefore);
-    for (const item of items) assert.equal(ps.find(item.uid).area, 'equipped');
-    checkInvariants(m);
-    // Free exactly one additional slot and retry the same public intent.
-    const filler = ps.temp.find((p) => p?.kind === 'item');
-    assert.deepEqual(m.handle(ps.playerId, { t: 'g.destroy', uid: filler.uid }), { ok: true });
+    const copies = owner.poolCopies;
     assert.deepEqual(m.handle(ps.playerId, { t: 'g.sell', uid: owner.uid }), { ok: true });
+    assert.equal(m.pool.left(ownerId), poolBefore + copies);
+    assert.equal(ps.temp.length, 6, 'one returned item waits behind the visible window');
     assert.equal(ps.find(owner.uid), null);
     assert.deepEqual(tokensOf(ps, owner), []);
-    assert.equal(ps.funds, before.funds + 1);
+    assert.equal(ps.funds, funds + 1);
     for (const item of items) {
       assert.equal(ps.find(item.uid).piece, item);
       assert.ok(['hand', 'temp'].includes(ps.find(item.uid).area));

@@ -1,0 +1,18 @@
+{
+  "id": "rose-skin",
+  "name": "玫瑰换装",
+  "version": "1.0.0",
+  "author": "rose",
+  "license": "CC0-1.0",
+  "description": "A small Forge-style skin pack written for the importer. The picture and the sound are not from the game.",
+  "content": [],
+  "art": {
+    "chars": {
+      "char_102_texas": { "avatar": "chars/texas/avatar.png" }
+    }
+  },
+  "voices": {
+    "char_102_texas": { "select": ["voice/select.mp3"] }
+  },
+  "notices": { "credits": "Rose test credits. No official art." }
+}

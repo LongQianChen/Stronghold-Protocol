@@ -25,8 +25,9 @@
   <!-- Web fonts: never render-blocking (LAN/offline play must still start); system fallbacks in theme.css. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" media="print" onload="this.media='all'"
+  <link rel="stylesheet" media="print" data-web-fonts
         href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oxanium:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&display=swap" />
+  <script src="/js/webFonts.js" defer></script>
   <!-- Self-hosted Bender / Novecento (provided by the assets pipeline). -->
   <link rel="stylesheet" href="/fonts/fonts.css" />
 
@@ -82,35 +83,10 @@
   </div>
 
   <noscript><p style="color:#c3cbc7;text-align:center;padding:40px">需要启用 JavaScript 才能运行本游戏。</p></noscript>
-  <script>
-    // Boot diagnostics (plain ES5: runs everywhere). A browser too old for the app says so instead of spinning forever:
-    // no ES modules (nomodule below), a module graph that cannot load (e.g. import maps: Safari / iOS < 16.4), or no
-    // boot after 9 s.
-    window.__spBootFail = function (why) {
-      var e = document.getElementById('boot-err');
-      if (!e || e.getAttribute('data-final')) return;
-      var im = false;
-      try { im = !!(window.HTMLScriptElement && HTMLScriptElement.supports && HTMLScriptElement.supports('importmap')); } catch (x) { im = false; }
-      e.textContent = why === 'old' || !im
-        ? '当前浏览器版本过旧，无法运行本游戏。请升级到 iOS / iPadOS 16.4+（Safari 16.4+）、Chrome / Edge 90+ 或 Firefox 108+ 后刷新。'
-        : '游戏脚本加载失败，请检查网络连接后刷新页面。';
-      e.setAttribute('data-final', '1');
-    };
-    // a module graph that fails to link (bare specifier without import-map support) reports here, not on the <script>
-    window.addEventListener('error', function (ev) {
-      var b = document.getElementById('boot');
-      if (!b || b.classList.contains('is-done')) return;
-      if (/specifier|resolve|import|module/i.test(String(ev && ev.message))) window.__spBootFail('load');
-    });
-  </script>
-  <script type="module" src="/js/main.js" onerror="window.__spBootFail && window.__spBootFail('load')"></script>
-  <script nomodule>window.__spBootFail && window.__spBootFail('old');</script>
-  <script>
-    // If modules never boot (very old browser / blocked script), explain instead of spinning forever.
-    setTimeout(function () {
-      var b = document.getElementById('boot'), e = document.getElementById('boot-err');
-      if (b && !b.classList.contains('is-done') && e && !e.textContent) e.textContent = '加载时间较长…如长时间无响应，请使用最新版 Chrome / Edge / Safari / Firefox 并刷新页面。';
-    }, 9000);
-  </script>
+
+  <script src="/js/boot.js"></script>
+  <script type="module" src="/js/main.js" id="sp-main"></script>
+  <script nomodule src="/js/bootLegacy.js"></script>
+
 </body>
 </html>

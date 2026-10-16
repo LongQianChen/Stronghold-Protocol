@@ -7,7 +7,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ERR, PHASE } from '../../shared/constants.js';
-import { validateC2S, checkLoadoutOps, isLoadoutOps, cultivationCharIds, LOADOUT_LIMITS } from '../../shared/protocol.js';
+import { validateC2S, checkLoadoutOps, isLoadoutOps, cultivationCharIds, LOADOUT_LIMITS, charPotentialChanges } from '../../shared/protocol.js';
+import { expandRecords } from '../../shared/plugins/records.js';
+import { guard } from '../helpers/contentFixtures.js';
 import { buildBattleSpec, createBattleFromSpec } from '../../server/sim/spec.js';
 import { DATA, makeMatch } from './harness.js';
 
@@ -49,6 +51,21 @@ test('room.loadout ops: structure (≤ 256 charIds → { potential 1–6?, culti
   assert.deepEqual(checkLoadoutOps({ [VENDLA_CHAR]: { potential: 2 }, [KALTS]: { potential: 6, cultivate: 3 } }, has), { ok: true, ops: { [VENDLA_CHAR]: { potential: 2, cultivate: 3 } } });
   assert.equal(checkLoadoutOps({ [SHARP]: { potential: 2 } }, has).error, 'BAD_TARGET');
   assert.equal(checkLoadoutOps({ [VENDLA_CHAR]: { potential: 9 } }, has).error, 'BAD_MSG');
+});
+
+test('a plugin operator without a potential curve accepts only the default potential', () => {
+  const expanded = expandRecords(DATA, [guard()], { pluginId: 'data-demo' });
+  assert.deepEqual(expanded.problems, []);
+  const id = 'char_x_data_demo_guard';
+  const changes = (charId) => charPotentialChanges(expanded.data, charId);
+  const isOp = (charId) => charId === id || charId === 'char_616_pithst' || IDS.has(charId);
+  assert.equal(changes(id), false);
+  assert.equal(checkLoadoutOps({ [id]: { potential: 1 } }, isOp, changes).error, 'BAD_TARGET');
+  assert.deepEqual(checkLoadoutOps({ [id]: { potential: 6 } }, isOp, changes), { ok: true, ops: {} });
+  assert.deepEqual(checkLoadoutOps({ [id]: { cultivate: 1 } }, isOp, changes).ops[id], { potential: 6, cultivate: 1 });
+  assert.equal(checkLoadoutOps({ [id]: { potential: 1 } }, isOp).ok, true);
+  assert.equal(checkLoadoutOps({ [VENDLA_CHAR]: { potential: 2 } }, isOp, changes).ok, true);
+  assert.equal(checkLoadoutOps({ char_616_pithst: { potential: 2 } }, isOp, changes).ok, true);
 });
 
 test('battle input: every owned operator states 潜能 / 练度 — the human\'s settings, the defaults (6 / 3) for the rest, for a seat without ops and for bots', () => {

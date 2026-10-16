@@ -1,0 +1,2098 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "plugin.json — the manifest of a plugin (manifest 2)",
+  "description": "A plugin of 卫戍协议：盟约 (Stronghold Protocol: Alliance): plugins/<id>/plugin.json beside the files it names. docs/PLUGINS.md §3–§5 (the manifest, permissions, files), §9 (the asset overlay: overlay.schema.json). Accepted here = node tools/plugin.mjs check finds neither a problem nor a warning in the manifest itself; what only the check sees: the folder (the id is its name; the files exist, of the types the class carries, inside the folder), the running game's version against \"app\", a plugin both required and in conflict or both after and before, a setting's min ≤ max and its default within them, a theme naming a URL, the limits.",
+  "type": "object",
+  "required": [
+    "manifest",
+    "class",
+    "version"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "This schema, for editors: \"../../schemas/plugin.schema.json\"."
+    },
+    "manifest": {
+      "const": 2,
+      "description": "The manifest format: 2."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,31}$",
+      "description": "Optional: the folder name is the id (2–32 lower-case letters, digits and -); a different id here is only a warning."
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 10000
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      ],
+      "description": "The display name: a text in sourceLang, or { \"zh\": \"…\", \"en\": \"…\" }."
+    },
+    "englishName": {
+      "type": "string",
+      "maxLength": 10000
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 10000
+        },
+        {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      ],
+      "description": "One or two sentences: a text in sourceLang, or { \"zh\": \"…\", \"en\": \"…\" }."
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Semantic version: 1.0.0, 0.2.1-beta.1 …",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "app": {
+      "type": "string",
+      "maxLength": 60,
+      "pattern": "^\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*(?:\\s*\\|\\|\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*)*\\s*$",
+      "description": "The game versions it is made for: \">=0.3.0 <0.4.0\", \"0.3.x\", \"^0.3.0\" …"
+    },
+    "api": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "The plugin API level (this game: 1–1)."
+    },
+    "class": {
+      "enum": [
+        "lang",
+        "cosmetic",
+        "content",
+        "script",
+        "ui",
+        "trusted"
+      ],
+      "description": "cosmetic: art, models, audio. lang: a language. content: data, DSL. ui: an interface page in a sandboxed frame (P4). script, trusted: code (not loaded by this version)."
+    },
+    "scope": {
+      "description": "Who switches it on: room (the host, for the room), personal (a player, for themself), server (trusted only).",
+      "anyOf": [
+        {
+          "enum": [
+            "room",
+            "personal",
+            "server"
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "room",
+              "personal",
+              "server"
+            ]
+          }
+        }
+      ]
+    },
+    "authors": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "credits": {
+      "type": "string",
+      "maxLength": 10000,
+      "description": "Where the art comes from, who made it."
+    },
+    "license": {
+      "type": "string",
+      "maxLength": 10000,
+      "description": "An SPDX id (CC-BY-4.0, CC0-1.0, MIT …) or words."
+    },
+    "homepage": {
+      "type": "string",
+      "pattern": "^\\s*https?://\\S+\\s*$",
+      "description": "An http(s) address."
+    },
+    "sourceLang": {
+      "type": "string",
+      "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$",
+      "description": "The language of plain-text names (default zh)."
+    },
+    "requires": {
+      "type": "object",
+      "description": "Plugins it needs: { \"<id>\": \"<version range>\" }.",
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 60,
+        "pattern": "(?:^\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*(?:\\s*\\|\\|\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*)*\\s*$)|^\\s*$"
+      }
+    },
+    "optional": {
+      "type": "object",
+      "description": "Plugins it loads after when present: { \"<id>\": \"<version range>\" }.",
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 60,
+        "pattern": "(?:^\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*(?:\\s*\\|\\|\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*)*\\s*$)|^\\s*$"
+      }
+    },
+    "conflicts": {
+      "type": "object",
+      "description": "Plugins it cannot be used with: { \"<id>\": \"<version range>\" }.",
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 60,
+        "pattern": "(?:^\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*(?:\\s*\\|\\|\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)(?:\\s+(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?))*)*\\s*$)|^\\s*$"
+      }
+    },
+    "loadAfter": {
+      "type": "array",
+      "description": "Plugins it loads after (ids).",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+      }
+    },
+    "loadBefore": {
+      "type": "array",
+      "description": "Plugins it loads before (ids).",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,31}$"
+      }
+    },
+    "priority": {
+      "type": "integer",
+      "minimum": -1000,
+      "maximum": 1000,
+      "description": "Among plugins free to load, the higher first (default 0)."
+    },
+    "settings": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "boolean"
+              },
+              "default": {
+                "type": "boolean"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "options"
+            ],
+            "properties": {
+              "type": {
+                "const": "enum"
+              },
+              "options": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "uniqueItems": true,
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                }
+              },
+              "default": {},
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "min",
+              "max"
+            ],
+            "properties": {
+              "type": {
+                "const": "integer"
+              },
+              "min": {
+                "type": "integer",
+                "minimum": -1000000000,
+                "maximum": 1000000000
+              },
+              "max": {
+                "type": "integer",
+                "minimum": -1000000000,
+                "maximum": 1000000000
+              },
+              "step": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              },
+              "default": {
+                "type": "integer"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": [
+              "type",
+              "min",
+              "max"
+            ],
+            "properties": {
+              "type": {
+                "const": "number"
+              },
+              "min": {
+                "type": "number",
+                "minimum": -1000000000,
+                "maximum": 1000000000
+              },
+              "max": {
+                "type": "number",
+                "minimum": -1000000000,
+                "maximum": 1000000000
+              },
+              "step": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "default": {
+                "type": "number"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 10000
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "\\S"
+                    }
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "description": "Settings the host sets (boolean, integer / number with min and max, enum with options) — no free text."
+    },
+    "permissions": {
+      "type": "array",
+      "description": "What it does: assets.override (replaces the installation's art), assets.add (a new entry), theme …",
+      "items": {
+        "enum": [
+          "assets.override",
+          "assets.add",
+          "theme",
+          "data.patch",
+          "data.add",
+          "dsl",
+          "sim.code",
+          "meta.code",
+          "mode.code",
+          "ui.frame",
+          "trusted.page",
+          "trusted.server"
+        ]
+      }
+    },
+    "assets": {
+      "description": "The asset overlay (overlay.schema.json), or the path of a .json file holding it.",
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "$ref": "overlay.schema.json"
+        }
+      ]
+    },
+    "theme": {
+      "description": "Theme colours and lengths (not applied by this version).",
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "object"
+        }
+      ]
+    },
+    "data": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "operators": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "enemies": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "modes": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "stages": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "dsl": {
+      "anyOf": [
+        {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.[jJ][sS][oO][nN]$"
+            }
+          ]
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "overlay.schema.json#/$defs/path"
+              },
+              {
+                "pattern": "\\.[jJ][sS][oO][nN]$"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "i18n": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$"
+      },
+      "additionalProperties": {
+        "allOf": [
+          {
+            "$ref": "overlay.schema.json#/$defs/path"
+          },
+          {
+            "pattern": "\\.[jJ][sS][oO][nN]$"
+          }
+        ]
+      }
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "sim": {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.js$"
+            }
+          ]
+        },
+        "meta": {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.js$"
+            }
+          ]
+        },
+        "client": {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.(?:html|js)$"
+            }
+          ]
+        },
+        "server": {
+          "allOf": [
+            {
+              "$ref": "overlay.schema.json#/$defs/path"
+            },
+            {
+              "pattern": "\\.js$"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "slots": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "hud.right",
+          "result.tab",
+          "stats.tab",
+          "room.panel"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1,
+      "maxItems": 4,
+      "description": "ui: the places the page asks for (DESIGN §32.8). One slot per plugin is granted; absent or empty, the plugin loads and the host grants none (a warning)."
+    },
+    "files": {},
+    "lang": {},
+    "base": {},
+    "fallback": {},
+    "complete": {},
+    "machineTranslated": {
+      "type": "boolean"
+    },
+    "numberUnits": {},
+    "overrides": {
+      "type": "array",
+      "maxItems": 200,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_:-]{1,128}$"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "lang"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "personal"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "personal"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": []
+            }
+          },
+          "assets": false,
+          "theme": false,
+          "data": false,
+          "operators": false,
+          "enemies": false,
+          "modes": false,
+          "stages": false,
+          "dsl": false,
+          "i18n": false,
+          "entry": {
+            "properties": {
+              "sim": false,
+              "meta": false,
+              "client": false,
+              "server": false
+            }
+          },
+          "files": {
+            "type": "object",
+            "required": [
+              "ui"
+            ],
+            "properties": {
+              "ui": {
+                "allOf": [
+                  {
+                    "$ref": "overlay.schema.json#/$defs/path"
+                  },
+                  {
+                    "pattern": "\\.[jJ][sS][oO][nN]$"
+                  }
+                ]
+              },
+              "data": {
+                "allOf": [
+                  {
+                    "$ref": "overlay.schema.json#/$defs/path"
+                  },
+                  {
+                    "pattern": "\\.[jJ][sS][oO][nN]$"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "lang": {
+            "type": "string",
+            "pattern": "^\\s*[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8})*\\s*$",
+            "not": {
+              "pattern": "^\\s*[zZ][hH]\\s*$"
+            }
+          },
+          "slots": false,
+          "overrides": false
+        },
+        "required": [
+          "lang",
+          "files"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "cosmetic"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "room",
+                  "personal"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "room",
+                    "personal"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "assets.override",
+                "assets.add",
+                "theme"
+              ]
+            }
+          },
+          "data": false,
+          "operators": false,
+          "enemies": false,
+          "modes": false,
+          "stages": false,
+          "dsl": false,
+          "i18n": false,
+          "entry": {
+            "properties": {
+              "sim": false,
+              "meta": false,
+              "client": false,
+              "server": false
+            }
+          },
+          "files": false,
+          "lang": false,
+          "base": false,
+          "fallback": false,
+          "complete": false,
+          "machineTranslated": false,
+          "numberUnits": false,
+          "slots": false,
+          "overrides": false
+        },
+        "required": [
+          "app",
+          "api"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          },
+          {
+            "required": [
+              "theme"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "content"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "room"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "room"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "assets.override",
+                "assets.add",
+                "data.patch",
+                "data.add",
+                "dsl"
+              ]
+            }
+          },
+          "theme": false,
+          "entry": {
+            "properties": {
+              "sim": false,
+              "meta": false,
+              "client": false,
+              "server": false
+            }
+          },
+          "files": false,
+          "lang": false,
+          "base": false,
+          "fallback": false,
+          "complete": false,
+          "machineTranslated": false,
+          "numberUnits": false,
+          "slots": false,
+          "overrides": false
+        },
+        "required": [
+          "app",
+          "api"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          },
+          {
+            "required": [
+              "data"
+            ]
+          },
+          {
+            "required": [
+              "operators"
+            ]
+          },
+          {
+            "required": [
+              "enemies"
+            ]
+          },
+          {
+            "required": [
+              "modes"
+            ]
+          },
+          {
+            "required": [
+              "stages"
+            ]
+          },
+          {
+            "required": [
+              "dsl"
+            ]
+          },
+          {
+            "required": [
+              "i18n"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "script"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "room"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "room"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "assets.override",
+                "assets.add",
+                "data.patch",
+                "data.add",
+                "dsl",
+                "sim.code",
+                "meta.code",
+                "mode.code"
+              ]
+            }
+          },
+          "theme": false,
+          "entry": {
+            "properties": {
+              "sim": true,
+              "meta": true,
+              "client": false,
+              "server": false
+            }
+          },
+          "files": false,
+          "lang": false,
+          "base": false,
+          "fallback": false,
+          "complete": false,
+          "machineTranslated": false,
+          "numberUnits": false,
+          "slots": false
+        },
+        "required": [
+          "app",
+          "api"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          },
+          {
+            "required": [
+              "data"
+            ]
+          },
+          {
+            "required": [
+              "operators"
+            ]
+          },
+          {
+            "required": [
+              "enemies"
+            ]
+          },
+          {
+            "required": [
+              "modes"
+            ]
+          },
+          {
+            "required": [
+              "stages"
+            ]
+          },
+          {
+            "required": [
+              "dsl"
+            ]
+          },
+          {
+            "required": [
+              "i18n"
+            ]
+          },
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "minProperties": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "ui"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "personal"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "personal"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "ui.frame"
+              ]
+            }
+          },
+          "assets": false,
+          "theme": false,
+          "data": false,
+          "operators": false,
+          "enemies": false,
+          "modes": false,
+          "stages": false,
+          "dsl": false,
+          "i18n": false,
+          "entry": {
+            "required": [
+              "client"
+            ],
+            "properties": {
+              "sim": false,
+              "meta": false,
+              "client": {
+                "pattern": "\\.html$"
+              },
+              "server": false
+            }
+          },
+          "files": false,
+          "lang": false,
+          "base": false,
+          "fallback": false,
+          "complete": false,
+          "machineTranslated": false,
+          "numberUnits": false,
+          "overrides": false
+        },
+        "required": [
+          "app",
+          "api",
+          "entry",
+          "slots"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "minProperties": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "trusted"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "server",
+                  "room"
+                ]
+              },
+              {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "server",
+                    "room"
+                  ]
+                }
+              }
+            ]
+          },
+          "permissions": {
+            "items": {
+              "enum": [
+                "assets.override",
+                "assets.add",
+                "theme",
+                "data.patch",
+                "data.add",
+                "dsl",
+                "sim.code",
+                "meta.code",
+                "mode.code",
+                "trusted.page",
+                "trusted.server"
+              ]
+            }
+          },
+          "entry": {
+            "properties": {
+              "sim": true,
+              "meta": true,
+              "client": {
+                "pattern": "\\.js$"
+              },
+              "server": true
+            }
+          },
+          "files": false,
+          "lang": false,
+          "base": false,
+          "fallback": false,
+          "complete": false,
+          "machineTranslated": false,
+          "numberUnits": false,
+          "slots": false
+        },
+        "required": [
+          "app",
+          "api"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          },
+          {
+            "required": [
+              "theme"
+            ]
+          },
+          {
+            "required": [
+              "data"
+            ]
+          },
+          {
+            "required": [
+              "operators"
+            ]
+          },
+          {
+            "required": [
+              "enemies"
+            ]
+          },
+          {
+            "required": [
+              "modes"
+            ]
+          },
+          {
+            "required": [
+              "stages"
+            ]
+          },
+          {
+            "required": [
+              "dsl"
+            ]
+          },
+          {
+            "required": [
+              "i18n"
+            ]
+          },
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "minProperties": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "assets"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "assets.override",
+                "assets.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "theme"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "theme"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "data"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "data.patch",
+                "data.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "operators"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "data.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "enemies"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "data.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "modes"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "data.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "stages"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "data.add"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "dsl"
+        ]
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "enum": [
+                "dsl"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "script"
+          },
+          "entry": {
+            "required": [
+              "sim"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "sim.code"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "trusted"
+          },
+          "entry": {
+            "required": [
+              "sim"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "sim.code"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "script"
+          },
+          "entry": {
+            "required": [
+              "meta"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "meta.code"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "trusted"
+          },
+          "entry": {
+            "required": [
+              "meta"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "meta.code"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "ui"
+          },
+          "entry": {
+            "required": [
+              "client"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "ui.frame"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "trusted"
+          },
+          "entry": {
+            "required": [
+              "client"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "trusted.page"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "class",
+          "entry"
+        ],
+        "properties": {
+          "class": {
+            "const": "trusted"
+          },
+          "entry": {
+            "required": [
+              "server"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "trusted.server"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "assets.override"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "assets.add"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "assets"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "theme"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "theme"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "data.patch"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "data"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "data.add"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "data"
+            ]
+          },
+          {
+            "required": [
+              "operators"
+            ]
+          },
+          {
+            "required": [
+              "enemies"
+            ]
+          },
+          {
+            "required": [
+              "modes"
+            ]
+          },
+          {
+            "required": [
+              "stages"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "dsl"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "dsl"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "sim.code"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "sim"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "meta.code"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "meta"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "mode.code"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "sim"
+                ]
+              }
+            }
+          },
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "meta"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "ui.frame"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "client"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "trusted.page"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "client"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "contains": {
+              "const": "trusted.server"
+            }
+          }
+        }
+      },
+      "then": {
+        "anyOf": [
+          {
+            "required": [
+              "entry"
+            ],
+            "properties": {
+              "entry": {
+                "required": [
+                  "server"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -126,7 +126,7 @@ export default {
       const r = Math.floor(k / COLS), c = k % COLS;
       const keys = [];
       for (const [dr, dc] of X5) if (battle.grid.inRect(r + dr, c + dc)) keys.push((r + dr) * COLS + c + dc);
-      const foes = battle.enemiesInKeys(keys, unit, GROUND);
+      const foes = battle.enemiesOnTiles(keys, unit, GROUND);
       battle.fx('aoe', { x: c, y: r, radius: 1, id: unit.id, skill: 'headb2:highland' });
       if (!foes.length) return;
       const amount = atk * num(t0['attack@splash_atk_scale']) * (s3 ? num(b3.splash_atk_scale_bonus, 1) : 1) * hamx(foes.length);

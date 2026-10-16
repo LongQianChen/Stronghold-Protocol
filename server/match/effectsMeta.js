@@ -13,7 +13,8 @@
 //
 // Hooks (handler methods; all optional, signature (ctx, ev)):
 //   onRoundStart onIncome onPrepStart onPrepEnd onGain onSold onRefresh onPrice onBuy onSpend onMerge onLevelUp
-//   onBattleStart onBattleResult onChoicePick onEquip onArt onDestroy onLayers
+//   onBattleStart onBattleResult onChoicePick onEquip onArt onDestroy onLayers onActiveBonds
+// (onActiveBonds: the set of active bonds changed — PlayerState.recompute, player/round.js _reportActiveBonds.)
 // Garrisons fire only on the hook of their eventType (SERVER_GAIN→onGain of the gained piece, SERVER_PREP_START→
 // onRoundStart, SERVER_PREP_FIN→onPrepEnd, SERVER_CHESS_SOLD→onSold of the sold piece, SERVER_PRICE→onPrice of the
 // slot's chess, SERVER_REFRESH_SHOP→onRefresh); the dispatcher calls `handler[hook] ?? handler.run`. A handler may
@@ -41,15 +42,18 @@
 import { itemKey } from './gamedata.js';
 import { boardOrder, parseKey, tileKey } from './board.js';
 import { pieceBonds as bondsOfPiece } from './bondsMeta.js';
+import { charge } from '../sim/content/dsl/budget.js';
+import { registerExtensionMeta, extensionMetaOwner } from '../sim/content/extensions.js';
 import { registerAllMeta } from '../sim/content/index.js';
 import { registerBuiltins } from './builtinMeta.js';
 import { msg, dn } from '../../shared/i18n.js';
 import { onGiftTicker } from './botEmotes.js';
+import { previewContext } from './preview.js';
 
 export const HOOKS = Object.freeze([
   'onRoundStart', 'onIncome', 'onPrepStart', 'onPrepEnd', 'onGain', 'onSold', 'onRefresh', 'onPrice', 'onBuy',
   'onSpend', 'onMerge', 'onLevelUp', 'onBattleStart', 'onBattleResult', 'onChoicePick', 'onEquip', 'onArt',
-  'onDestroy', 'onLayers',
+  'onDestroy', 'onLayers', 'onActiveBonds',
 ]);
 /** Non-hook members a handler object may carry. */
 const HANDLER_EXTRAS = new Set(['run', 'garrisonHooks']);
@@ -125,6 +129,7 @@ export function createRegistry({ builtins = true, content = true, log = console 
   if (content) {
     try { registerAllMeta(reg); } catch (e) { log.error?.('[meta] registerAllMeta failed', e); }
   }
+  if (content) registerExtensionMeta(reg);
   if (reg.warnings.length) log.warn?.(`[meta] ${reg.warnings.length} handler method(s) are not hooks and will never run, e.g. ${reg.warnings.slice(0, 3).join('; ')}`);
   return reg;
 }
@@ -157,6 +162,7 @@ export class EffectDispatcher {
   }
 
   _report(key, hook, e) {
+    if (this.preview) return;
     this.errors++;
     const msg = `${key}.${hook}: ${e && e.message ? e.message : e}`;
     const rec = this.errorsByKey.get(msg);
@@ -168,11 +174,26 @@ export class EffectDispatcher {
     this.m.log.error?.(`[match ${this.m.roomCode}] meta handler error ${msg}`, e && e.stack ? e.stack.split('\n').slice(0, 4).join(' | ') : '');
   }
 
+  _allowScript(handler, hook) {
+    const pluginId = extensionMetaOwner(handler);
+    if (pluginId && this.scriptRound !== this.m.round) {
+      this.scriptRound = this.m.round;
+      // [ASSUMED] Prep shares one deterministic per-plugin counter per round across all seats.
+      this.scriptBudget = {units:[], _handlerError:(label,unit,e) => this._report(label,hook,e)};
+    }
+    return !pluginId || charge(this.scriptBudget,null,pluginId);
+  }
+
   _call(ps, key, handler, hook, source, ev, repeat = 1) {
     const fn = typeof handler[hook] === 'function' ? handler[hook] : source.kind === 'garrison' && typeof handler.run === 'function' ? handler.run : null;
     if (!fn) return;
-    const ctx = makeCtx(this.m, ps, source, hook, ev);
+    let ctx;
+    if (this.preview) {
+      try { ctx = makeCtx(this.m, ps, source, hook, ev, this.preview); }
+      catch (e) { this._report(key, hook, e); return; }
+    } else ctx = makeCtx(this.m, ps, source, hook, ev);
     for (let i = 0; i < repeat; i++) {
+      if (!this._allowScript(handler,hook)) break;
       try { fn.call(handler, ctx, ev); } catch (e) { this._report(key, hook, e); }
     }
   }
@@ -195,6 +216,15 @@ export class EffectDispatcher {
    * ev.gain, onBattleStart ev.input, …) and returned.
    */
   dispatch(ps, hook, ev = {}, { quiet = false, skipKey = null } = {}) {
+    if (ev.preview && !this.preview) {
+      // Fresh dispatcher per preview: scripts share a local budget, and errors never enter the match diagnostics.
+      // Clone the entire event, including nested effect data and spawn mods, before giving it to any handler.
+      const isolated = new EffectDispatcher(this.m, this.registry);
+      isolated.preview = { rng: this.m.rngMeta.clone(), data: new Map(), players: new Map([[ps.playerId, ps]]) };
+      const result = isolated.dispatch(ps, hook, structuredClone(ev), { quiet: true, skipKey });
+      Object.assign(ev, result);
+      return ev;
+    }
     if (!ps || this.depth >= MAX_DEPTH) {
       if (ps && !quiet) this.m.log.warn?.(`[match ${this.m.roomCode}] meta dispatch depth limit (${hook})`);
       return ev;
@@ -209,7 +239,8 @@ export class EffectDispatcher {
       const reg = this.registry;
       // onRefresh: the board / hand chess as they stood when the refresh happened, taken before any handler runs — a
       // chess gained during this dispatch (贾维's gift on the 6th refresh, the elite its copy completes) was not there
-      // when it happened: its 刷新时 特质 waits for the next manual refresh (拉普兰德's "本回合首次主动刷新", PR #196)
+      // when it happened: its 刷新时 特质 waits for the next manual refresh (拉普兰德's "本回合首次主动刷新", PR #196);
+      // the copies that elite consumed were there, and still fire (GitHub #627)
       const refreshed = hook === 'onRefresh' ? refreshPieces(ps) : null;
       // 0. onPrice: the priced chess's own 特质 first — 购买价格为N defines the price every other modifier acts on
       if (hook === 'onPrice') this._garrisons(ps, hook, ev);
@@ -218,7 +249,7 @@ export class EffectDispatcher {
       // 2. band
       if (ps.bandId) {
         const key = `band:${ps.bandId}`;
-        const h = reg.get(key);
+        const h = reg.get(key) ?? reg.get(`band:${this.m.gd.band(ps.bandId)?.effectRef}`);
         if (h) this._call(ps, key, h, hook, { kind: 'band', key, bandId: ps.bandId, band: this.m.gd.band(ps.bandId) }, ev);
       }
       // 3. bonds
@@ -237,7 +268,7 @@ export class EffectDispatcher {
         const pairs = [];
         for (const holder of ownedChess(ps)) for (const it of holder.items || []) pairs.push([holder, it]);
         for (const [holder, it] of pairs) {
-          const key = `item:${itemKey(it.id)}`;
+          const key = `item:${itemKey(this.m.gd.item(it.id)?.effectRef ?? it.id)}`;
           const h = reg.get(key);
           if (h && stillEquipped(ps, holder, it)) this._call(ps, key, h, hook, { kind: 'item', key, piece: it, holder, item: this.m.gd.item(it.id) }, ev);
         }
@@ -288,8 +319,10 @@ export class EffectDispatcher {
 
   /**
    * Run the owned chess's garrisons of `hook`. `refreshed` (onRefresh): the board / hand chess taken when the dispatch
-   * began (refreshPieces) — each runs if it is still on the board or in the hand (where it stands now); a chess gained
-   * meanwhile does not run, nor one that left (sold, consumed by a merge, moved to the 临时整备区).
+   * began (refreshPieces) — each runs if it is still on the board or in the hand (where it stands now), or, consumed by
+   * a merge during this dispatch (`mergedInto`: 贾维's gift completing the elite), where it stood — it witnessed the
+   * refresh (GitHub #627: two 拉普兰德 merged by the round's first refresh still add their layers); a chess gained
+   * meanwhile does not run, nor one that left otherwise (sold, moved to the 临时整备区).
    */
   _garrisons(ps, hook, ev, refreshed = null) {
     const gd = ps.gd || this.m.gd;
@@ -317,9 +350,10 @@ export class EffectDispatcher {
     }
     if (hook !== 'onRoundStart' && hook !== 'onPrepEnd' && hook !== 'onRefresh') return;
     if (refreshed) {
-      for (const piece of refreshed) {
+      for (const { piece, area } of refreshed) {
         const loc = ps.find(piece.uid);
         if (loc && loc.piece === piece && (loc.area === 'board' || loc.area === 'hand')) run(piece, loc.area);
+        else if (!loc && piece.mergedInto != null) run(piece, area);
       }
       return;
     }
@@ -367,7 +401,7 @@ export class EffectDispatcher {
   /** Item-specific hook (onEquip / onArt / onDestroy) for one item piece. */
   dispatchItem(ps, item, holder, hook, ev) {
     if (!item || this.depth >= MAX_DEPTH) return ev;
-    const key = `item:${itemKey(item.id)}`;
+    const key = `item:${itemKey(this.m.gd.item(item.id)?.effectRef ?? item.id)}`;
     const h = this.registry.get(key);
     if (!h) return ev;
     this.depth++;
@@ -389,7 +423,7 @@ export class EffectDispatcher {
     this.depth++;
     try {
       const ctx = makeCtx(this.m, ps, { ...source, key }, hook, ev);
-      try { fn.call(h, ctx, ev); } catch (e) { this._report(key, hook, e); }
+      try { if (this._allowScript(h,hook)) fn.call(h, ctx, ev); } catch (e) { this._report(key, hook, e); }
     } finally {
       this.depth--;
     }
@@ -405,11 +439,11 @@ function ownedChess(ps) {
   return out;
 }
 
-/** The board chess (reading order) then the hand chess — the pieces whose 刷新时 特质 a refresh runs (onRefresh). */
+/** The board chess (reading order) then the hand chess, with where each stood — the pieces whose 刷新时 特质 a refresh runs (onRefresh). */
 function refreshPieces(ps) {
   const out = [];
-  for (const { piece } of boardOrder(ps.board)) if (piece.kind === 'chess') out.push(piece);
-  for (const p of ps.hand) if (p && p.kind === 'chess') out.push(p);
+  for (const { piece } of boardOrder(ps.board)) if (piece.kind === 'chess') out.push({ piece, area: 'board' });
+  for (const p of ps.hand) if (p && p.kind === 'chess') out.push({ piece: p, area: 'hand' });
   return out;
 }
 
@@ -453,11 +487,22 @@ function grantSpeaker(gd, source) {
  * @param {string} hook
  * @param {object|null} [ev] the event being dispatched (onPrice: ctx.modifyPrice / ctx.setPrice edit ev.price)
  */
-export function makeCtx(m, ps, source, hook, ev = null) {
+export function makeCtx(m, ps, source, hook, ev = null, preview = null) {
   // the player's view of the data: its slotted 自选 slots are its operators (0.2.0, player/diy.js) — chessRecord,
   // pieceBonds, a strategy's / 特质's bond and tier reads see the operator; the match's GameData for everyone else
   const gd = ps.gd || m.gd;
+  const rng = preview?.rng ?? m.rngMeta;
+  // The roll helpers only read pools/data; shadow their RNG receiver without replacing the live match stream.
+  const rolls = preview ? Object.assign(Object.create(m), { rngMeta: rng }) : m;
   const view = (p) => (p ? ps.pieceView(p) : null);
+  // the piece whose per-round counters a handler reads: an owned one, or the handler's own source copy that a merge
+  // consumed during this refresh dispatch — it still witnessed the refresh (EffectDispatcher._garrisons, GitHub #627)
+  const counted = (uid) => {
+    const l = ps.find(uid);
+    if (l) return l.piece;
+    const p = source && source.piece;
+    return p && p.uid === uid && p.mergedInto != null ? p : null;
+  };
   const ctx = {
     hook,
     source,
@@ -472,7 +517,7 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     isCoop: !m.isSolo,
     data: gd.raw,
     gd,
-    rng: m.rngMeta,
+    rng,
     log: (msg) => m.log.info?.(`[meta ${m.roomCode}] ${ps.playerId}: ${msg}`),
 
     // ---- reads
@@ -524,8 +569,8 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     incCounter: (k, n = 1) => { if (typeof k !== 'string' || !Number.isFinite(n)) return 0; ps.counters[k] = (Number.isFinite(ps.counters[k]) ? ps.counters[k] : 0) + n; return ps.counters[k]; },
     /** Per-piece counter of the current round (0 in a new round / for a new piece, an elite merged this round included —
      *  PlayerState.pieceRoundCount). */
-    pieceCounter: (uid, k) => { const l = ps.find(uid); return l ? ps.pieceRoundCount(l.piece, k) : 0; },
-    incPieceCounter: (uid, k, n = 1) => { const l = ps.find(uid); return l ? ps.bumpPieceRoundCount(l.piece, k, n) : 0; },
+    pieceCounter: (uid, k) => { const p = counted(uid); return p ? ps.pieceRoundCount(p, k) : 0; },
+    incPieceCounter: (uid, k, n = 1) => { const p = counted(uid); return p ? ps.bumpPieceRoundCount(p, k, n) : 0; },
 
     // ---- economy
     addFunds: (n, reason = '') => ps.addFunds(finiteInt(n), { reason }),
@@ -589,14 +634,14 @@ export function makeCtx(m, ps, source, hook, ev = null) {
         return typeof opts.filter === 'function' ? !!opts.filter(id) : true;
       };
       const extra = typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null;
-      return ps.pool.roll(m.rngMeta, { maxTier: Number.isInteger(opts.maxTier) ? opts.maxTier : 6, tier: Number.isInteger(opts.tier) ? opts.tier : null, filter: f, extra, ignoreCounts: opts.ignoreCounts === true });
+      return ps.pool.roll(rng, { maxTier: Number.isInteger(opts.maxTier) ? opts.maxTier : 6, tier: Number.isInteger(opts.tier) ? opts.tier : null, filter: f, extra, ignoreCounts: opts.ignoreCounts === true });
     },
-    rollItem: (opts = {}) => m.rollItemId({ ...opts, player: ps }),
+    rollItem: (opts = {}) => rolls.rollItemId({ ...opts, player: ps }),
     /**
      * Roll a choices.json pool: equip pools → { kind: 'item', id }; chess pools (items / weighted / shopEligible with
      * tier, minTier, bond, golden) → { kind: 'chess', id, golden } (a pool chess needs a free copy). null when empty.
      */
-    rollPool: (poolId, opts = {}) => m.rollPool(poolId, {
+    rollPool: (poolId, opts = {}) => rolls.rollPool(poolId, {
       shopLevel: ps.shop.level,
       // a shared-pool draw also takes the player's 自选 stock, its bonds read through the player's view (rollChess)
       extra: typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null, chessOf: (id) => gd.chess(id),
@@ -638,11 +683,15 @@ export function makeCtx(m, ps, source, hook, ev = null) {
       ps._detach(l);
       if (l.piece.kind === 'chess') {
         ps.removeTokensOf(l.piece.uid);
-        for (const it of l.piece.items || []) ps.stow(it, { allowTemp: true });
+        const lost = [];
+        for (const it of l.piece.items || []) {
+          if (!ps.stow(it, { allowTemp: true })) lost.push(it);
+        }
         l.piece.items = [];
         ps.returnCopies(l.piece);
         ps.checkItemMerges(); // the returned equipment auto-merges like any gain
-      }
+        for (const it of lost) ps.releaseItemStock(it);
+      } else if (l.piece.kind === 'item') ps.releaseItemStock(l.piece);
       ps.recompute();
       return true;
     },
@@ -704,5 +753,10 @@ export function makeCtx(m, ps, source, hook, ev = null) {
     teammates: () => m.alivePlayers().filter((p) => p !== ps).map((p) => makeCtx(m, p, source, hook, null)),
     player: (playerId) => { const p = m.players.get(playerId); return p && p.alive ? makeCtx(m, p, source, hook, null) : null; },
   };
-  return ctx;
+  if (!preview) return ctx;
+  const forPlayer = (p) => makeCtx(m, preview.players.get(p.playerId) || p, source, hook, null, preview);
+  return previewContext(ctx, preview, {
+    teammates: () => m.alivePlayers().filter((p) => p.playerId !== ps.playerId).map(forPlayer),
+    player: (id) => { const p = m.players.get(id); return p?.alive ? forPlayer(p) : null; },
+  });
 }

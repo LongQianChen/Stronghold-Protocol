@@ -73,7 +73,7 @@
 
 import { canTargetEnemy, enemyStealthed, extendedGrid } from '../../../targeting.js';
 import { normDir, rotateOffset, localOrder, localBefore } from '../../../dir.js';
-import { bodyKeys, bodyInKeys } from '../../../body.js';
+import { bodyKeys, bodyInRange } from '../../../body.js';
 import { applyRedirectCut, isHpLoss, redirectShare } from '../../../damage.js';
 import { BOSS_ROW_OFFSET } from '../../../constants.js';
 import { GEO } from '../../../../../shared/constants.js';
@@ -293,11 +293,15 @@ function raidBoard(battle, r, c) {
 
 /**
  * Landing tile [row, col] of a jump to enemy `e`, or null: a tile from which the member's range (`reach`, raidReach)
- * covers the enemy's body (a huge enemy: any tile it occupies — body.js), within RAID_SEARCH tiles (Chebyshev) of the
- * enemy, inside the field rect and on a board of its field (Battle.onFieldBoard — "再部署" goes where a player of the
- * field deploys: its own board or a teammate's half when both halves are taken, the two-helper 联防 field and a pair
- * field — the owner's decision of 2026-10-07, DESIGN §26.1; never a boss field's hand row 0 or 临时整备区 row 1, both
- * inside BOSS_RECT and buildable high ground, nor the empty other half of the one-helper 联防 map or a single-mode boss field;
+ * covers the enemy's body (a huge enemy: any tile it occupies — body.js) — and is within RAID_SEARCH tiles (Chebyshev) of
+ * that body, measured as the gap to the body's nearest tile, never to the tile the enemy's position rounds to: the
+ * anchor tile is not the body, and a huge leader's hitArea offset plus its route anchor split one body differently
+ * (community report of 2026-10-13), which moved the window and, in the hidden round's leader alone, lost every landing
+ * on the far side of that body — inside the field rect and on a board of its field (Battle.onFieldBoard — "再部署" goes
+ * where a player of the field deploys: its own board or a teammate's half when both halves are taken, the two-helper
+ * 联防 field and a pair field — the owner's decision of 2026-10-07, DESIGN §26.1; never a boss field's hand row 0 or
+ * 临时整备区 row 1, both inside BOSS_RECT and buildable high ground, nor the empty other half of the one-helper 联防
+ * map or a single-mode boss field;
  * community reports of 2026-10-06, items 40 and 16.3: a ranged member landed on the 临时整备区 row of a solo leader
  * round, and on the right half of the one-helper 联防 map). #475 additionally opens the empty deployment half only
  * in multiplayer boss/hidden battles (raidBoard, approved 2026-10-10, §29.13). The tile must be one that the member's
@@ -318,13 +322,23 @@ function raidTile(battle, u, e, reach) {
   const er = Math.round(e.y), ec = Math.round(e.x);
   const ranged = u.def?.position === 'RANGED';
   const body = bodyKeys(e);
+  // The window is measured to the tiles the enemy occupies, never to the tile its position rounds to: a huge unit's
+  // hitArea offset and its route anchor split the same body differently (enemy_9021_acduml dx 0 from col 10 and
+  // enemy_9021_acduml_2 dx 1 from col 9 are one body, cols 8–12), and the anchor-relative window dropped every landing
+  // on the far side of that body — the hidden round's leader then stopped being jumped to at all.
+  let bR0 = Infinity, bR1 = -1, bC0 = Infinity, bC1 = -1;
+  for (const k of body) {
+    const br = Math.floor(k / COLS), bc = k - br * COLS;
+    bR0 = Math.min(bR0, br); bR1 = Math.max(bR1, br); bC0 = Math.min(bC0, bc); bC1 = Math.max(bC1, bc);
+  }
   const path = !ranged && u.s.blockCnt > 0 ? battle.groundPathTiles() : null;
   let best = null, bp = 2, bd = Infinity, bo = null;
   for (const k of body) {
     const br = Math.floor(k / COLS), bc = k - br * COLS;
     for (let i = 0; i < reach.length; i += 2) {
       const r = br - reach[i], c = bc - reach[i + 1], dr = r - er, dc = c - ec;
-      if (Math.abs(dr) > RAID_SEARCH || Math.abs(dc) > RAID_SEARCH) continue;
+      const wr = Math.min(Math.max(r, bR0), bR1) - r, wc = Math.min(Math.max(c, bC0), bC1) - c;   // gap to the body
+      if (Math.abs(wr) > RAID_SEARCH || Math.abs(wc) > RAID_SEARCH) continue;
       if (!battle.grid.inRect(r, c) || !raidBoard(battle, r, c) || !battle.grid.canStand(r, c, { ranged }) || battle.isReservedTile(r, c)) continue;
       const t = r * COLS + c;
       const p = path && battle.grid.tile(r, c).pass === 'ALL' && (path.has(t) || body.includes(t)) ? 0 : 1;   // its block applies
@@ -356,7 +370,7 @@ function raidGroundEnemy(u, e) {
 function raidStealthInRange(battle, u) {
   const keys = u.rangeKeySet || u.rangeKeys;
   if (!keys) return false;
-  for (const e of battle.enemies) if (e.alive && enemyStealthed(e) && raidGroundEnemy(u, e) && bodyInKeys(e, keys)) return true;
+  for (const e of battle.enemies) if (e.alive && enemyStealthed(e) && raidGroundEnemy(u, e) && bodyInRange(e, keys)) return true;
   return false;
 }
 

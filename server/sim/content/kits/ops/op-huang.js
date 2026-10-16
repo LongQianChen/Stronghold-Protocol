@@ -121,7 +121,7 @@ export default {
             // 维持技能状态: a hard control ends it early (PRTS 游戏数据基础 "眩晕、冻结等硬性控制会提前结束")
             if (!unit.canAct || unit.s.flags.sleep) { skill.end('interrupted'); return; }
             s.t += dt;
-            while (s.k < S3_CYCLES && s.t >= s.k + 1 - 1e-9) {
+            while (s.k < S3_CYCLES && s.t >= s.k + 1 - 1e-9) { // loop-cap: constant cycle count and a one-second step
               s.k++;
               setRamp(battle, unit, Math.min(1, s.k / Math.max(1e-6, skill.duration - S3_RAMP_END)));
               if (s.k >= S3_CYCLES) { finish(battle, unit, s); return; }

@@ -45,7 +45,8 @@ export default withDefaults({
             // 蓄力额外效果：特性效果在技能期间继续生效 (the profession removes its own guard buff when a skill starts; the
             // kit trait's canAttack keeps the trait's 不攻击)
             if (unit.mem.billroCharged) battle.addBuff(unit, { key: 'billro:s1guard', mods: { defPct: num(unit.profile?.guardDef, 2), resFlat: num(unit.profile?.guardRes, 20) } });
-            battle.fx('shell', { x: unit.x, y: unit.y, id: unit.id });
+            // (`charged`: display only — the client's 蓄力 sand armour, render/vfx/skillfx.js)
+            battle.fx('shell', { x: unit.x, y: unit.y, id: unit.id, charged: unit.mem.billroCharged || undefined });
           },
           onEnd({ battle, unit }) { unit.mem.billroCharged = false; battle.removeBuff(unit, 'billro:s1guard'); },
         }),
@@ -57,7 +58,7 @@ export default withDefaults({
             unit.mem.billroRamp = 0;
             unit.mem.billroMarked = new Set();
             battle.addBuff(unit, { key: 'billro:s3atk', mods: { atkPct: 0 } });
-            battle.fx('devour', { x: unit.x, y: unit.y, id: unit.id });
+            battle.fx('devour', { x: unit.x, y: unit.y, id: unit.id, charged: unit.mem.billroCharged || undefined });
           },
           onTick({ unit, dt }) { // 攻击力逐渐增至+N%: PRTS 备注 "从+0%开始在20秒内线性增加，攻击力每1秒更新1次"
             unit.mem.billroRamp = (unit.mem.billroRamp ?? 0) + dt;
@@ -84,7 +85,7 @@ export default withDefaults({
           const charged = isCharged(skill);
           unit.mem.billroCharged = charged;
           if (charged) battle.addBuff(unit, { key: 'billro:charged', mods: { atkPct: num(bb.atk, 0.1) } });
-          battle.fx(charged ? 'sandChainsCharged' : 'sandChains', { x: unit.x, y: unit.y, id: unit.id });
+          battle.fx(charged ? 'sandChainsCharged' : 'sandChains', { x: unit.x, y: unit.y, id: unit.id, charged: charged || undefined });
         },
         onEnd({ battle, unit }) { unit.mem.billroCharged = false; battle.removeBuff(unit, 'billro:charged'); },
       },

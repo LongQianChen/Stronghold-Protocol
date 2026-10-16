@@ -24,19 +24,30 @@ import { guardDefaultFetch } from './env-proxy.mjs';
  * @param {MirrorPolicy} [o.mirrorPolicy] shared invocation-wide mirror circuit breaker
  * @param {number} [o.timeoutMs]
  * @param {number} [o.backoffMs]
+ * @param {import('./source-verifier.mjs').SourceVerifier} [o.verifier]
  * @returns {Promise<any>} parsed JSON
  */
-export async function cachedJson({ cacheFile, url, refresh = false, offline = false, log = console.log, source = 'direct', proxyPrefix, fetchImpl = globalThis.fetch, mirrorPolicy, timeoutMs = 180000, backoffMs = 500 }) {
+export async function cachedJson({ cacheFile, url, refresh = false, offline = false, log = console.log, source = 'direct', proxyPrefix, fetchImpl = globalThis.fetch, mirrorPolicy, timeoutMs = 180000, backoffMs = 500, verifier }) {
+  if (verifier && offline) throw new Error('source verification is incompatible with --offline');
+  let verifiedSource;
+  if (verifier) {
+    verifiedSource = await verifier.resolve(url);
+    if (!verifiedSource) throw new Error(`source index missing ${url}`);
+  }
   // Same rule as the file downloader: a configured proxy must not be skipped.
   const fetchFn = guardDefaultFetch(fetchImpl);
   if (!refresh || offline) {
-    try { return JSON.parse(await readFile(cacheFile, 'utf8')); } catch (e) {
+    try {
+      const buf = await readFile(cacheFile);
+      if (verifier) verifier.verify(buf, verifiedSource);
+      return JSON.parse(buf.toString('utf8'));
+    } catch (e) {
       if (offline) throw new Error(`--offline: cached index ${cacheFile} is missing or corrupt (${e.message}); run once online`);
     }
   }
   const network = mirrorPolicy ?? new MirrorPolicy({ source, proxyPrefix, log });
   let lastErr = null;
-  for (const src of network.urls(url)) {
+  for (const src of network.urls(verifiedSource?.pinnedUrl ?? url)) {
     if (network.skip(src)) continue;
     const attempts = network.isProxy(src) ? 1 : 3;
     for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -53,7 +64,9 @@ export async function cachedJson({ cacheFile, url, refresh = false, offline = fa
           }
           throw new Error(`HTTP ${res.status}`);
         }
-        text = (await network.readBody(src, res)).toString('utf8');
+        const buf = await network.readBody(src, res);
+        if (verifier) verifier.verify(buf, verifiedSource);
+        text = buf.toString('utf8');
         json = JSON.parse(text);
       } catch (e) {
         lastErr = e;
@@ -76,7 +89,7 @@ export async function cachedJson({ cacheFile, url, refresh = false, offline = fa
 /**
  * Load audio_data.json (official), charword_table.json (official voice slots) and Ark-Models models_data.json.
  * @param {string} root project root
- * @param {{refresh?:boolean, offline?:boolean, log?:(m:string)=>void, source?:'direct'|'mirror', proxyPrefix?:string, fetchImpl?:typeof fetch, mirrorPolicy?:MirrorPolicy}} [opts]
+ * @param {{refresh?:boolean, offline?:boolean, log?:(m:string)=>void, source?:'direct'|'mirror', proxyPrefix?:string, fetchImpl?:typeof fetch, mirrorPolicy?:MirrorPolicy, verifier?:import('./source-verifier.mjs').SourceVerifier}} [opts]
  * @returns {Promise<{ audioData: any, modelsData: any, charword: any }>}
  */
 export async function loadIndexes(root, opts = {}) {

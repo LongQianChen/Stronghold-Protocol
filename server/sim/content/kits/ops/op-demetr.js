@@ -58,6 +58,7 @@
 // Melee, ground-only (data canHitFly false: no anti-air); ground enemies target him normally (no 起飞 / 迷彩 / 隐匿).
 
 import { num, talentBb, traitBb, skillRec, up, onHitBy, toggleBuff, once } from '../shared/tier1.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { isElite } from '../shared/tier6.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 
@@ -208,7 +209,11 @@ export default {
             }
             if (battle.time + 1e-9 < st.next) return;
             // no target (or he cannot act): the timer keeps counting — the next try at its next interval
-            if (!flyTo(battle, unit, st)) while (st.next <= battle.time + 1e-9) st.next += iv;
+            if (!flyTo(battle, unit, st)) {
+              const step = stepOf('attack@demetr_s3[target_timer].interval', iv, 0.5);
+              let guard = 0;
+              while (st.next <= battle.time + 1e-9 && guard++ < STEP_PER_TICK) st.next += step; // loop-cap: stepOf interval
+            }
           },
           onEnd({ battle, unit }) {
             const st = unit.mem.demetrS3;

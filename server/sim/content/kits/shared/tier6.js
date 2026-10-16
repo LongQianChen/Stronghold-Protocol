@@ -14,7 +14,8 @@
 //  1_15 盟约·辅助干员  every damage she deals attaches all three elements, neural → burn → apoptosis (see pithst).
 //  6_01 蕾缪安   locks every 0.5 s while an enemy is in range (ends early — and bombs — when the range empties);
 //                the shells then follow one every 0.3 s (PRTS), each landing 0.3 s after it is fired [ASSUMED flight];
-//                the 1.5 radius (PRTS "碰撞箱判定") is read as the centre distance like every engine radius; knocked
+//                the 1.5 radius (PRTS "碰撞箱判定") takes an enemy whose 0.1 collider overlaps it
+//                (foesInColliderRadius, 0.3.0); the 0.8 inner ring stays a centre distance [ASSUMED]; knocked
 //                out / withdrawn after the end, she fires no further shell (those already in the air still land);
 //                "wanted" needs a continuous 8 s stay in some 拉特兰 range; wanted targets are added to her range tiles.
 //  6_02 圣聆初雪 "诱导" (ba.attract 无法被阻挡并向目标位置移动) = the engine `attract` status for attract_time: the enemy
@@ -109,6 +110,7 @@
 // `skill.addTriggerRange`; element-type damage skips the `hit` hook, so element (损伤) amplification uses the
 // `elementHit` hook (`onElementHit`: × dmg.mul before the gauge fill).
 
+import { textCount, textFinite } from '../../../../../shared/plugins/textNumber.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
 import { COLS, ROWS, PULL_STOP_RADIUS } from '../../../constants.js';
 import { hasHp } from '../../../damage.js';
@@ -143,7 +145,8 @@ function moduleBb(chess) {
   }
   return out;
 }
-const parseN = (text, re, d) => { const m = String(text ?? '').match(re); return m ? +m[1] : d; };
+/** Finite capture. Counts go through textCount; a percent or a duration stays uncapped. */
+const parseN = (text, re, d) => textFinite(text, re, d);
 const live = (u) => !!u && u.alive && u.deployed && !u.removed && !u.hidden;
 const isElite = (e) => !!e && (e.isBoss || e.def?.rank === 'ELITE' || e.def?.rank === 'BOSS');
 const hasBond = (u, id) => !!(u && u.def && Array.isArray(u.def.bonds) && u.def.bonds.includes(id));
@@ -278,7 +281,7 @@ function aura(battle, unit, period, fn) {
 }
 
 export {
-  num, bv, tbb, tdesc, moduleBb, parseN, live, isElite, hasBond, keyOf, opsOf, ANY, enemiesIn, isTok, onDefaultSkill,
+  num, bv, tbb, tdesc, moduleBb, parseN, textCount, live, isElite, hasBond, keyOf, opsOf, ANY, enemiesIn, isTok, onDefaultSkill,
   selectedSkill, batOf, instantKind, skillGridOf, ABNORMAL, hasAbnormal, cleanseAbnormal, AROUND8, N4, WHOLE_FIELD,
   bstate, freeTiles, bestTile, onElementHit, elementDmg, pullToward, aura,
 };

@@ -50,12 +50,15 @@ test('a duplicate draft card becomes unavailable when the preceding player exhau
   assert.equal(cardPickable({ turnPid: 'p_1', pickOf: new Map() }, card, { myId: 'p_1', solo: false }), false);
   assert.ok(m.pickCard(b, 2).ok); m.dispose();
 });
-test('measured operator capacities and exceptions: co-op doubles shared stock, never private DIY stock', () => {
+test('measured operator capacities and exceptions: co-op doubles shared stock and each player\'s private 自选 stock (#650)', () => {
   const solo = new GameData(DATA, 'mode_single_normal'), coop = new GameData(DATA, 'mode_multi_normal');
   for (const [name, n] of [['普罗旺斯', 10], ['跃跃', 10], ['风丸', 8], ['蒂比', 12], ['哈洛德', 14], ['缪尔赛思', 5]]) {
     assert.equal(solo.poolCopies(byName(name)), n, name); assert.equal(coop.poolCopies(byName(name)), 2 * n, name);
   }
-  assert.equal(coop.poolCopies('chess_char_6_diy1_a'), solo.poolCopies('chess_char_6_diy1_a'));
+  // the maintainer's decision of 2026-10-15 (GitHub #650): the 自选 stock doubles too, or a 自选 operator is diluted
+  for (const [slot, n] of [['chess_char_5_diy1_a', 8], ['chess_char_5_diy2_a', 8], ['chess_char_6_diy1_a', 5], ['chess_char_6_diy2_a', 5]]) {
+    assert.equal(solo.poolCopies(slot), n, slot); assert.equal(coop.poolCopies(slot), 2 * n, slot);
+  }
   assert.equal(solo.itemPoolCopies(PACK), 2); assert.equal(coop.itemPoolCopies(PACK), 2);
 });
 
@@ -79,9 +82,8 @@ test('shared equipment occupancy includes hand/equipped/elite, never displayed o
   a.pushItemOffer([PACK]); assert.equal(m.itemPool.left(PACK), 2, 'display reserves nothing');
   const x = a.acquireItem(PACK), y = b.acquireItem(PACK); assert.ok(x && y);
   assert.equal(m.itemPool.left(PACK), 0);
-  const money = a.funds;
-  assert.equal(a.buy(slot).error, 'SOLD_OUT'); assert.equal(a.funds, money); assert.equal(a.shop.slots[slot].sold, false);
-  assert.equal(a.pickReward(0).error, 'SOLD_OUT'); assert.equal(a.offers.length, 1);
+  // Buying or claiming those displayed cards while empty is the debt test below. This one keeps them on screen
+  // and checks occupancy: equipping and selling do not free stock.
   const id = [...m.pool.entries.keys()].find(id => m.gd.tierOf(id) === 1), owner = give(m, a, id);
   assert.ok(a.equip(x.uid, owner.uid).ok); assert.equal(m.itemPool.held(PACK), 2);
   assert.ok(a.sell(owner.uid).ok); assert.equal(m.itemPool.held(PACK), 2, 'selling returns equipment to hand, not to stock');
@@ -93,6 +95,109 @@ test('shared equipment occupancy includes hand/equipped/elite, never displayed o
   assert.equal(m.itemPool.held(PACK), 2, 'one upgraded item occupies two normal copies');
   assert.ok(a.destroy(gold.uid).ok); assert.equal(m.itemPool.left(PACK), 2);
   checkInvariants(m); m.dispose();
+});
+
+test('already displayed equipment stays buyable after stock runs out; release repays the debt first', () => {
+  const h = makeMatch({ mode: 'coop', humans: 2, seed: 11, fake: true }).start().toPrep();
+  const m = h.m, a = h.ps('p_0'), b = h.ps('p_1');
+  assert.equal(m.itemPool.cap(PACK), 2);
+  a.funds = 50; b.funds = 50;
+  const slotA = a.shop.slots.findIndex((s) => s?.kind === 'item');
+  const slotB = b.shop.slots.findIndex((s) => s?.kind === 'item');
+  assert.ok(slotA >= 0 && slotB >= 0);
+  a.shop.slots[slotA] = { kind: 'item', id: PACK, basePrice: 1, sold: false, frozen: true };
+  b.shop.slots[slotB] = { kind: 'item', id: PACK, basePrice: 1, sold: false, frozen: true };
+  a.pushItemOffer([PACK]);
+  assert.equal(a.offers[0].slots[0].id, PACK);
+  assert.equal(m.itemPool.left(PACK), 2, 'display reserves nothing');
+  assert.ok(b.acquireItem(PACK));
+  assert.ok(b.acquireItem(PACK), 'the second copy merges into the golden and fills the cap');
+  assert.equal(m.itemPool.left(PACK), 0);
+  assert.equal(m.itemPool.debtOf(PACK), 0);
+  const funds = a.funds;
+  assert.ok(a.buy(slotA).ok, 'the displayed shop card stays purchasable');
+  assert.equal(a.funds, funds - 1);
+  assert.equal(a.shop.slots[slotA].sold, true);
+  assert.equal(a.buy(slotA).error, 'SOLD_OUT', 'the same card cannot be bought twice');
+  assert.equal(a.funds, funds - 1);
+  assert.equal(m.itemPool.debtOf(PACK), 1);
+  assert.equal(m.itemPool.rawLeft(PACK), -1);
+  assert.equal(m.itemPool.left(PACK), 0);
+  const normal = [...a.hand, ...a.temp].find((p) => p && m.gd.baseIdOf(p.id) === PACK);
+  assert.ok(normal && !m.gd.isGolden(normal.id));
+  assert.equal(a.upgradeItem(normal), false, '整备 stays limited once nothing is free');
+  assert.equal(m.gd.isGolden(normal.id), false);
+  assert.equal(a.acquireItem(PACK), null, 'a random grant is still refused');
+  assert.equal(m.itemPool.debtOf(PACK), 1);
+  assert.ok(a.pickReward(0).ok, 'the displayed reward stays claimable');
+  assert.equal(a.offers.length, 0);
+  // The reward completes a's pair, so the two normals become one golden: occupancy +1, the same as the incoming need.
+  assert.equal(m.itemPool.debtOf(PACK), 2);
+  assert.equal(m.itemPool.held(PACK), 4);
+  assert.equal(m.itemPool.left(PACK), 0);
+  checkInvariants(m);
+  for (let i = 0; i < 40; i++) {
+    assert.notEqual(m.pool.rollItem(m.rngShop, 6, m.itemPool), PACK);
+    assert.notEqual(m.rollItemId({ pool: 'pool_equip_normal', shopLevel: 6 }), PACK);
+  }
+  const beforeB = b.funds;
+  assert.ok(b.buy(slotB).ok, 'the other player\'s displayed card is its own purchase');
+  assert.equal(b.funds, beforeB - 1);
+  assert.equal(b.buy(slotB).error, 'SOLD_OUT');
+  // b already holds the golden, so this normal does not merge.
+  assert.equal(m.itemPool.debtOf(PACK), 3);
+  assert.equal(m.itemPool.held(PACK), 5);
+  checkInvariants(m);
+  const carrierId = [...m.pool.entries.keys()].find((id) => m.gd.tierOf(id) === 1);
+  const carrier = give(m, b, carrierId);
+  const worn = [...b.hand, ...b.temp].find((p) => p && p.kind === 'item' && !m.gd.isGolden(p.id) && m.gd.baseIdOf(p.id) === PACK);
+  assert.ok(b.equip(worn.uid, carrier.uid).ok);
+  assert.equal(m.itemPool.debtOf(PACK), 3, 'equipping moves the copy; it does not repay');
+  assert.ok(b.sell(carrier.uid).ok);
+  assert.equal(m.itemPool.held(PACK), 5, 'selling returns equipment to the hand');
+  assert.equal(m.itemPool.debtOf(PACK), 3);
+  const returned = [...b.hand, ...b.temp].find((p) => p && p.kind === 'item' && !m.gd.isGolden(p.id) && m.gd.baseIdOf(p.id) === PACK);
+  const tempAt = b.temp.findIndex((p) => p == null);
+  assert.ok(tempAt >= 0);
+  const handAt = b.hand.indexOf(returned);
+  assert.ok(handAt >= 0);
+  b.hand[handAt] = null;
+  b._putTemp(tempAt, returned);
+  b.resolveTemp();
+  assert.equal(m.itemPool.debtOf(PACK), 2, 'a temp wipe repays one copy and leaves the rest of the debt');
+  assert.equal(m.itemPool.held(PACK), 4);
+  assert.equal(m.itemPool.left(PACK), 0);
+  checkInvariants(m);
+  const aGold = [...a.hand, ...a.temp].find((p) => p && m.gd.isGolden(p.id) && m.gd.baseIdOf(p.id) === PACK);
+  assert.ok(a.destroy(aGold.uid).ok);
+  assert.equal(m.itemPool.debtOf(PACK), 0);
+  assert.equal(m.itemPool.held(PACK), 2);
+  assert.equal(m.itemPool.left(PACK), 0, 'stock stays empty until the debt is cleared and a copy is actually free');
+  checkInvariants(m);
+  b.eliminate(1);
+  assert.equal(m.itemPool.debtOf(PACK), 0);
+  assert.equal(m.itemPool.held(PACK), 0);
+  assert.equal(m.itemPool.left(PACK), 2);
+  assert.equal(m.itemPool.canGain(PACK), true);
+  checkInvariants(m);
+  m.dispose();
+});
+
+test('a displayed golden reward records only the copies that did not fit', () => {
+  const h = makeMatch({ mode: 'coop', humans: 2, seed: 11, fake: true }).start().toPrep();
+  const m = h.m, a = h.ps('p_0'), b = h.ps('p_1');
+  const gold = m.gd.item(PACK).goldenId || m.gd.item(PACK).upgradeChessId;
+  assert.ok(gold && m.gd.isGolden(gold));
+  assert.equal(m.itemPool.need(gold), 2);
+  assert.ok(a.pushItemOffer([gold]), 'a golden still fits while both copies are free');
+  assert.ok(b.acquireItem(PACK));
+  assert.equal(m.itemPool.left(PACK), 1);
+  assert.ok(a.pickReward(0).ok);
+  assert.equal(m.itemPool.debtOf(PACK), 1);
+  assert.equal(m.itemPool.held(PACK), 3);
+  assert.equal(m.itemPool.left(PACK), 0);
+  checkInvariants(m);
+  m.dispose();
 });
 
 test('整备 does not upgrade a purchase that would exceed the shared item cap', () => {

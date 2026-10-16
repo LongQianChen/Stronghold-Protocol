@@ -1,9 +1,10 @@
 // server/sim/targeting.js — range tests, target filters and priorities (DESIGN §3, §5.5).
 //
 // Grid ranges: `[dRow, dCol]` offsets relative to facing RIGHT, rotated by the unit's direction (sim/dir.js: RIGHT
-// (dr,dc), UP (dc,−dr), LEFT (−dr,−dc), DOWN (−dc,dr); row 0 = bottom). An enemy is in range when the tile containing
-// it (rounded half to even, detmath roundHalfEven; PRTS 作战机制 四舍六入五成双) is one of the absolute range tiles — a huge enemy (巨型单位) when any tile its hit rectangle
-// occupies is (body.js; user playtest #5 item 10). `rangeExtend` (ability_range_forward_extend) adds N tiles
+// (dr,dc), UP (dc,−dr), LEFT (−dr,−dc), DOWN (−dc,dr); row 0 = bottom). An enemy is in range when its 0.1 collider
+// overlaps one of the absolute range tiles (body.js colliderKeys, constants.js ENEMY_COLLIDER_RADIUS — the owner's
+// decision of 2026-10-14) — a huge enemy (巨型单位) when its hit rectangle does (body.js; user playtest #5 item 10); a
+// tile rule takes the tile containing it (rounded half to even, detmath roundHalfEven; PRTS 作战机制 四舍六入五成双). `rangeExtend` (ability_range_forward_extend) adds N tiles
 // past the furthest cell of every row, along +dCol BEFORE rotating (DESIGN §3).
 // Operator priority: (1) enemies it blocks (every blocker, ranged ones on melee tiles included — user playtest #6
 // follow-up "阻挡了就一定要能打到"; Battle.blockedTargets; a healer's heal attack picks injured allies instead, blocking
@@ -85,7 +86,9 @@ export function canTargetEnemy(attacker, e, profile) {
   const f = e.s.flags;
   if (f.untargetable || (f.sleep && !(profile && profile.hitSleep))) return false;
   if (f.stealth && enemyStealthed(e)) return false;
-  if (e.isFlying && !(profile && profile.canHitFly)) return false;
+  // `dollHitsFly`: a 傀儡师 whose <替身> state hits air (风丸 — PRTS 特性备注 「<替身>状态下可对空，由技能产生的召唤物不可对空」,
+  // GitHub community report of 2026-10-15) targets flyers while substituted (Unit.trait.doll, professions.js installDollkeeper)
+  if (e.isFlying && !(profile && (profile.canHitFly || (profile.dollHitsFly && attacker && attacker.trait && attacker.trait.doll)))) return false;
   if (profile && profile.groundOnly && e.isFlying) return false;
   if (profile && typeof profile.skipEnemy === 'function' && profile.skipEnemy(e)) return false;
   return true;

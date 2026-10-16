@@ -47,9 +47,14 @@ test('missing data/local-assets.json → 200 empty manifest (no 404 on installs 
     const h = await get(srv, '/data/local-assets.json', 'HEAD');
     assert.equal(h.status, 200);
     assert.equal(h.body, '');
+    // the official effects' file list (data/local-fx.json, DESIGN §33.1): the same empty stand-in
+    const fx = await get(srv, '/data/local-fx.json');
+    assert.equal(fx.status, 200);
+    assert.deepEqual(JSON.parse(fx.body).groups, {});
     // other missing data files still 404
     assert.equal((await get(srv, '/data/nope.json')).status, 404);
     assert.equal((await get(srv, '/data/sub/local-assets.json')).status, 404);
+    assert.equal((await get(srv, '/data/sub/local-fx.json')).status, 404);
   } finally {
     srv.close();
     fs.rmSync(dir, { recursive: true, force: true });

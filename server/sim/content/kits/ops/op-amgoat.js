@@ -44,7 +44,7 @@
 import { num, talentBb, traitBb, skillRec, statBuff, installAura, batMod, giveSp, onHitBy } from '../shared/tier1.js';
 import { hasHp } from '../../../damage.js';
 import { canTargetEnemy } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 
 const S1 = 'skchr_amgoat_1';
 const S2 = 'skchr_amgoat_2';
@@ -148,7 +148,7 @@ export default {
           battle.on('deploy', (ctx) => {
             if (ctx.unit !== unit || !unit.alive) return;
             // (a scan of the enemies: the tile index of enemiesInKeys is the last tick's)
-            const top = maxRule && battle.enemies.some((e) => isEliteEnemy(e) && canTargetEnemy(unit, e, unit.profile) && bodyInKeys(e, unit.rangeKeySet));
+            const top = maxRule && battle.enemies.some((e) => isEliteEnemy(e) && canTargetEnemy(unit, e, unit.profile) && bodyInRange(e, unit.rangeKeySet));
             // floor of a uniform draw in [lo, hi); "取最大值" = the largest value the draw yields (hi − 1 for integer bounds)
             const draw = (lo, hi) => (hi > lo ? (top ? Math.ceil(hi) - 1 : Math.floor(battle.rng.range(lo, hi))) : 0);
             const sp = draw(spLo, spHi);

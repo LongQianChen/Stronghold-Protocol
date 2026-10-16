@@ -9,14 +9,16 @@ and their textures come from the theme bundles of the local client (SCENES lists
 index records them: the scene bundle's dependencies).
 
 Output per stage, under <out>/scene/<stageId>/ (manifest group scene/<stageId>):
-  scene.json   { version, stage, light, lightmaps, materials, groups, chunks: [{ material, lightmap, group, verts,
-                 tris, offset, index32, bounds }] }
+  scene.json   { version, stage, light, lightmaps, lightRange, lightEncoding, env: { size, mips, range }, materials
+                 (each with the names of its textures: map, normalMap, glossMap), groups, chunks: [{ material,
+                 lightmap, group, verts, tris, offset, index32, bounds }] }
+  env.png      the scene's default reflection cubemap, decoded (env_atlas: 6 faces × the mip chain in one atlas)
   scene.bin    the chunks' vertex data in board space (x = column, y = row, z = height: Unity's anchor-local
                (x, y, −z)); per chunk: position f32×3, uv f32×2, lightmap uv f32×2 (scale / offset applied),
                normal i8×4, colour u8×4, indices u16|u32 (padded to 4 bytes)
   lm<i>.png    lightmap page i (+ a WebP copy, the one the manifest lists): RGB = the baked indirect light (Lightmap-<i>_comp_light, stored RGBM: decode_rgbm),
                A = the key light's baked shadow (Lightmap-<i>_comp_shadowmask, R)
-and the materials' albedo textures under <out>/scene/tex/ (manifest group scene/tex, shared by the scenes).
+and the materials' albedo, normal (normal_rgb) and metallic-gloss textures under <out>/scene/tex/ (manifest group scene/tex, shared by the scenes).
 A chunk's `group` is '' for what the scene shows at rest and the sub-graphic name (HIDDEN@1 …, MapSubGraphicHolder)
 for the meshes the game switches on later.
 """
@@ -50,8 +52,16 @@ COMMON_DEPS = ['arts/maps/effect.ab']
 SCENE_SUB = 'scene'
 TEX_SUB = 'scene/tex'
 SCENE_VERSION = 1
-# linear light value that a lightmap page's 1.0 stands for (decode_rgbm; scene.json lightRange)
-LIGHT_RANGE = 8.0
+# display-space light value that a lightmap page's 1.0 stands for (decode_rgbm; scene.json lightRange, with
+# lightEncoding 'gamma'). The pages of the eleven scenes stay below 2.8.
+LIGHT_RANGE = 3.0
+LIGHT_ENCODING = 'gamma'
+# material texture slots written to scene/tex: slot → key of the texture's name in scene.json materials[name]
+TEX_SLOTS = (('_MainTex', 'map'), ('_BumpMap', 'normalMap'), ('_MetallicGlossMap', 'glossMap'))
+# RGBM range of a reflection cubemap in gamma colour space (the same 5 as the lightmap pages)
+ENV_RGBM = 5.0
+# bytes of one 4 × 4 block of the cubemap formats the scenes use
+ENV_BLOCK_BYTES = {'ETC2_RGBA8': 16}
 HIDDEN_NAME = re.compile(r'^[A-Z_]+@\d+$')
 WATER_SHADERS = ('StylizedWater', 'StandardWater', 'DynamicWaterTile')
 
@@ -120,17 +130,69 @@ def pack_chunk(ch):
 
 
 def decode_rgbm(img):
-    """RGB image of a baked lightmap page stored RGBM (Unity, linear colour space: light = 5^2.2 · A^2.2 · RGB):
-    the linear light L as (L / LIGHT_RANGE)^(1/2.2) per channel — = (5^2.2 / LIGHT_RANGE)^(1/2.2) · A · RGB^(1/2.2),
-    clamped to 1 (the renderer reads L = value^2.2 · LIGHT_RANGE). A page without alpha is taken as plain RGB."""
-    from PIL import Image, ImageChops
+    """RGB image of a baked lightmap page stored RGBM (texture usage BakedLightmapRGBM). The client renders in gamma
+    colour space (PlayerSettings m_ActiveColorSpace 0), where Unity reads the page as light = 5 · A · RGB and adds it
+    to the key light in display values: the page keeps that value / LIGHT_RANGE per channel, clamped to 1 (the
+    renderer reads light = value · LIGHT_RANGE). A page without alpha is taken as plain RGB."""
+    from PIL import Image
     if img.mode != 'RGBA':
         return img.convert('RGB')
-    k = (5.0 ** 2.2 / LIGHT_RANGE) ** (1 / 2.2)
+    k = 5.0 / LIGHT_RANGE / 255
+    rows = [bytes(min(255, int(a * c * k + 0.5)) for c in range(256)) for a in range(256)]
     r, g, b, a = img.split()
-    m = a.point([min(255, int(round(v * k))) for v in range(256)])
-    gamma = [int(round(255 * (v / 255) ** (1 / 2.2))) for v in range(256)]
-    return Image.merge('RGB', tuple(ImageChops.multiply(ch.point(gamma), m) for ch in (r, g, b)))
+    alpha = a.tobytes()
+    return Image.merge('RGB', tuple(Image.frombytes('L', img.size, bytes(rows[m][c] for m, c in zip(alpha, ch.tobytes())))
+                                    for ch in (r, g, b)))
+
+
+def normal_rgb(img):
+    """RGB tangent-space normal map (the layout the official GLES program reads: xyz · 2 − 1) from the client's
+    two-channel one, Z rebuilt per pixel. X and Y are read the way Unity unpacks them (x = R · A, y = G), which covers
+    BC5 (R = X, G = Y, no alpha) and DXT5nm (R = 1, G = Y, A = X)."""
+    from PIL import Image, ImageChops
+    r, g, _b, a = img.convert('RGBA').split()
+    x = ImageChops.multiply(r, a)  # exact when either factor is 255
+    axis = [v / 127.5 - 1.0 for v in range(256)]
+    rows = [bytes(int(round((max(0.0, 1.0 - nx * nx - ny * ny) ** 0.5 * 0.5 + 0.5) * 255)) for ny in axis) for nx in axis]
+    z = bytes(rows[xb][yb] for xb, yb in zip(x.tobytes(), g.tobytes()))
+    return Image.merge('RGB', (x, g, Image.frombytes('L', img.size, z)))
+
+
+def env_atlas(data, size, mips, fmt, version, platform, intensity):
+    """Atlas of a reflection cubemap stored RGBM (6 faces, each with its mip chain): mip m in the row at
+    y = Σ sizes of the mips before it, face f (+X −X +Y −Y +Z −Z) at x = f · (size >> m), rows in stored order (the
+    order the client uploads). A texel keeps the display-space light Unity's gamma-space decode gives
+    (unity_SpecCube0_HDR.x · A · RGB, with .x = 5 · the scene's reflection intensity) / range. Returns (image, range),
+    range being the brightest channel value of the cubemap."""
+    from PIL import Image
+    from UnityPy.enums import TextureFormat
+    from UnityPy.export.Texture2DConverter import parse_image_data
+    fmt = TextureFormat(fmt)
+    block = ENV_BLOCK_BYTES[fmt.name]
+    sizes = [max(1, size >> m) for m in range(mips)]
+    lengths = [((s + 3) // 4) ** 2 * block for s in sizes]
+    faces, at = [], 0
+    for _f in range(6):
+        row = []
+        for s, ln in zip(sizes, lengths):
+            row.append(parse_image_data(data[at:at + ln], s, s, fmt, version, platform, flip=False).convert('RGBA'))
+            at += ln
+        faces.append(row)
+    k = ENV_RGBM * intensity / 255.0 / 255.0   # stored bytes → light
+    top = max((max(px[0], px[1], px[2]) * px[3] for row in faces for im in row for px in im.getdata()), default=0) * k
+    rng = max(0.01, round(top + 0.005, 2))
+    scale = k / rng * 255.0
+    rows = [bytes(min(255, int(a * c * scale + 0.5)) for c in range(256)) for a in range(256)]
+    atlas = Image.new('RGB', (6 * size, sum(sizes)))
+    y = 0
+    for m, s in enumerate(sizes):
+        for f in range(6):
+            r, g, b, a = faces[f][m].split()
+            alpha = a.tobytes()
+            atlas.paste(Image.merge('RGB', tuple(Image.frombytes('L', (s, s), bytes(rows[q][c] for q, c in zip(alpha, ch.tobytes())))
+                                                for ch in (r, g, b))), (f * s, y))
+        y += s
+    return atlas, rng
 
 
 def save_image(img, out_dir, stem, sub):
@@ -308,8 +370,8 @@ def export_scene(stage_id, deps, scene_path, ab_root, out_root, manifest, log, m
             materials[name] = info
             try:
                 for slot, env_ in mat.m_SavedProperties.m_TexEnvs:
-                    if slot == '_MainTex' and env_.m_Texture.m_PathID:
-                        mat_tex[name] = env_.m_Texture
+                    if slot in dict(TEX_SLOTS) and env_.m_Texture.m_PathID:
+                        mat_tex.setdefault(name, {})[slot] = env_.m_Texture
             except Exception:
                 pass
         return name
@@ -430,23 +492,72 @@ def export_scene(stage_id, deps, scene_path, ab_root, out_root, manifest, log, m
         lightmaps = max(lightmaps, i + 1)
         n += 1
 
-    # albedo textures of the materials (shared by the scenes)
+    # the reflection every surface shows (unity_SpecCube0): the baked cubemap of the ReflectionProbe whose box holds
+    # the board (act2autochess_m01 / m03: one probe, box 40 / 50 units, every renderer set to blend probes), at the
+    # probe's intensity; else the scene's default reflection cubemap (RenderSettings) at the scene's reflection
+    # intensity. Unity picks by importance, then the smaller box.
+    # [ASSUMED] one cubemap for the whole scene, chosen at the board's anchor: a renderer outside the probe's box (far
+    # background) would show the default reflection in the client, and probes are not blended at the box's edge
+    env_doc = None
+    try:
+        rs = next(o.read_typetree() for o in scene_objs if o.type.name == 'RenderSettings')
+        want = rs['m_GeneratedSkyboxReflection']['m_PathID'] if rs.get('m_DefaultReflectionMode', 0) == 0 else rs['m_CustomReflection']['m_PathID']
+        intensity = rs.get('m_ReflectionIntensity', 1.0)
+        probes = []
+        for o in scene_objs:
+            if o.type.name != 'ReflectionProbe':
+                continue
+            d = o.read_typetree()
+            gid = d['m_GameObject']['m_PathID']
+            baked = (d.get('m_CustomBakedTexture') or {}).get('m_PathID') or (d.get('m_BakedTexture') or {}).get('m_PathID')
+            if not d.get('m_Enabled', 1) or not baked or gid not in tf_of_go or not state(gid)[0]:
+                continue
+            m = world(tf_of_go[gid])
+            size, off = d.get('m_BoxSize', {}), d.get('m_BoxOffset', {})
+            half = [abs(size.get(k, 0.0)) / 2 for k in 'xyz']
+            centre = [m[i][3] + off.get(k, 0.0) for i, k in enumerate('xyz')]
+            if all(abs(anchor[i] - centre[i]) <= half[i] for i in range(3)):
+                probes.append((-d.get('m_Importance', 1), half[0] * half[1] * half[2], baked, d.get('m_IntensityMultiplier', 1.0)))
+        if probes:
+            _, _, want, intensity = min(probes)
+        cubes = [o for o in env.objects if o.type.name == 'Cubemap']
+        cube = next((o for o in cubes if o.path_id == want), None)
+        if cube is not None:
+            t = cube.read()
+            atlas, rng = env_atlas(bytes(t.get_image_data()), t.m_Width, t.m_MipCount, t.m_TextureFormat, cube.assets_file.version,
+                                   cube.assets_file.target_platform, intensity)
+            atlas.save(out_dir / 'env.png')   # PNG only: a lossy copy would bleed between the atlas cells
+            manifest[sub]['env'] = {'path': f'/assets/local/{sub}/env.png', 'w': atlas.width, 'h': atlas.height, 'kind': 'Reflection'}
+            env_doc = {'size': t.m_Width, 'mips': t.m_MipCount, 'range': rng, 'source': 'probe' if probes else 'default'}
+            n += 1
+    except Exception as e:
+        log(f'  warn {stage_id}: reflection cubemap: {e}')
+
+    # textures of the materials (shared by the scenes): albedo, and the normal / metallic-gloss maps of the lit ones
     tex_dir = Path(out_root) / TEX_SUB
     tex_dir.mkdir(parents=True, exist_ok=True)
-    for name, pptr in sorted(mat_tex.items()):
-        try:
-            tex = pptr.read()
-            tname = re.sub(r'[^A-Za-z0-9_.\-\[\]]+', '_', tex.m_Name or f'tex_{pptr.m_PathID}')
-            materials[name]['map'] = tname
-            if tname in manifest.get(TEX_SUB, {}):
+    for name, slots in sorted(mat_tex.items()):
+        for slot, key in TEX_SLOTS:
+            pptr = slots.get(slot)
+            if pptr is None or (key != 'map' and materials[name].get('kind') != 'lit'):
                 continue
-            manifest.setdefault(TEX_SUB, {})[tname] = {**save_image(tex.image, tex_dir, tname, TEX_SUB), 'kind': 'Texture2D'}
-            n += 1
-        except Exception as e:
-            log(f'  warn {stage_id}: texture of {name}: {e}')
+            if key == 'glossMap' and '_METALLICGLOSSMAP' not in (materials[name].get('keywords') or ()):
+                continue   # the shader variant without the keyword reads _Metallic / _Glossiness
+            try:
+                tex = pptr.read()
+                tname = re.sub(r'[^A-Za-z0-9_.\-\[\]]+', '_', tex.m_Name or f'tex_{pptr.m_PathID}')
+                materials[name][key] = tname
+                if tname in manifest.get(TEX_SUB, {}):
+                    continue
+                img = normal_rgb(tex.image) if key == 'normalMap' else tex.image
+                manifest.setdefault(TEX_SUB, {})[tname] = {**save_image(img, tex_dir, tname, TEX_SUB), 'kind': 'Texture2D'}
+                n += 1
+            except Exception as e:
+                log(f'  warn {stage_id}: texture {slot} of {name}: {e}')
 
     doc = {'version': SCENE_VERSION, 'stage': stage_id, 'bundle': scene_bundle(stage_id), 'light': light, 'lightmaps': lightmaps,
-           'lightRange': LIGHT_RANGE, 'materials': dict(sorted(materials.items())), 'groups': sorted({rec['group'] for rec in records}),
+           'lightRange': LIGHT_RANGE, 'lightEncoding': LIGHT_ENCODING, **({'env': env_doc} if env_doc else {}),
+           'materials': dict(sorted(materials.items())), 'groups': sorted({rec['group'] for rec in records}),
            'chunks': records, 'binBytes': len(blob)}
     (out_dir / 'scene.json').write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
     manifest[sub]['scene'] = {'path': f'/assets/local/{sub}/scene.json', 'kind': 'Scene', 'chunks': len(records)}

@@ -64,7 +64,10 @@ const VIEWS = ['prep', 'normal', 'unite', 'bossPrep', 'boss', 'pen'];
 describe('#6 act2 m01 blowers in every view', () => {
   test('repro: the normal / prep view builds the own field\'s row-13 blowers (cols 5, 9) above the wind lanes', () => {
     // (plus the boss field's row-6 machines on the wall under the bench, as in v2.3 — they blow away from this field)
-    for (const vk of ['prep', 'normal']) assert.deepEqual(blowersIn3d(M01, vk), ['13,5', '13,9', '6,5', '6,9'], vk);
+    assert.deepEqual(blowersIn3d(M01, 'normal'), ['13,5', '13,9', '6,5', '6,9'], 'normal');
+    // the prep view builds the enemy pen's block too (the maintainer's decision of 2026-10-15: the pen shows in 休整期),
+    // whose front wall holds the partner's (13,13) — as the pen view always did
+    assert.deepEqual(blowersIn3d(M01, 'prep'), ['13,13', '13,5', '13,9', '6,5', '6,9'], 'prep');
   });
 
   test('联防 builds both halves\' row-13 blowers; the Final Assault builds the four row-6 blowers', () => {
@@ -76,7 +79,8 @@ describe('#6 act2 m01 blowers in every view', () => {
   });
 
   test('the blower machines stand on the separator blocks; the row-13 ones blow onto the field below them', () => {
-    const b = buildBoard(M01, { area: boardArea('prep') });
+    // the battle view's area: the field alone (the prep view adds the pen block, see the repro above)
+    const b = buildBoard(M01, { area: boardArea('normal') });
     for (const d of b.devices.filter((x) => x.kind === 'blower')) {
       const t = b.grid[d.r][d.c];
       assert.equal(t.glyph, 'X');
@@ -86,9 +90,12 @@ describe('#6 act2 m01 blowers in every view', () => {
       const onto = d.rangeTiles.slice(1).map(([r, c]) => !!b.grid[r][c].content);
       assert.deepEqual(onto, d.r === 13 ? [true, true, true] : [false, false, false], `${d.r},${d.c}`);
     }
-    // the separator row is built along the field's top edge (the pen rows 14–18 are still not)
+    // the separator row is built along the field's top edge (the pen rows 14–18 are not, in battle)
     const rows = new Set(b.grid.flat().filter((t) => t.drawn).map((t) => t.r));
     assert.ok(rows.has(13) && !rows.has(14) && !rows.has(5), [...rows].join());
+    // the prep view builds the pen rows too
+    const p = new Set(buildBoard(M01, { area: boardArea('prep') }).grid.flat().filter((t) => t.drawn).map((t) => t.r));
+    assert.ok(p.has(13) && p.has(14) && p.has(18) && !p.has(5), [...p].join());
   });
 
   test('the 2D board draws the same blowers and airflow per view', async () => {

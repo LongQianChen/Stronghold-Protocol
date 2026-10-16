@@ -43,6 +43,7 @@
 //   (wiki.gg reads the end of the flight as the far end of her range, 4 tiles; PRTS's 5 is kept.)
 // - No summon (the forms list no token).
 
+import { textCount } from '../../../../../shared/plugins/textNumber.js';
 import { num, talentBb, traitBb, skillRec, statBuff, batMod, giveSp, onHitBy, up } from '../shared/tier1.js';
 import { canTargetEnemy } from '../../../targeting.js';
 import { dirVec, rotateOffset } from '../../../dir.js';
@@ -98,7 +99,7 @@ export default {
     const pen = num(tb.magic_resist_penetrate_fixed);
     const b1 = bbOf(chess, S1), b2 = bbOf(chess, S2), b3 = bbOf(chess, S3);
     const s1 = skillRec(chess, S1), s2 = skillRec(chess, S2), s3 = skillRec(chess, S3);
-    const shots = Math.max(1, Math.floor(num(+(/(\d+)连发/.exec(String(s2?.desc ?? ''))?.[1]), SHOTS)));
+    const shots = Math.max(1, Math.floor(textCount(String(s2?.desc ?? ''), /(\d+)连发/, SHOTS, 'burst')));
 
     /** S3: release one attack's three whirlwinds. */
     function releaseWinds(battle, unit, winds) {
@@ -241,7 +242,7 @@ export default {
             for (const e of battle.blockedTargets(unit, ctx.profile)) if (!cands.includes(e)) cands.push(e);
             if (!cands.length) return;
             const out = [];
-            for (let i = 0; i < shots; i++) out.push(battle.rng.pick(cands));
+            for (let i = 0; i < shots; i++) out.push(battle.rng.pick(cands)); // loop-cap: textCount burst
             ctx.targets = out;
           }, { owner: unit });
           onHitBy(battle, unit, (ctx) => {

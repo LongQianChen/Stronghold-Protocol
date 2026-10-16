@@ -15,6 +15,7 @@ import {
   loadStats, saveStats, migrateStats, normalizeRecord, importStats, exportStats, aggregateStats, selfRowOf, roomModeOf,
   recordToResult, compactRecord, fitToBudget, countsTowardStats, roundsOf, clearedRounds, createLiveMatch, observeMatch,
   buildQuitRecord, installStatsRecorder, liveMatch, MIGRATIONS,
+  trophyMedalOf,
 } from '../../public/js/ui/stats.js';
 import { createStore, emptyMatch } from '../../public/js/store.js';
 import { normalizeResult } from '../../public/js/ui/gameLogic.js';
@@ -238,6 +239,31 @@ describe('local stats: replay dedupe', () => {
   });
 });
 
+describe('local stats: the room\'s cosmetic plugins (DESIGN §32 P1a review round 2)', () => {
+  const VS = 'ab'.repeat(32);
+  test('every record names the room\'s visual set vs (null without plugins); a cosmetic-only match counts like any (the owner\'s decision of 2026-10-13)', () => {
+    const plain = buildRecord(baseResult(), { myId: 'p1', now: 1 });
+    assert.equal(plain.vs, null, 'no cosmetic plugin: null');
+    const skinned = buildRecord(baseResult({ seed: 7 }), { myId: 'p1', vs: VS, now: 2 });
+    assert.equal(skinned.vs, VS);
+    assert.equal(buildRecord(baseResult(), { myId: 'p1', vs: 'not-a-hash', now: 3 }).vs, null, 'only a visual hash');
+    assert.equal(compactRecord(skinned).vs, VS, 'kept when compacted');
+    assert.equal(normalizeRecord({ ...skinned, vs: 'XX' }).vs, null);
+    // a quit record takes the room's from the app state
+    const s = liveState({ phase: PHASE.PREP, round: 3 });
+    s.room.content = { cs: 'cd'.repeat(32), vanilla: true, vs: VS, plugins: [{ id: 'skin' }] };
+    const quit = buildQuitRecord(s, { live: watched([liveState({ phase: PHASE.INFO_CHECK, round: 0 }), s]), now: 5_000_000 });
+    assert.equal(quit.vs, VS);
+    // the overview counts both alike: cosmetic plugins change neither gameplay nor numbers (the owner's decision of 2026-10-13)
+    let stats = emptyStats();
+    for (const r of [plain, skinned]) stats = appendRecord(stats, r).stats;
+    assert.deepEqual([aggregateStats(stats.records).total, aggregateStats(stats.records).count], [2, 2]);
+    // an id-less (hand-made) record's content id does not depend on vs: the id of a record from before 0.3.0 stays
+    const { id: _id, vs: _vs, ...bare } = plain;
+    assert.equal(normalizeRecord({ ...bare }).id, normalizeRecord({ ...bare, vs: VS }).id);
+  });
+});
+
 describe('local stats: the counting rule (a match entered and left right away does not count)', () => {
   /** A quit record whose player left in `phase` of `round` (alive unless told otherwise). */
   const quitAt = (phase, round, o = {}) => {
@@ -294,7 +320,7 @@ describe('local stats: the counting rule (a match entered and left right away do
     assert.equal(agg.rounds.total, 16 + 5, 'the peek adds nothing');
     assert.equal(agg.byDifficulty.HARD.games, 2);
     assert.deepEqual(agg.bands.band_amiya, { games: 2, wins: 1 });
-    assert.equal(agg.byMode.solo, 2);
+    assert.equal(agg.byMode.solo.games, 2);
   });
 
   test('combat totals read the settled records only (a quit record has no stat block)', () => {
@@ -410,7 +436,7 @@ describe('local stats: bounded storage', () => {
     assert.equal(stats.records.at(-1).t, 30); // oldest 30 dropped
   });
 
-  test(`only the newest ${FULL_KEEP} records keep their rows: the older ones are compacted to the player's own summary`, () => {
+  test(`the newest ${FULL_KEEP} records keep their rows; older non-peak records compact without losing aggregates`, () => {
     withStorage((ls) => {
       assert.equal(saveStats(manyRecords(FULL_KEEP + 20)), true);
       const stored = JSON.parse(ls.raw).records;
@@ -452,7 +478,7 @@ describe('local stats: bounded storage', () => {
     const coop = (i) => baseResult({ seed: i, modeId: 'mode_multi_hard', players: [row(1), row(2), row(3), row(4)].map((r, k) => (k === 0 ? { ...r, playerId: 'p1' } : r)) });
     const stats = manyRecords(MAX_RECORDS, coop);
     const fit = fitToBudget(stats.records);
-    assert.ok(fit.length >= 900 && fit.length <= MAX_RECORDS, `kept ${fit.length}`);
+    assert.ok(fit.length > FULL_KEEP && fit.length <= MAX_RECORDS, `kept ${fit.length}; full replays and compacted history must both remain`);
     assert.equal(fit[0].t, MAX_RECORDS - 1, 'the newest first');
     assert.ok(JSON.stringify({ v: 1, records: fit }).length <= MAX_CHARS);
     withStorage((ls) => { assert.equal(saveStats(stats), true); assert.ok(ls.raw.length <= MAX_CHARS); });
@@ -644,6 +670,23 @@ describe('local stats: corrupt and old storage', () => {
 });
 
 describe('local stats: export / import merge', () => {
+  test('an import offers the newest valid self nickname without taking a teammate or existing-history name', () => {
+    const newest = buildRecord(baseResult({ seed: 3 }), { myId: 'p1', now: 3 });
+    newest.players[0].name = '\u200b';
+    newest.players[1].name = 'Teammate';
+    const named = buildRecord(baseResult({ seed: 2 }), { myId: 'p1', now: 2 });
+    named.players[0].name = '  Archive\u200bID  ';
+    const older = buildRecord(baseResult({ seed: 1 }), { myId: 'p1', now: 1 });
+    older.players[0].name = 'OldID';
+    const existing = buildRecord(baseResult({ seed: 4 }), { myId: 'p1', now: 4 });
+    existing.players[0].name = 'ExistingID';
+    const incoming = { v: STATS_VERSION, records: [older, newest, named] };
+    assert.equal(importStats(incoming, { records: [existing] }).name, 'ArchiveID');
+    assert.equal(importStats(incoming, { records: [existing, newest, named, older] }).name, 'ArchiveID', 'duplicate imports can also recover an unknown ID');
+    assert.equal(importStats({ v: STATS_VERSION, records: [compactRecord(named), newest] }, { records: [existing] }).name, '', 'no usable imported self name stays unknown');
+    assert.equal(importStats({ v: STATS_VERSION, records: [] }, { records: [existing] }).name, '');
+  });
+
   test('export → import round-trips; merge unions by id, newest first, and counts added / skipped', () => {
     withStorage(() => {
       const rec = recordResult(baseResult(), { myId: 'p1', now: 1000 });
@@ -719,8 +762,8 @@ describe('local stats: aggregation (what the page renders)', () => {
     assert.equal(agg.duration.totalMs, 952123 + 300000);
     assert.equal(agg.hidden.reached, 1);
     assert.equal(agg.hidden.cleared, 1);
-    assert.equal(agg.byMode.solo, 1);
-    assert.equal(agg.byMode.coop, 1);
+    assert.equal(agg.byMode.solo.games, 1);
+    assert.equal(agg.byMode.coop.games, 1);
   });
 
   test('per-difficulty rows; an unknown difficulty is keyed UNKNOWN (never a translated text)', () => {
@@ -733,6 +776,71 @@ describe('local stats: aggregation (what the page renders)', () => {
   test('per-band games / passed and self titles', () => {
     assert.deepEqual(agg.bands.band_amiya, { games: 2, wins: 1 });
     assert.equal(agg.titles.comment_1.count, 1); // only the win granted 卫戍之星
+  });
+
+  test('alliance usage counts self active settlement bonds once per match, independent of layers', () => {
+    const first = buildRecord(baseResult({ players: [
+      { ...baseResult().players[0], bonds: [
+        { bondId: 'yanShip', active: true, layers: 0 }, { bondId: 'yanShip', active: true, layers: 999 },
+        { bondId: 'steadShip', active: false, layers: 500 }, { bondId: 'soloShip', active: true, layers: 0 },
+      ] }, { ...baseResult().players[1], bonds: [{ bondId: 'egirShip', active: true, layers: 999 }] },
+    ] }), { myId: 'p1', now: 1 });
+    const second = buildRecord(baseResult({ seed: 2, victory: false, players: [{ ...baseResult().players[0], victory: false,
+      bonds: [{ bondId: 'yanShip', active: true, layers: 1 }, { bondId: 'steadShip', active: true, layers: 10 }],
+    }] }), { myId: 'p1', now: 2 });
+    const quit = { ...first, id: 'quit', end: 'quit' };
+    assert.deepEqual({ ...aggregateStats([first, second, quit]).bonds }, {
+      yanShip: { games: 2 }, soloShip: { games: 1 }, steadShip: { games: 1 },
+    });
+  });
+
+  test('active alliance usage survives compaction and transfer; v2 rows with discarded bonds stay unknown', () => {
+    const full = buildRecord(baseResult(), { myId: 'p1', now: 1 });
+    const compact = compactRecord(full);
+    assert.deepEqual(compact.players[0].usedBondIds, ['steadShip']);
+    assert.equal(compact.players[0].bonds, undefined, 'the replay-only bond details are still discarded');
+    const transferred = importStats(exportStats({ v: STATS_VERSION, records: [compact] }), emptyStats());
+    assert.deepEqual({ ...aggregateStats(transferred.stats.records).bonds }, { steadShip: { games: 1 } });
+    const legacy = { ...compact, id: 'old', players: [{ ...compact.players[0], usedBondIds: undefined }] };
+    const migrated = migrateStats({ v: 2, records: [full, legacy] });
+    assert.equal(migrated.stats.v, STATS_VERSION);
+    assert.deepEqual({ ...aggregateStats(migrated.stats.records).bonds }, { steadShip: { games: 1 } });
+  });
+
+  test('mode rows separate successful defense from hidden-core clears and use the player outcome', () => {
+    const solo = buildRecord(baseResult({ hiddenCleared: false }), { myId: 'p1', roomMode: 'solo', now: 1 });
+    const coop = buildRecord(baseResult(), { myId: 'p1', roomMode: 'coop', now: 2 });
+    const eliminated = buildRecord(baseResult(), { myId: 'p2', roomMode: 'coop', now: 3 });
+    const summary = aggregateStats([solo, coop, eliminated]);
+    assert.deepEqual(summary.byMode.solo, { games: 1, wins: 1, hiddenCleared: 0 }, 'failing the hidden core keeps the final-boss win');
+    assert.deepEqual(summary.byMode.coop, { games: 2, wins: 1, hiddenCleared: 1 }, 'an eliminated teammate gets neither a personal clear nor a breakthrough');
+    assert.deepEqual(aggregateStats([]).byMode, {
+      solo: { games: 0, wins: 0, hiddenCleared: 0 }, coop: { games: 0, wins: 0, hiddenCleared: 0 },
+    });
+  });
+
+  test('trophy totals count self settled co-op awards, including defeats, and survive compaction and transfer', () => {
+    const records = [['coop', 5, true, 'match'], ['coop', 2, false, 'match'], ['solo', 999, true, 'match'], ['coop', 999, false, 'quit']].map(([mode, award, won, end], i) => {
+      const rec = buildRecord(baseResult({ seed: i + 1, victory: won, modeId: mode === 'coop' ? 'mode_multi_hard' : 'mode_single_hard',
+        players: [{ ...baseResult().players[0], trophies: award, victory: won }, { ...baseResult().players[1], trophies: 999 }],
+      }), { myId: 'p1', roomMode: mode, now: i + 1 });
+      rec.end = end;
+      return rec;
+    });
+    assert.equal(aggregateStats(records).trophies, 7, 'solo, quit and teammate awards must not inflate the total');
+    const compacted = records.map(compactRecord);
+    const transferred = importStats(exportStats({ v: STATS_VERSION, records: compacted }), emptyStats());
+    assert.equal(aggregateStats(transferred.stats.records).trophies, 7, 'discarding replay details and exporting must retain actual rewards');
+  });
+
+  test('trophy medals choose the highest eligible configured threshold regardless of row order', () => {
+    const medals = [{ count: 20, iconId: 'high' }, { count: 0, iconId: 'base' }, { count: 5, iconId: 'mid' }];
+    assert.equal(trophyMedalOf(4, medals).iconId, 'base');
+    assert.equal(trophyMedalOf(5, medals).iconId, 'mid');
+    assert.equal(trophyMedalOf(19, medals).iconId, 'mid');
+    assert.equal(trophyMedalOf(20, medals).iconId, 'high');
+    assert.equal(trophyMedalOf(100, medals).iconId, 'high');
+    assert.equal(trophyMedalOf(0, null), null);
   });
 
   test('combat sums over the self player only', () => {

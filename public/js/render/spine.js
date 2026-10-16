@@ -95,24 +95,107 @@ export function pointInPolygon(x, y, pts, n) {
 }
 
 /**
- * World centre of what a slot draws, into `out` ([x, y]); false when it draws nothing measurable. A mesh: the mean of its
- * world vertices (`buf` grows to fit); a region: its quad's centre — the attachment's (x, y) through the bone (the four
- * corners sit symmetrically around it; RegionAttachment.computeWorldVertices takes a bone in runtime 3.8, a slot in 4.1).
+ * The eyelid fallback's cut (SpineActor._eyeMaskFallback, GitHub #647): a covered slot is hidden when less than
+ * CLIP_HIDE_SHARE of its drawn area lies inside the clip polygon, kept when at least CLIP_KEEP_SHARE does, and in
+ * between its centre decides (the 0.2.2 rule, GitHub #177). [ASSUMED] both shares.
  */
-function slotCentre(slot, att, buf, out) {
+const CLIP_HIDE_SHARE = 0.25, CLIP_KEEP_SHARE = 0.5;
+
+/**
+ * World geometry of what a slot draws, into `buf.v` (grown to fit): a vertex attachment's world vertices (a mesh), else
+ * a region's quad — its attachment rectangle (width × height × scale, rotated, at x / y) through the bone, corners in
+ * order. Returns the number of floats written, 0 when nothing is measurable. pixi-spine keeps a bone's world transform
+ * in `bone.matrix` (a PIXI Matrix, whose b / c are spine's c / b); spine-ts's a…d / worldX / worldY are read only when
+ * there is no matrix — 0.2.2 read those alone, undefined on pixi-spine's bones, so no region was ever measured.
+ */
+function drawnVerts(slot, att, buf) {
   const n = att.worldVerticesLength | 0;
   if (n >= 2 && typeof att.computeWorldVertices === 'function') {
     if (buf.v.length < n) buf.v = new Float32Array(n);
-    const v = buf.v;
-    att.computeWorldVertices(slot, 0, n, v, 0, 2);
-    let cx = 0, cy = 0;
-    for (let k = 0; k < n; k += 2) { cx += v[k]; cy += v[k + 1]; }
-    out[0] = cx / (n >> 1); out[1] = cy / (n >> 1);
-  } else if (att.region !== undefined && Number.isFinite(att.x) && Number.isFinite(att.y) && slot.bone) {
-    const b = slot.bone;
-    out[0] = b.a * att.x + b.b * att.y + b.worldX; out[1] = b.c * att.x + b.d * att.y + b.worldY;
-  } else return false;
-  return Number.isFinite(out[0]) && Number.isFinite(out[1]);
+    att.computeWorldVertices(slot, 0, n, buf.v, 0, 2);
+    return n;
+  }
+  const b = slot.bone;
+  if (att.region === undefined || !b || !Number.isFinite(att.x) || !Number.isFinite(att.y) || !(att.width > 0) || !(att.height > 0)) return 0;
+  const m = b.matrix;
+  const a = m ? m.a : b.a, bb = m ? m.c : b.b, c = m ? m.b : b.c, d = m ? m.d : b.d, tx = m ? m.tx : b.worldX, ty = m ? m.ty : b.worldY;
+  const hw = (att.width * (Number.isFinite(att.scaleX) ? att.scaleX : 1)) / 2, hh = (att.height * (Number.isFinite(att.scaleY) ? att.scaleY : 1)) / 2;
+  const rad = ((att.rotation || 0) * Math.PI) / 180, cs = Math.cos(rad), sn = Math.sin(rad);
+  const v = buf.v;
+  for (let q = 0; q < 4; q++) {
+    const px = q === 0 || q === 3 ? -hw : hw, py = q < 2 ? -hh : hh;
+    const lx = px * cs - py * sn + att.x, ly = px * sn + py * cs + att.y;
+    v[q * 2] = a * lx + bb * ly + tx; v[q * 2 + 1] = c * lx + d * ly + ty;
+  }
+  return 8;
+}
+
+/** Twice the signed area of the polygon of `n` points `p` (flat). */
+function area2(p, n) {
+  let s = 0;
+  for (let i = 0, j = n - 1; i < n; j = i++) s += p[j * 2] * p[i * 2 + 1] - p[i * 2] * p[j * 2 + 1];
+  return s;
+}
+
+/**
+ * Area of the polygon `poly` (`pn` points) inside the convex polygon `win` (`wn` points): Sutherland–Hodgman with the
+ * clip polygon as the subject, so a concave one is measured exactly (the bridge edges a concave subject leaves along the
+ * window's border add no area). `buf.a` / `buf.b` are scratch buffers, grown to fit (each pass at most doubles the points).
+ */
+function clippedArea(poly, pn, win, wn, buf) {
+  const w2 = area2(win, wn);
+  if (!(Math.abs(w2) > 1e-9)) return 0;
+  const sg = w2 > 0 ? 1 : -1, cap = pn * 2 * 2 ** wn;
+  if (buf.a.length < cap) { buf.a = new Float64Array(cap); buf.b = new Float64Array(cap); }
+  let src = buf.a, dst = buf.b, m = pn;
+  for (let i = 0; i < pn * 2; i++) src[i] = poly[i];
+  for (let e = 0; e < wn && m >= 3; e++) {
+    const ax = win[e * 2], ay = win[e * 2 + 1], k = (e + 1) % wn, ex = win[k * 2] - ax, ey = win[k * 2 + 1] - ay;
+    let o = 0;
+    for (let i = 0; i < m; i++) {
+      const j = i + 1 < m ? i + 1 : 0;
+      const px = src[i * 2], py = src[i * 2 + 1], qx = src[j * 2], qy = src[j * 2 + 1];
+      const dp = sg * (ex * (py - ay) - ey * (px - ax)), dq = sg * (ex * (qy - ay) - ey * (qx - ax));
+      if (dp >= 0) { dst[o++] = px; dst[o++] = py; }
+      if ((dp >= 0) !== (dq >= 0)) { const t = dp / (dp - dq); dst[o++] = px + (qx - px) * t; dst[o++] = py + (qy - py) * t; }
+    }
+    m = o >> 1;
+    const s = src; src = dst; dst = s;
+  }
+  return m >= 3 ? Math.abs(area2(src, m)) / 2 : 0;
+}
+
+/**
+ * Does the eyelid fallback hide covered slot `slot` (drawing `att`) under the clip polygon `poly` of `pn` (≥ 3) points?
+ * By the share of its drawn area inside the polygon — what the stencil would keep: each mesh triangle (a region: its
+ * quad) clips the polygon — and in the middle band (CLIP_HIDE_SHARE … CLIP_KEEP_SHARE), or when no area is measurable
+ * (a path, a collapsed mesh), by its centre (mesh: the mean of its vertices; region: its quad's centre).
+ */
+function clipHides(slot, att, buf, poly, pn) {
+  const n = drawnVerts(slot, att, buf);
+  if (!n) return false;
+  const v = buf.v, tri = att.triangles;
+  let total = 0, inside = 0;
+  if ((att.worldVerticesLength | 0) < 2) { total = Math.abs(area2(v, 4)) / 2; inside = clippedArea(poly, pn, v, 4, buf); }
+  else if (tri && tri.length >= 3) {
+    const w = buf.w;
+    for (let k = 0; k + 2 < tri.length; k += 3) {
+      const i0 = tri[k] * 2, i1 = tri[k + 1] * 2, i2 = tri[k + 2] * 2;
+      if (i0 + 1 >= n || i1 + 1 >= n || i2 + 1 >= n) continue;
+      w[0] = v[i0]; w[1] = v[i0 + 1]; w[2] = v[i1]; w[3] = v[i1 + 1]; w[4] = v[i2]; w[5] = v[i2 + 1];
+      const a = Math.abs(area2(w, 3)) / 2;
+      if (!(a > 0)) continue;
+      total += a;
+      inside += clippedArea(poly, pn, w, 3, buf);
+    }
+  }
+  const share = total > 1e-6 ? inside / total : NaN;
+  if (share < CLIP_HIDE_SHARE) return true;
+  if (share >= CLIP_KEEP_SHARE) return false;
+  let cx = 0, cy = 0;
+  for (let k = 0; k < n; k += 2) { cx += v[k]; cy += v[k + 1]; }
+  cx /= n >> 1; cy /= n >> 1;
+  return Number.isFinite(cx) && Number.isFinite(cy) && !pointInPolygon(cx, cy, poly, pn);
 }
 
 // ---- clip bounds (GitHub #542) ------------------------------------------------------------------------------------
@@ -564,6 +647,12 @@ export class SpineActor {
     this._play(clip.loop, false, { timeScale: plan.tsWind, start: plan.start, mix: 0.06 });
     this.windTs = plan.ts;
     this.windUntil = this.clock + lead;
+    // for the official effects that start with the cast (render/vfx/wiring.js castStart): how far into its clip the
+    // wind-up started and when the cast ends, in game s at the clip's own speed — sped up only when the attacks come
+    // quicker than the clip, as the client plays it (this actor may stretch the clip over a slower rhythm)
+    const tsOff = clampN(loopDur / iv, 1, 4);
+    this.windSkip = plan.start / tsOff;
+    this.windCastLeft = lead + Math.max(0, loopDur - hit) / tsOff;
     this.wound = true;
     return true;
   }
@@ -636,6 +725,18 @@ export class SpineActor {
     const sk = this.roles.skill;
     if (!this.skillOn || !sk || sk.idle === sk.loop || !this.has(sk.idle)) return null;
     return this._attackClip() === sk ? sk.idle : null;
+  }
+
+  /**
+   * The strike frame of the attack clip playing now — { anim (the spine Animation), time (its first hit, s) } — or null
+   * when no attack clip plays (render/units.js boneOffset: a shot leaves the muzzle as that frame poses it).
+   */
+  strikePose() {
+    if (this.mode !== 'attack' || this.dead) return null;
+    const tr = this.spine && this.spine.state ? this.spine.state.tracks[0] : null;
+    const anim = tr && tr.animation;
+    if (!anim || anim.name !== this.current) return null;
+    return { anim, time: this._hitTime(anim.name, this.dur(anim.name)) };
   }
 
   _hitTime(anim, dur) {
@@ -844,15 +945,17 @@ export class SpineActor {
    * are off on a crowded field or below high quality (render/app.js pickClipping), and the eyeballs showed through
    * the closed lids (佩佩, 仇白, 隐德来希, 琳琅诗怀雅 …). While they are off, every slot a clip covers — walked in draw
    * order from the clipping slot to its endSlot, with the attachments in force (any skin), as pixi-spine does — is
-   * hidden for the frame when the centre of what it draws lies outside the clip polygon [ASSUMED: all or nothing per
-   * slot, an approximation of the mask's cut]. pixi-spine shows every attached slot container again on each update.
+   * hidden for the frame when the clip would cut most of it (clipHides: less than a quarter of its drawn area inside the
+   * polygon, or less than half with its centre outside; GitHub #647 — 纯烬艾雅法拉's eyeballs are regions, never measured
+   * before, and her lids close to a slit through their centres) [ASSUMED: all or nothing per slot, an approximation of
+   * the mask's cut]. pixi-spine shows every attached slot container again on each update.
    */
   _eyeMaskFallback() {
     const sp = this.spine, skel = sp && sp.skeleton, boxes = sp && sp.slotContainers;
     if (!skel || !Array.isArray(skel.drawOrder) || !boxes) return;
     this._showClipHidden();   // undo the last pass (a pixi-spine update re-shows them anyway; a frozen one does not)
     try {
-      const buf = this._clipBuf || (this._clipBuf = { v: new Float32Array(64), poly: new Float32Array(16), c: [0, 0] });
+      const buf = this._clipBuf || (this._clipBuf = { v: new Float32Array(64), poly: new Float32Array(16), w: new Float32Array(6), a: new Float64Array(256), b: new Float64Array(256) });
       let pn = -1, end = null;   // pn: points of the clip in force (−1: none; < 3: degenerate, hides nothing)
       for (const slot of skel.drawOrder) {
         const att = typeof slot.getAttachment === 'function' ? slot.getAttachment() : slot.attachment;
@@ -866,7 +969,7 @@ export class SpineActor {
         }
         if (pn < 0) continue;
         const box = boxes[slot.data.index];
-        if (pn >= 3 && att && box && slotCentre(slot, att, buf, buf.c) && !pointInPolygon(buf.c[0], buf.c[1], buf.poly, pn)) {
+        if (pn >= 3 && att && box && clipHides(slot, att, buf, buf.poly, pn)) {
           box.visible = false;
           this._clipHidden.add(slot.data.index);
         }

@@ -3,7 +3,7 @@
 
 import { sortEnemyTargets, canTargetEnemy } from '../../../targeting.js';
 import { rotateOffset } from '../../../dir.js';
-import { bodyDist, bodyInKeys, bodyKeys } from '../../../body.js';
+import { bodyDist, bodyKeys, bodyInRange } from '../../../body.js';
 import { num, tbb, live, isElite, hasBond, ANY, bstate } from '../shared/tier6.js';
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ function ensureWanted(battle) {
       for (const e of battle.enemies) {
         if (!e.alive || state.marks.has(e) || !isElite(e)) continue;
         // PRTS: starting the timer needs selectability; once attached, only its continuous stay is tested.
-        if (e.hidden || !lat.some((a) => a.rangeKeySet && bodyInKeys(e, a.rangeKeySet))) { state.time.delete(e); continue; }
+        if (e.hidden || !lat.some((a) => a.rangeKeySet && bodyInRange(e, a.rangeKeySet))) { state.time.delete(e); continue; }
         if (!state.time.has(e) && !canTargetEnemy(u, e, ANY)) continue;
         const t = (state.time.get(e) ?? 0) + 0.25;
         state.time.set(e, t);
@@ -103,7 +103,7 @@ function lemuen(bb, chess, def) {
   };
   const blast = (battle, unit, atk, x, y) => {
     battle.fx('bombard', { x, y, id: unit.id, r: d2 });
-    for (const e of battle.foesInRadius(x, y, d2)) {
+    for (const e of battle.foesInColliderRadius(x, y, d2)) {
       if (e.s.flags.untargetable) continue;
       const d = bodyDist(e, x, y);
       battle.dealDamage(unit, e, { amount: atk * (d <= d1 + 1e-9 ? s1 : s2), type: 'phys', isSkill: true, isSplash: true, tags: ['skill', 'bombard'] });

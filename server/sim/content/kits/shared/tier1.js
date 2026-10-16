@@ -30,7 +30,7 @@
 import { COLS, TICK } from '../../../constants.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 import { offsetTile } from '../../../dir.js';
-import { bodyInKeys, bodyTileReach } from '../../../body.js';
+import { bodyTileReach, bodyInRange } from '../../../body.js';
 import { isHpLoss } from '../../../damage.js';
 
 // =================================================================================================================
@@ -200,7 +200,7 @@ export function installReveal(battle, unit, interval = 0.2) {
   battle.every(interval, () => {
     if (!up(unit) || !unit.rangeKeySet) return;
     for (const e of battle.enemies) {
-      if (!e.alive || e.hidden || !e.s.flags.stealth || !bodyInKeys(e, unit.rangeKeySet)) continue;
+      if (!e.alive || e.hidden || !e.s.flags.stealth || !bodyInRange(e, unit.rangeKeySet)) continue;
       const was = !!e.s.flags.reveal;
       if (battle.applyStatus(e, 'reveal', { duration: interval + 0.1, source: unit }) && !was) battle.fx('reveal', { x: e.x, y: e.y, id: e.id });
     }

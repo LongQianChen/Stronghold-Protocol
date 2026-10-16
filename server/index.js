@@ -6,15 +6,22 @@
 //   http/websocket.js  session wiring (SessionRegistry → Lobby → Network) and the WebSocket at /ws (maxPayload 64 KB,
 //                      permessage-deflate with a per-connection outbound dictionary; refused at upgrade with 404 / 429 per network / 503)
 //   http/static.js     the static mounts (/ → public/, /data/, /shared/, /sim/ `.js` only), the /data.js browser stand-in,
-//                      the content packs (/packs/index.json, /packs/<id>/<file> — the registry is packs.js)
+//                      the language packs (/packs/index.json, /packs/<id>/<file>), the plugin catalogue
+//                      (/plugins/index.json — the registry is plugins/registry.js), the vanilla content set's manifest
+//                      (/cs/<cs16>/index.json — plugins/identity.js: the content hash `cs`, DESIGN §32), the visual sets
+//                      of cosmetic plugins (/vs/<vs16>/…, plugins/visualSet.js) and their files (/p/<id>/<hash8>/…),
+//                      the content sets of gameplay plugins (/cs/<cs16>/…, plugins/contentSets.js — DESIGN §32.6; the
+//                      server owner's plugins/config.json: plugins/policy.js; a room's plugins: plugins/roomSets.js; its
+//                      match then runs in that set's worker: match/host/)
 //   http/media.js      /media/bgm/act1 → public/assets/audio/bgm/act1.mp3 (audio addressed without its extension)
 //   http/files.js      one file → response: MIME, brotli / gzip + memory cache, ETag / Last-Modified / 304, Cache-Control, ranges
 //   http/assetIndex.js the content hashes of public/assets and public/fonts (built in the background, cached in
 //                      .cache/asset-hashes.json by path + size + mtime; Spine models share one hash)
-//   http/assetViews.js the served /data/assets.json and /data/local-assets.json: every art URL with its hash segment
-//                      (/assets/~<hash>/…, immutable when the hash matches); the committed files stay unchanged
+//   http/assetViews.js the served /data/assets.json, /data/local-assets.json and /data/local-fx.json: every art URL with
+//                      its hash segment (/assets/~<hash>/…, immutable when the hash matches); the files stay unchanged
 //   http/buildTag.js   the build tag of the served browser runtime (/healthz `build`, public/js/ui/buildGuard.js)
-//   http/routes.js     the request listener: security headers, 414 / 400 / 405, GET /healthz → JSON status, else static
+//   http/routes.js     the request listener: security headers, 414 / 400, the plugin studio (/studio/, studio/index.js —
+//                      this machine and the local network only), 405, GET /healthz → JSON status, else static
 //   http/traffic.js    the traffic counters: bytes sent per category (assets / audio / code / data) and on the
 //                      WebSocket, since the start (GET /healthz?traffic=1)
 //   http/common.js     what every answer shares: security headers, URL split, error page, JSON replies, bare 400
@@ -29,14 +36,25 @@
 // The server only auto-listens when this file is the process entry point.
 
 import http from 'node:http';
+import path from 'node:path';
 import { getData, loadData } from './data.js';
 import { ROOT, listenAddress, bindCandidates, serveDirs, makeLogger, parseTrustProxy, assetIndexOptionsFrom } from './http/config.js';
 import { WS_MAX_PAYLOAD, createSessionStack, attachWebSocket } from './http/websocket.js';
+import { siteCsp } from './http/csp.js';
 import { DATA_SHIM_JS, createStaticHandler } from './http/static.js';
-import { createPackRegistry } from './packs.js';
 import { createAnnouncementStore } from './announcements.js';
 import { createAnnouncementNoticeMonitor } from './announcementNotices.js';
 import { createServerSettings } from './serverSettings.js';
+import { createPluginRegistry } from './plugins/registry.js';
+import { computeVanillaContent } from './plugins/identity.js';
+import { createVisualSets } from './plugins/visualSet.js';
+import { createContentSets } from './plugins/contentSets.js';
+import { createPluginPolicy } from './plugins/policy.js';
+import { createRoomSets } from './plugins/roomSets.js';
+import { createMatchHosts } from './match/host/index.js';
+import { createTrustedRuntime } from './plugins/trustedRuntime.js';
+import { trustedHostAllowed } from './plugins/trusted.js';
+import { createStudio } from './studio/index.js';
 import { MIME, COMPRESSIBLE, acceptsGzip, pickEncoding, parseRange } from './http/files.js';
 import { BUILD_INPUTS, computeBuildTag, buildTag, resetBuildTag } from './http/buildTag.js';
 import { createRequestHandler } from './http/routes.js';
@@ -58,8 +76,8 @@ export {
  * Build and start the HTTP + WebSocket server.
  * @param {{
  *   port?: number, host?: string, quiet?: boolean, log?: object,
- *   publicDir?: string, dataDir?: string, sharedDir?: string, packsDir?: string, announcementsDir?: string,
- *   serverSettingsDir?: string,
+ *   publicDir?: string, dataDir?: string, sharedDir?: string, packsDir?: string, pluginsDir?: string,
+ *   announcementsDir?: string, serverSettingsDir?: string,
  *   MatchClass?: Function, seedFn?: () => number,
  *   lobbyGraceMs?: number, reconnectWindowMs?: number, heartbeatMs?: number, helloTimeoutMs?: number,
  *   ratePerSec?: number, rateBurst?: number, maxConnections?: number, maxRooms?: number, compactWire?: boolean, runtimeCache?: boolean,
@@ -68,39 +86,70 @@ export {
  *   assetCacheLimits?: { totalBps?: number, clientBps?: number, maxDownloads?: number, maxDownloadsPerClient?: number },
  *   assetCacheBuildCatalog?: Function,
  *   bandwidthEmergency?: object | false,
- *   assetIndex?: boolean | { cacheFile?: string | null, delayMs?: number },
+ *   assetIndex?: boolean | { cacheFile?: string | null, delayMs?: number }, studio?: boolean,
+ *   matchHost?: object,
  * }} [opts]
- *   assetIndex: the content-hash index (default on; false or SP_ASSET_INDEX=0: off — config.js assetIndexOptionsFrom)
+ *   assetIndex: the content-hash index (default on; false or SP_ASSET_INDEX=0: off — config.js assetIndexOptionsFrom);
+ *   studio: the plugin studio at /studio/ (default on for this machine and the local network — SP_STUDIO=local|off;
+ *   false: none);
+ *   matchHost: options of the match hosts (server/match/host/index.js — watchdogMs, matchOptions …; tests)
  * @returns {Promise<{ port: number, host: string, url: string, server: http.Server, wss: import('ws').WebSocketServer,
  *                     lobby: import('./lobby.js').Lobby, network: import('./net.js').Network,
- *                     registry: import('./net.js').SessionRegistry, packs: ReturnType<typeof createPackRegistry>,
+ *                     registry: import('./net.js').SessionRegistry, packs: ReturnType<typeof createPluginRegistry>,
  *                     announcements: ReturnType<typeof createAnnouncementStore>,
  *                     serverSettings: ReturnType<typeof createServerSettings>,
+ *                     content: import('./plugins/identity.js').VanillaContent, visual: ReturnType<typeof createVisualSets>,
+ *                     contents: ReturnType<typeof createContentSets>, hosts: ReturnType<typeof createMatchHosts>,
  *                     traffic: ReturnType<typeof createTrafficCounter>, assetIndex: ReturnType<typeof createAssetIndex> | null,
- *                     views: ReturnType<typeof createManifestViews> | null, close: () => Promise<void> }>}
+ *                     views: ReturnType<typeof createManifestViews> | null, studio: ReturnType<typeof createStudio> | null,
+ *                     close: () => Promise<void> }>}
  */
 export async function startServer(opts = {}) {
   // Validate operator options before starting any session/watch timers.
   const emergencyOptions = bandwidthEmergencyOptions(opts.bandwidthEmergency === false ? { enabled: false } : opts.bandwidthEmergency || {});
   const { port, host } = listenAddress(opts);
   const log = opts.log || makeLogger(!!opts.quiet);
-  const { publicDir, dataDir, sharedDir, packsDir } = serveDirs(opts);
+  const { publicDir, dataDir, sharedDir, packsDir, pluginsDir } = serveDirs(opts);
+  const simDir = path.join(ROOT, 'server', 'sim');
 
   // The process-wide singleton serves the default data dir; a custom dir (tests) gets its own copy.
   const data = opts.dataDir ? loadData(dataDir, { log }) : getData({ dir: dataDir, log });
-  const serverSettings = createServerSettings({ dir: opts.serverSettingsDir, root: ROOT, log,
-    onChange: (next) => applySettings(next) });
-  const { registry, lobby, network } = createSessionStack(opts, { data, log });
-  const announcements = createAnnouncementStore({ dir: opts.announcementsDir, root: ROOT, log });
-  const announcementNotices = createAnnouncementNoticeMonitor({ store: announcements, network, log });
-  // content packs (docs/PACKS.md): scanned now — the start log names them — and again whenever their folders change
-  const packs = createPackRegistry({ publicDir, dataDir, packsDir }, { log });
+  // the vanilla content hash `cs` (DESIGN §32): the bytes of the served sim, shared code and game data, read once now —
+  // like the data the matches use and the build tag below
+  const content = computeVanillaContent({ simDir, sharedDir, dataDir, shim: DATA_SHIM_JS, log });
+  log.info(`[content] vanilla ${content.cs.slice(0, 16)} (${Object.keys(content.simFiles).length} code files, ${Object.keys(content.data).length} data files)`);
+  // language packs and plugins (docs/PACKS.md, docs/PLUGINS.md): scanned now — the start log names them — and again
+  // whenever their folders change
+  const scriptMode = process.env.SP_PLUGIN_SCRIPTS;
+  const packs = createPluginRegistry({ publicDir, dataDir, packsDir, pluginsDir }, { log, scriptHost: host, scriptMode });
   packs.refresh(true);
   // the content hashes of the art (built in the background once listening) and the manifests served with them
   const indexOptions = assetIndexOptionsFrom(opts, publicDir);
   const assetIndex = indexOptions ? createAssetIndex({ publicDir, log, ...indexOptions }) : null;
   const views = assetIndex ? createManifestViews({ dataDir, index: assetIndex, log }) : null;
-  const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, packsDir, packs, runtimeCache: opts.runtimeCache, log, assetIndex, views });
+  const serverSettings = createServerSettings({ dir: opts.serverSettingsDir, root: ROOT, log,
+    onChange: (next) => applySettings(next) });
+  const announcements = createAnnouncementStore({ dir: opts.announcementsDir, root: ROOT, log });
+  // the visual sets of the cosmetic plugins (DESIGN §32 P1a): what a room's host switches on, served at /vs/ and /p/
+  const visual = createVisualSets({ registry: packs, log });
+  // the server owner's policy (plugins/config.json), the content sets of the gameplay plugins (served at /cs/<cs16>/…),
+  // what a room's plugins make of both, and the match hosts a room with gameplay plugins plays in (DESIGN §32.6)
+  const policy = createPluginPolicy({ pluginsDir, log });
+  const contents = createContentSets({ registry: packs, vanillaData: data, log, maxSets: () => policy.get().maxSets });
+  const roomSets = createRoomSets({ registry: packs, visual, contents, policy });
+  // a child process per content set; SP_MATCH_HOST=worker asks for a worker thread instead (match/host/index.js header:
+  // an out-of-memory abort in a worker thread ends the whole server)
+  const transport = String(process.env.SP_MATCH_HOST || '').trim().toLowerCase() === 'worker' ? 'worker' : 'process';
+  const hosts = createMatchHosts({ contents, log, options: { transport, maxWorkers: Math.max(1, policy.get().maxSets), ...(opts.matchHost || {}) } });
+  const { registry, lobby, network } = createSessionStack(opts, { data, log, content, plugins: roomSets, hosts });
+  const announcementNotices = createAnnouncementNoticeMonitor({ store: announcements, network, log });
+  const serveStatic = createStaticHandler({ publicDir, dataDir, sharedDir, simDir, packsDir, pluginsDir, packs, content,
+    runtimeCache: opts.runtimeCache, log, assetIndex, views, visual, contents });
+  // the plugin studio (DESIGN §32.9): its page and API for this machine and the local network; it watches plugins/ only
+  // once it is used (hot reload), and rooms whose host is the author or alone follow a plugin's changes by themselves
+  const studio = opts.studio === false ? null : createStudio({ publicDir, pluginsDir, dataDir, registry: packs, lobby, sessions: registry, log, fetch: opts.fetch });
+  const trustedRuntime = await createTrustedRuntime({ registry: packs, log });
+  lobby.trustedRuntime = trustedRuntime;
   // A persisted owner limit overrides the programmatic/env fallback. A null setting means the
   // default unlimited limiter, while keeping tests and embedders' explicit opts usable.
   const fallbackAssetCacheLimits = opts.assetCacheLimits;
@@ -156,7 +205,9 @@ export async function startServer(opts = {}) {
     },
   });
   requestHandler = createRequestHandler({ serveStatic, announcements, assetCache,
-    emergency: () => network.emergency, health: { startedAt, network, registry, lobby, bandwidthEmergency, traffic, assetIndex, views }, log, trustProxy: network.opts.trustProxy });
+    emergency: () => network.emergency, csp: process.env.SP_CSP === 'off' ? null : siteCsp(publicDir),
+    health: { startedAt, network, registry, lobby, content, bandwidthEmergency, traffic, assetIndex, views, trusted: trustedRuntime?.health },
+    log, trustProxy: network.opts.trustProxy, studio, trustedRuntime });
   const server = http.createServer(requestHandler);
   server.on('clientError', answerClientError);
   const wss = attachWebSocket(server, { network, log, traffic });
@@ -193,6 +244,14 @@ export async function startServer(opts = {}) {
     }
     if (bound === null) throw lastError;
     boundHost = bound;
+    // Check the kernel's address too: aliases/DNS and bind fallback cannot weaken the owner gate.
+    const actual = server.address();
+    const scriptHost = actual && typeof actual === 'object' ? actual.address : '';
+    packs.setScriptHost(scriptHost);
+    if (!trustedHostAllowed(scriptHost, scriptMode)) {
+      lobby.trustedRuntime = null;
+      await trustedRuntime?.close();
+    }
   } catch (e) {
     bandwidthEmergency.close();
     serverSettings.close();
@@ -200,6 +259,8 @@ export async function startServer(opts = {}) {
     announcementNotices.close();
     network.close(); // stop heartbeat/sweep timers of the half-built server
     assetIndex?.close();
+    studio?.close();
+    await trustedRuntime?.close();
     throw e;
   }
   server.on('error', (e) => log.error('[http] server error', e));
@@ -219,8 +280,11 @@ export async function startServer(opts = {}) {
       assetCache.close();
       announcementNotices.close();
       try { lobby.shutdown('shutdown'); } catch (e) { log.error('[shutdown] lobby', e); }
+      try { hosts.close(); } catch (e) { log.error('[shutdown] match hosts', e); }
       network.close();
       assetIndex?.close();
+      studio?.close();
+      await trustedRuntime?.close();
       await new Promise((resolve) => {
         server.close(() => resolve());
         server.closeIdleConnections?.();
@@ -232,7 +296,7 @@ export async function startServer(opts = {}) {
   }
 
   return { port: actualPort, host: boundHost, url, server, wss, lobby, network, registry, packs, announcements, serverSettings,
-    bandwidthEmergency, traffic, assetIndex, views, close };
+    bandwidthEmergency, content, visual, contents, hosts, traffic, assetIndex, views, studio, close };
 }
 
 // `node server/index.js` / npm start: listen, print the banner, stop on SIGINT / SIGTERM (http/boot.js).

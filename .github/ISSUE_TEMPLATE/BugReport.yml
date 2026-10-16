@@ -57,6 +57,33 @@ body:
         3. ……
     validations:
       required: true
+  - type: dropdown
+    id: plugins
+    attributes:
+      label: 是否开了插件
+      description: |
+        插件为非官方制作。出问题的房间开着插件时，请先确认关掉插件（原版）后问题是否仍然出现；只在插件房里出现的问题请先反馈给插件作者。
+        游戏内「问题反馈」报告的第二行（content: …）写着本房间的内容：`vanilla` 为原版，`MODDED` 为开了改变玩法的插件。
+      options:
+        - 没有（原版）
+        - 只开了外观插件
+        - 开了改变玩法的插件（非官方对局）
+        - 不确定
+    validations:
+      required: true
+  - type: checkboxes
+    id: vanilla-repro
+    attributes:
+      label: 插件房的问题
+      description: 开着插件时出现的问题，请勾选下面一项（没有开插件可以跳过）。
+      options:
+        - label: 我已在原版（关掉所有插件）中复现了这个问题
+  - type: input
+    id: content-line
+    attributes:
+      label: 内容标识（可选）
+      description: "「问题反馈」报告第二行 content: 之后的内容（原版 / 插件与内容哈希），帮助开发者确认对局用的是哪套内容。"
+      placeholder: "vanilla cs=… 或 MODDED cs=… plugins=…"
   - type: textarea
     id: screenshots
     attributes:

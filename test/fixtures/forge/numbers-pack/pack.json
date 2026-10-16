@@ -1,0 +1,11 @@
+{
+  "id": "rose-numbers",
+  "name": "玫瑰数值",
+  "version": "1.0.0",
+  "author": "rose",
+  "license": "CC0-1.0",
+  "description": "A small Forge-style numbers pack written for the importer.",
+  "content": ["bonds", "units", "enemies"],
+  "overrides": ["bonds:deputShip"],
+  "operators": {}
+}

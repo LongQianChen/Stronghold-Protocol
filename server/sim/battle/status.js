@@ -97,7 +97,7 @@ export class BattleStatus {
             if (b.interval > 0) {
               b._acc += dt;
               let n = 0;
-              while (b._acc >= b.interval - 1e-9 && n++ < 8) {
+              while (b._acc >= b.interval - 1e-9 && n++ < 8) { // loop-cap: at most 8 interval ticks
                 b._acc -= b.interval;
                 this._safe(() => b.onTick({ battle: this, unit: u, buff: b, dt: b.interval }), 'buff.onTick', u);
               }
@@ -284,7 +284,7 @@ export class BattleStatus {
     const strength = (v, s = null) => Math.abs(Number.isFinite(s) ? s : Number.isFinite(v) ? v : tpl.valued);
     const entry = (v, s, extra) => (Number.isFinite(s) ? { value: v, stackAs: s, ...extra } : { value: v, ...extra });
     const after = (tail, until) => {
-      while (tail && tail.until <= until) tail = tail.tail;
+      while (tail && tail.until <= until) tail = tail.tail; // loop-cap: buff chain
       return tail || null;
     };
     const insertTail = (tail, incoming) => {

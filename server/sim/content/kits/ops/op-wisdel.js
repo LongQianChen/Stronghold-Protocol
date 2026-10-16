@@ -58,6 +58,7 @@
 //   picks [ASSUMED: one 维什戴尔, no shared lock].
 
 import { num, talentBb, traitBb, skillRec, up, batMod } from '../shared/tier1.js';
+import { bbCap } from '../../../../../shared/plugins/officialBounds.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 import { hasHp } from '../../../damage.js';
 import { COLS } from '../../../constants.js';
@@ -226,7 +227,9 @@ export default {
   char_1035_wisdel: (bb, chess) => {
     const tb = traitBb(chess);
     const shockScale = num(tb['attack@append_atk_scale'], 0.5);
-    const count = num(tb['attack@enable_third_attack']) > 0 ? 2 : Math.max(1, Math.floor(num(tb['attack@times'], 2)) - 1);
+    // [ASSUMED] DESIGN §32.5: shock count follows attack@times. The enable_third_attack branch is the constant 2.
+    const rawCount = num(tb['attack@enable_third_attack']) > 0 ? 2 : Math.max(1, Math.floor(num(tb['attack@times'], 2)) - 1);
+    const count = Math.min(bbCap('attack@times'), rawCount);
     const t0 = talentBb(chess, 0);
     const mainScale = num(t0['attack@main_atk_scale'], 1);
     const bomb = { scale: num(t0['attack@bomb_atk_scale']), stun: num(t0['attack@stun']), radius: num(t0['attack@range_radius'], 1.1) };

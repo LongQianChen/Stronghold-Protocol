@@ -217,15 +217,16 @@ test('no skill, blink or scripted move while it lasts (失衡免疫 「失衡期
   assert.equal(e.x, x0);
   h.run(1.05);
   assert.equal(canCast(e, false, h.b), true, 'after the state');
-  // 枯朽之种 (a 静态刚体 flyer: a pull's window, no movement): no dive, no blast meanwhile
-  const s = real('enemy_1269_nhfly', { units: [{ chessId: 't_wall', row: 10, col: 6 }], pos: [10, 7] });
+  // 枯朽之种 (a 静态刚体 flyer): the pull holds it before it enters the 2-tile launch range.
+  const s = real('enemy_1269_nhfly', { units: [{ chessId: 't_wall', row: 10, col: 6 }], pos: [10, 8.2], move: true });
   const t0 = s.h.b.time;
   s.h.b.pull(s.e, 3, { to: { x: 3, y: 10 } });
   assert.ok(near(s.e.unbalanceUntil - t0, PULL_UNBALANCE));
   const sx = s.e.x, sy = s.e.y;
   s.h.run(0.9);
-  assert.ok(s.e.alive && near(s.e.x, sx) && near(s.e.y, sy), 'still where it was, not exploded');
-  assert.ok(s.h.runUntil(() => !s.e.alive, 5), 'then it dives and blows up');
+  assert.ok(s.e.alive && near(s.e.x, sx) && near(s.e.y, sy), 'still where it was, not launched');
+  assert.equal(s.h.b.projectiles.list.some((p) => p.source === s.e), false, 'no projectile during the pull');
+  assert.ok(s.h.runUntil(() => !s.e.alive, 5), 'then it enters range, launches and blows up');
 });
 
 test('乌顶巨角卢鲁: a 失衡 that does not move it holds its clash until the state ends', REAL, () => {

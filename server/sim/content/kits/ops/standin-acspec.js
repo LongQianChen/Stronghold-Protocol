@@ -7,7 +7,7 @@
 import { num, talentBb, traitBb, skillRec, statBuff, toggleBuff } from '../shared/tier1.js';
 import { lonely } from '../shared/tier4.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 
 const S1 = 'skchr_acspec_1';
 const S2 = 'skchr_acspec_2';
@@ -28,7 +28,7 @@ const RING_X4 = Object.freeze([[1, -1], [1, 0], [1, 1], [0, -1], [0, 0], [0, 1],
 function enemiesAround4(battle, unit) {
   const keys = new Set(absoluteRangeKeys(AROUND4, unit.tileR, unit.tileC, unit.dir, 0));
   let n = 0;
-  for (const e of battle.enemies) if (e.alive && e.deployed && !e.hidden && bodyInKeys(e, keys)) n++;
+  for (const e of battle.enemies) if (e.alive && e.deployed && !e.hidden && bodyInRange(e, keys)) n++;
   return n;
 }
 

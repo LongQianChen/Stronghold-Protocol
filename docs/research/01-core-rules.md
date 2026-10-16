@@ -396,6 +396,8 @@ The 20-fund 绮良 / 55-fund 帕格尼尼 band thresholds count **funds spent** 
   - Entry condition after passing R14:
     - solo: activated bond layers total **> 350** and LP > 1;
     - multi: sum over all players **> 1200** and LP sum > 1.
+    - PRTS marks these conditions as user-contributed; a community measurement (Bilibili 路标月报#2, cited on
+      GitHub #645) shows the same 「剩余生命值 > 1」, so 1 LP left does not enter.
     - (盟约 上半 values were 300 / 1000.)
   - The boss is weighted among 胄/铳/管 hidden versions (50/40/40).
   - Failing it does not affect the clear or the reward. Success shows a special banner and awards more trophies.

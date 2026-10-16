@@ -1,0 +1,15 @@
+{
+  "$schema": "../../../schemas/plugin.schema.json",
+  "manifest": 2,
+  "id": "script-demo",
+  "name": "Script training guard",
+  "version": "1.0.0",
+  "app": ">=0.3.0 <0.4.0",
+  "api": 1,
+  "class": "script",
+  "scope": ["room"],
+  "authors": ["Your name"],
+  "permissions": ["sim.code", "data.add"],
+  "operators": ["guard.json"],
+  "entry": { "sim": "sim/index.js" }
+}

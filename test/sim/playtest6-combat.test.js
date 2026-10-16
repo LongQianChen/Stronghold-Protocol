@@ -1,8 +1,8 @@
 // User playtest #6, workstream WF (combat rules) — reports #17, #14, #18.
 //
 // #17 "两个干员之间卡了敌人，靠后的干员死亡之后敌人确实会被靠前的干员阻挡了，但是只有敌人攻击干员，靠前的干员不会攻击那个敌人":
-//     PRTS 选择器 "可以选择且优先选择阻挡单位" — and the user's rule after playtest #6, "阻挡了就一定要能打到": officially the
-//     collision pushes a blocked enemy to its blocker's front, so EVERY blocker — a ranged operator on a melee tile included
+//     PRTS 选择器 "可以选择且优先选择阻挡单位" — and the user's rule after playtest #6, "阻挡了就一定要能打到", where the
+//     enemy stands: EVERY blocker — a ranged operator on a melee tile included
 //     (the playtest #5 QA had made that melee-only, PRTS 索敌的概念 "阻挡（近战限定）") — attacks the enemies it blocks, in
 //     range or not, whatever its facing, and takes them first. The real sim does for every blocking chess of the pool in
 //     a plain block and in the user's layout, whether the take-over happens at once or once the enemy slid behind the

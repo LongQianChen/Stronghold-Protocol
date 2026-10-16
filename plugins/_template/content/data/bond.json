@@ -1,0 +1,1 @@
+{"patch":1,"ops":[{"op":"set","file":"bonds","id":"deputShip","path":["bb","base_def"],"value":0.3},{"op":"set","file":"bonds","id":"deputShip","path":["buffs",0,"bb","base_def"],"value":0.3}]}

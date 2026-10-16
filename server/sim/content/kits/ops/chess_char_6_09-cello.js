@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_6_09-cello.js — 塑心 (char_245_cello) kit, tier 6.
 // Conventions of the tier-6 kits: ../shared/tier6.js; kit contract and rules: ../README.md.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { hasHp } from '../../../damage.js';
 import {
   num, tbb, moduleBb, live, isElite, enemiesIn, selectedSkill, skillGridOf, bstate, onElementHit, elementDmg, aura,
@@ -112,7 +112,7 @@ function cello(bb, chess, def) {
             if (!d || d.type !== 'element' || d.element !== 'apoptosis' || !t || t.side !== 'enemy') return;
             let best = 1;
             for (const c of S.cellos) {
-              if (!live(c) || !(c.mem.celloWide || bodyInKeys(t, c.rangeKeySet))) continue;
+              if (!live(c) || !(c.mem.celloWide || bodyInRange(t, c.rangeKeySet))) continue;
               const v = scaled(c.mem.celloAmp, c);
               if (v > best) best = v;
             }

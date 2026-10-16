@@ -52,7 +52,7 @@
 import { num, talentBb, moduleBb, traitBb, skillRec, up, giveSp, batMod } from '../shared/tier1.js';
 import { COLS } from '../../../constants.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { isHpLoss } from '../../../damage.js';
 
 const S1 = 'skchr_lin_1';
@@ -219,7 +219,7 @@ export default {
           battle.on('hit', (c) => {
             if (c.source !== unit || !c.target || c.target.side !== 'enemy' || c.dmg.type === 'element' || !unit.rangeKeySet) return;
             let n = 0;
-            for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInKeys(e, unit.rangeKeySet) && ++n >= cap) break;
+            for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInRange(e, unit.rangeKeySet) && ++n >= cap) break;
             if (n > 0) c.dmg.mul *= 1 + per * n;
           }, { owner: unit });
         }

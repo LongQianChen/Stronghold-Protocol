@@ -207,7 +207,7 @@ export default {
             skill.timeLeft = Math.max(0.01, skill.duration) + dt;   // the 6 s start after the move
             m.t += dt;
             if (gone(m.target) && !handOver(m, battle, unit)) { landS2(battle, unit, skill, m); return; }
-            while (m.n < m.hits && m.t + 1e-9 >= SLASH_IV * m.n) {
+            while (m.n < m.hits && m.t + 1e-9 >= SLASH_IV * m.n) { // loop-cap: constant SLASH_IV and a hit count
               slash(battle, unit, m);
               if (!unit.alive || !skill.active) return;
               if (gone(m.target) && !handOver(m, battle, unit)) { landS2(battle, unit, skill, m); return; }
@@ -248,7 +248,7 @@ export default {
             const m = unit.mem.chen3T2;
             if (!up(unit) || !m) return;
             m.acc += dt;
-            while (m.acc >= 1 - 1e-9) {
+            while (m.acc >= 1 - 1e-9) { // loop-cap: one-second step
               m.acc -= 1;
               if (++m.count < st) continue;
               m.count = 0;

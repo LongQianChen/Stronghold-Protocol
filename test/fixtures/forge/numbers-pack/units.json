@@ -1,0 +1,16 @@
+{
+  "rose_guard": {
+    "name": "玫瑰守卫",
+    "rarity": 4,
+    "profession": "DEFENDER",
+    "subProfessionId": "protector",
+    "position": "MELEE",
+    "bonds": ["deputShip"],
+    "kit": "kits/guard.js",
+    "forms": {
+      "0": { "stats": { "maxHp": 2000, "atk": 200, "def": 250, "bat": 1.2, "blockCnt": 3 }, "rangeGrid": [[0, 0], [0, 1]] },
+      "2": { "stats": { "maxHp": 3000, "atk": 300, "def": 400, "bat": 1.2, "blockCnt": 3 }, "rangeGrid": [[0, 0], [0, 1]] }
+    },
+    "skills": [{ "name": "守御", "duration": 10, "spCost": 20, "initSp": 20, "bb": { "max_hp": 0.4, "def": 0.5 }, "default": true }]
+  }
+}

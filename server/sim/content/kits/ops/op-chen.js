@@ -150,7 +150,7 @@ export default {
             m.t += dt;
             // "若斩击次数未到10次之前技能范围内没有目标，立刻中止技能" (after the last slash the clip runs out)
             if (m.n < times3 && !slashTarget(battle, unit, m)) { skill.end('noTarget'); return; }
-            while (m.n < times3 && m.t + 1e-9 >= S3_SLASH_AT[m.n]) {
+            while (m.n < times3 && m.t + 1e-9 >= S3_SLASH_AT[m.n]) { // loop-cap: fixed slash-time table
               const e = slashTarget(battle, unit, m);
               if (!e) { skill.end('noTarget'); return; }
               m.n++;

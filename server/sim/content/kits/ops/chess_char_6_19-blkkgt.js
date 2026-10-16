@@ -2,14 +2,14 @@
 // Conventions of the tier-6 kits: ../shared/tier6.js; kit contract and rules: ../README.md.
 
 import { sortEnemyTargets, canTargetEnemy } from '../../../targeting.js';
-import { num, tbb, parseN, live, ANY, enemiesIn, instantKind, pullToward } from '../shared/tier6.js';
+import { num, tbb, textCount, live, ANY, enemiesIn, instantKind, pullToward } from '../shared/tier6.js';
 
 // ------------------------------------------------------------------------------------------------------------------
 // 锏 chess_char_6_19 (剑豪) — S3 归于宁静; “天生的武者”; 活着的传奇; module “过往的注脚”
 
 function blkkgt(bb, chess, def) {
   const t0 = tbb(def, 0), t1 = tbb(def, 1), tb = def?.traitBb || {};
-  const slashes = Math.max(1, parseN(def?.skill?.description, /总计(\d+)次/, 10));
+  const slashes = Math.max(1, textCount(def?.skill?.description, /总计(\d+)次/, 10, 'total-times'));
   const iv = Math.max(0.05, num(bb.d_hit_interval, 0.3)), pullIv = Math.max(0.1, num(bb.p_hit_interval, 1));
   const maxT = Math.max(1, Math.floor(num(bb.max_target, 1)));
   const skillGrid = def?.skill?.rangeGrid?.length ? def.skill.rangeGrid : null;
@@ -100,7 +100,7 @@ function blkkgt(bb, chess, def) {
         if (!m) return;
         m.acc += dt;
         m.pacc += dt;
-        while (m.acc + 1e-9 >= iv && m.n < slashes) { m.acc -= iv; m.n++; slash(battle, unit, num(bb.d_atk_scale, 1)); }
+        while (m.acc + 1e-9 >= iv && m.n < slashes) { m.acc -= iv; m.n++; slash(battle, unit, num(bb.d_atk_scale, 1)); } // loop-cap: interval floored and textCount total-times
         if (m.pacc + 1e-9 >= pullIv) { m.pacc -= pullIv; pull(battle, unit, num(bb.p_force)); }
       },
       onEnd({ battle, unit, reason }) {

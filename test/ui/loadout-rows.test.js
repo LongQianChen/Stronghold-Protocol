@@ -163,9 +163,12 @@ test('the module card reads its talent changes at the operator\'s 潜能, as 局
   const lines = texts(ModuleInfo({ m: null, golden: ex, opt: { id: rea.uniEquipId, rec: rea }, potential: 6 }));
   assert.ok(lines.some((x) => x.includes('每攻击到一个敌人回复自身<@ba.kw>50</>生命')), lines.join(' | '));
   assert.ok(lines.some((x) => x === '攻击范围内存在2名及以上敌人时攻击速度<@ba.kw>+12</>'));
-  // the detail hands the operator's 潜能 to it
+  // the detail hands the operator's 潜能 to it — the stored one (cultivationView: opsOf(ops, charId).potential) when the
+  // operator has a 潜能 curve; a data plugin's operator without one gets none, the full-potential text (DESIGN §32.5)
   const src = readFileSync(path.join(ROOT, 'public/js/screens/loadout.js'), 'utf8');
-  assert.match(src, /<\$\{ModuleInfo\} m=\$\{m\} golden=\$\{golden\} opt=\$\{modOpt\} potential=\$\{opsOf\(ops, chess\.charId\)\.potential\} \/>/);
+  assert.match(src, /<\$\{ModuleInfo\} m=\$\{m\} golden=\$\{golden\} opt=\$\{modOpt\} potential=\$\{cv\.potentialOn \? cv\.potential : null\} \/>/);
+  const cult = readFileSync(path.join(ROOT, 'public/js/screens/cultivation.js'), 'utf8');
+  assert.match(cult, /const cur = opsOf\(ops, charId\);\n  const potentialOn = potentialEditable\(charId, tables\);\n  return \{\n    potential: cur\.potential,/);
 });
 
 test('css: the selected skill\'s frame is square around its icon (GitHub #398 / PR #399): no img max-width clamp, fill beats `.lo-sicon img`', () => {

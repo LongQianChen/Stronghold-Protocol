@@ -11,9 +11,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  FOLDER, REFUSE, RUNTIME_RESEARCH, entryProblems, isRefused, packageOutIsUnsafe, plan, playerPackageJson,
-  rewritePlayerDoc, resolveSpecifier, scanFiles, selectTracked,
+  ASSET_PACK_README, AUTHOR_TEST_FILES, FOLDER, REFUSE, RUNTIME_RESEARCH, assetPackName, assetPackPlan, assetPackReadme, entryProblems,
+  importableArt, isRefused, packageOutIsUnsafe, parseArgs, plan, playerPackageJson, rewritePlayerDoc, resolveSpecifier, scanFiles,
+  selectTracked,
 } from '../tools/package.mjs';
+import { hash16 } from '../server/http/assetIndex.js';
+import { rewriteManifest } from '../server/http/assetViews.js';
+import { IMPORTED_ASSET_CACHE } from '../public/js/assetCache.js';
+import { createAssetImport } from '../public/js/assetPack.js';
 
 // a fake home path, built at run time so the repository never contains one (the local push guard scans every patch)
 const FAKE_HOME = ['', 'Users', 'someone'].join('/');
@@ -41,7 +46,7 @@ test('selection: runtime files in; tests, maintainer tools, other docs, dev page
     'data/chess.json', 'data/i18n/en.json', 'tools/setup.mjs', 'tools/vendor.mjs', 'tools/fetch-assets.mjs', 'tools/doctor.mjs',
     'tools/announcements.mjs', 'docs/ANNOUNCEMENTS.md', 'tools/crop-board-atlas.mjs', 'tools/assets/plan.mjs', 'tools/assets/local-enemy-spines.json', 'tools/assets/local-token-spines.json',
     'tools/local-extract/extract.py',
-    'tools/local-extract/LICENSE-Ark-Unpacker.txt', 'scripts/start.sh', 'scripts/start-windows.bat', 'scripts/launch.mjs',
+    'tools/local-extract/LICENSE-Ark-Unpacker.txt', 'scripts/start.sh', 'scripts/start-windows.bat', 'scripts/start-windows-sandbox.bat', 'scripts/launch.mjs',
     'scripts/install-service-windows.ps1', 'docs/PLAYING.md', 'docs/DEPLOY.md', ...RUNTIME_RESEARCH, 'package.json',
     'package-lock.json', 'LICENSE', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md', 'README.md', 'CHANGELOG.md',
     // out
@@ -55,11 +60,11 @@ test('selection: runtime files in; tests, maintainer tools, other docs, dev page
     'public/.DS_Store', 'tools/local-extract/.venv-extract/x.py', 'node_modules/ws/index.js', 'runtime/announcements/index.json',
   ]);
   for (const f of ['server/index.js', 'public/i18n/en.json', 'data/i18n/en.json', 'tools/assets/local-enemy-spines.json',
-    'tools/assets/local-token-spines.json', 'tools/local-extract/LICENSE-Ark-Unpacker.txt', 'scripts/install-service-windows.ps1',
+    'tools/assets/local-token-spines.json', 'tools/local-extract/LICENSE-Ark-Unpacker.txt', 'scripts/install-service-windows.ps1', 'scripts/start-windows-sandbox.bat',
     'docs/research/07-assets.json', 'CHANGELOG.md']) {
     assert.ok(keep.includes(f), `keeps ${f}`);
   }
-  assert.equal(keep.length, 37, keep.join(' '));
+  assert.equal(keep.length, 38, keep.join(' '));
   assert.ok(keep.includes('tools/announcements.mjs'));
   assert.ok(keep.includes('docs/ANNOUNCEMENTS.md'));
   assert.ok(drop.includes('runtime/announcements/index.json'));
@@ -97,7 +102,7 @@ test('the real tracked tree: runtime in, the rest out; every shipped import, npm
     assert.ok(!got.has(f), f);
   }
   // the design document (the index docs/DESIGN.md and its parts in docs/design/, docs/history/) stays out too
-  for (const f of got) assert.ok(!/^(?:test|handoff|\.github|types|public\/dev|docs\/img|docs\/design|docs\/history)\//.test(f), f);
+  for (const f of got) if (!AUTHOR_TEST_FILES.includes(f)) assert.ok(!/^(?:test|handoff|\.github|types|public\/dev|docs\/img|docs\/design|docs\/history)\//.test(f), f);
   const code = [...got].filter((f) => /\.(?:m?js|py)$/.test(f));
   for (const f of code) {
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -369,5 +374,221 @@ test('the personal scan reads bytes, never reports the matched text, and skips f
     assert.deepEqual(scanFiles(dir, ['a.bin', 'c.txt'], { home: false, names: [] }), [], 'node_modules: the names only');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --assets: the example asset pack for the title screen's 导入素材包 (docs/history/0.3.0.md §32.14.39). The selection is
+// the importer's own plan of the served manifests; the built zip goes through the real importer (assetPack.js) below.
+
+test('importableArt: what the import checks — files, whole Spine models with their default page, local groups and effects; nothing it skips', () => {
+  const art = importableArt({
+    chars: { a: { avatar: '/assets/char/a.png', front: { skel: '/assets/spine/a/a.skel', atlas: '/assets/spine/a/a.atlas', textures: ['/assets/spine/a/a.png', '/assets/spine/a/a_2.png'] } } },
+    tokens: { t: { skel: '/assets/spine/t/t.skel', atlas: '/assets/spine/t/t.atlas' } },   // no textures: the default t.png counts
+    ui: { b: '/assets/ui/b%20c.png', q: '/assets/ui/q.png?v=2', dots: '/assets/ui/../x.png', remote: 'https://cdn.test/assets/y.png' },
+    audio: { bgm: '/assets/audio/bgm/a.mp3' },
+    fonts: { css: '/fonts/fonts.css' },
+  }, {
+    version: 1, stray: '/assets/local/stray.png',                                   // outside groups: the importer never reads it
+    groups: {
+      'spine/token/x': { 'x.skel': { path: '/assets/local/spine/x/x.skel' }, 'x.atlas': { path: '/assets/local/spine/x/x.atlas' } },
+      scene: { a: { path: '/assets/local/scene/a/scene.bin' } },
+    },
+  }, { format: 'fx-manifest', groups: { 'fx/tex': { t: { path: '/assets/local/fx/tex/t.webp' } } } });
+  assert.deepEqual(art, [
+    'public/assets/audio/bgm/a.mp3', 'public/assets/char/a.png',
+    'public/assets/local/fx/tex/t.webp', 'public/assets/local/scene/a/scene.bin',
+    'public/assets/local/spine/x/x.atlas', 'public/assets/local/spine/x/x.skel',
+    'public/assets/spine/a/a.atlas', 'public/assets/spine/a/a.png', 'public/assets/spine/a/a.skel', 'public/assets/spine/a/a_2.png',
+    'public/assets/spine/t/t.atlas', 'public/assets/spine/t/t.png', 'public/assets/spine/t/t.skel',
+    'public/assets/ui/b c.png', 'public/fonts/fonts.css',
+  ]);
+  assert.deepEqual(importableArt(null, null, null), []);
+});
+
+/** fakeCheckout() plus what the asset pack looks at: an effects manifest, a model without textures, leftovers no manifest lists. */
+function assetCheckout() {
+  const co = fakeCheckout();
+  const assets = JSON.parse(fs.readFileSync(path.join(co.dir, 'data/assets.json'), 'utf8'));
+  assets.tokens = { t: { skel: '/assets/spine/t/t.skel', atlas: '/assets/spine/t/t.atlas' } };
+  co.put('data/assets.json', JSON.stringify(assets));
+  co.put('public/assets/spine/t/t.skel', 'token-skel');
+  co.put('public/assets/spine/t/t.atlas', 't.png\nsize: 1,1\n');
+  co.put('public/assets/spine/t/t.png', Buffer.concat([PNG, Buffer.from('t')]));
+  co.put('data/local-fx.json', JSON.stringify({ version: 1, format: 'fx-manifest', groups: { 'fx/prefabs': { hit: { path: '/assets/local/fx/prefabs/hit.json' } } } }));
+  co.put('public/assets/local/fx/prefabs/hit.json', '{"hit":1}');
+  co.put('public/assets/local/fx/prefabs/unused.json', '{"old":1}');                  // extracted, not listed
+  const git = (...args) => spawnSync('git', ['-C', co.dir, ...args], { encoding: 'utf8' });
+  assert.equal(git('add', 'data/assets.json').status, 0);
+  assert.equal(git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'fake').status, 0);
+  return co;
+}
+
+const PACK_ART = ['public/assets/char/a.png', 'public/assets/local/fx/prefabs/hit.json', 'public/assets/local/g/x.webp',
+  'public/assets/local/spine/token/token_x/token_x.skel', 'public/assets/spine/t/t.atlas', 'public/assets/spine/t/t.png',
+  'public/assets/spine/t/t.skel', 'public/assets/ui/b c.png', 'public/fonts/fonts.css'];
+
+test('asset pack plan: the listed art with the effects and the default page; manifests, leftovers and unlisted fonts stay out', () => {
+  const { dir, put, rm } = assetCheckout();
+  try {
+    const p = assetPackPlan(dir, { env: ENV });
+    assert.deepEqual(p.problems, []);
+    assert.equal(p.name, 'Stronghold-Protocol-v9.9.9-assets');
+    assert.equal(assetPackName('0.3.0'), 'Stronghold-Protocol-v0.3.0-assets');
+    assert.deepEqual(p.files, PACK_ART);
+    assert.deepEqual(p.notListed, ['public/assets/local/fx/prefabs/unused.json', 'public/assets/local/g/x.png', 'public/fonts/x.woff2'],
+      'the full zip ships them; the import would skip them');
+    assert.ok(!p.files.some((f) => f.startsWith('data/')), 'the browser reads the host\'s manifests, never the pack\'s');
+    assert.equal(p.scanned, p.files.length);
+    assert.deepEqual(assetPackPlan(dir, { env: ENV, fx: false, scan: false }).files, PACK_ART.filter((f) => !f.includes('/fx/')), 'FULL_ZIP_FX off');
+    const noJp = assetPackPlan(dir, { env: ENV, scan: false, jpVoice: false });
+    assert.deepEqual(noJp.held, []);
+    // the checks: missing art, personal info in art, an uncommitted manifest
+    rm('public/assets/spine/t/t.png');
+    assert.match(assetPackPlan(dir, { env: ENV }).problems.join('\n'), /^missing art: public\/assets\/spine\/t\/t\.png/);
+    put('public/assets/spine/t/t.png', Buffer.concat([PNG, Buffer.from('..PlantedName..')]));
+    assert.deepEqual(assetPackPlan(dir, { env: ENV }).problems, ['personal info: public/assets/spine/t/t.png (account name)']);
+    put('public/assets/spine/t/t.png', Buffer.concat([PNG, Buffer.from('t')]));
+    put('data/assets.json', `${fs.readFileSync(path.join(dir, 'data/assets.json'), 'utf8')}\n`);
+    assert.deepEqual(assetPackPlan(dir, { env: ENV, scan: false }).problems,
+      ['uncommitted change: data/assets.json (the pack must match the released manifest: commit it, or --allow-dirty)']);
+    assert.deepEqual(assetPackPlan(dir, { env: ENV, scan: false, allowDirty: true }).problems, []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('--assets: a dry run lists the pack and writes nothing; it never combines with --lite or --update', () => {
+  const { dir } = assetCheckout();
+  try {
+    const before = fs.readdirSync(dir).sort();
+    const dry = runTool(['--root', dir, '--assets', '--dry-run', '--list']);
+    assert.equal(dry.status, 0, dry.stdout + dry.stderr);
+    assert.deepEqual(listed(dry.stdout), [...PACK_ART, ASSET_PACK_README]);
+    assert.match(dry.stdout, /^asset pack: Stronghold-Protocol-v9\.9\.9-assets\.zip · version 9\.9\.9/m);
+    assert.match(dry.stdout, /^left out: 3 files the full zip ships from public\/ that no manifest lists/m);
+    assert.match(dry.stdout, /^checks: ok$/m);
+    assert.deepEqual(fs.readdirSync(dir).sort(), before, 'a dry-run writes nothing');
+    for (const bad of [['--assets', '--lite'], ['--assets', '--update', '--from', dir]]) {
+      assert.throws(() => parseArgs(bad), /--assets builds the asset pack alone/);
+      assert.equal(runTool(['--root', dir, ...bad, '--dry-run']).status, 2);
+    }
+    assert.equal(parseArgs(['--assets']).assets, true);
+    assert.equal(parseArgs([]).assets, false, 'the normal modes are unchanged');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the README names the version, the manifests it matches, how to import, and the notice', () => {
+  const text = assetPackReadme({ version: '0.3.0', files: ['a', 'b'], bytes: { art: 3 * 1048576 }, local: true, fx: true });
+  assert.ok(text.startsWith('\ufeff卫戍协议：盟约 v0.3.0 素材包\n'), 'UTF-8 with a BOM');
+  for (const s of ['data/assets.json、data/local-assets.json、data/local-fx.json', '「导入素材包」', '「选择 zip」', '「跳过 1 个」',
+    'HTTPS', 'localhost', '"Import asset pack"', 'files that version does not list are skipped', '2 files (3.0 MB)',
+    'https://github.com/sganggs/Stronghold-Protocol/blob/v0.3.0/NOTICE.md']) assert.ok(text.includes(s), s);
+  const dev = assetPackReadme({ version: '0.3.1-dev', files: [], bytes: { art: 0 }, local: false, fx: false });
+  assert.ok(dev.includes('/blob/v0.3.1/NOTICE.md') && !dev.includes('local-fx.json'));
+});
+
+/** The served manifests of `dir` as the server builds them (assetViews.js), with the real content hashes of its files. */
+function servedViews(dir) {
+  const hashOf = (rel) => {
+    try { return hash16(fs.readFileSync(path.join(dir, 'public', rel))); } catch { return null; }
+  };
+  const index = {
+    hashOf,
+    modelHash(rels) {
+      const parts = rels.map(hashOf);
+      return parts.every(Boolean) ? hash16(parts.join('\n')) : null;
+    },
+  };
+  const view = (name) => {
+    const file = path.join(dir, 'data', name);
+    return fs.existsSync(file) ? rewriteManifest(JSON.parse(fs.readFileSync(file, 'utf8')), name, index).doc : null;
+  };
+  return { 'assets.json': view('assets.json'), 'local-assets.json': view('local-assets.json'), 'local-fx.json': view('local-fx.json') };
+}
+
+function memoryCaches() {
+  const store = new Map();
+  return {
+    store,
+    caches: {
+      async open(name) {
+        assert.equal(name, IMPORTED_ASSET_CACHE);
+        return {
+          async put(url, response) { store.set(String(url), new Uint8Array(await response.arrayBuffer())); },
+          async keys() { return [...store.keys()].map((url) => ({ url })); },
+        };
+      },
+    },
+  };
+}
+
+test('a --assets build zips exactly the plan and README.txt in one folder, and the real importer accepts every file', { skip: !hasZipTool && 'no zip / tar' }, async () => {
+  const { dir } = assetCheckout();
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-package-out-'));
+  try {
+    const r = runTool(['--root', dir, '--assets', '--out', out]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /^not a release asset: offer it for download elsewhere/m);
+    const name = 'Stronghold-Protocol-v9.9.9-assets';
+    const zip = path.join(out, `${name}.zip`);
+    assert.deepEqual(fs.readdirSync(out), [`${name}.zip`], 'the stage is removed after zipping');
+    if (hasUnzip) {
+      const entries = spawnSync('unzip', ['-Z1', zip], { encoding: 'utf8' }).stdout.split('\n').filter((l) => l && !l.endsWith('/'));
+      assert.deepEqual(entries.sort(), [...PACK_ART, ASSET_PACK_README].map((f) => `${name}/${f}`).sort());
+    }
+    const again = runTool(['--root', dir, '--assets', '--out', out]);
+    assert.equal(again.status, 1, 'an existing zip is not replaced without --force');
+    assert.match(again.stderr, /already exists \(--force replaces it\)/);
+    assert.equal(runTool(['--root', dir, '--assets', '--out', out, '--force']).status, 0);
+    const inRepo = runTool(['--root', dir, '--assets', '--out', path.join(dir, 'dist')]);
+    assert.equal(inRepo.status, 1);
+    assert.match(inRepo.stderr, /refusing to write into the repository/);
+
+    // the title screen's import (public/js/assetPack.js) of this zip against the same checkout's served manifests
+    const views = servedViews(dir);
+    const fetched = [];
+    const fetch = async (url) => {
+      fetched.push(url);
+      const name = url.replace(/^\/data\//, '');
+      if (!Object.hasOwn(views, name)) throw new Error(`unexpected fetch ${url}`);
+      return views[name] ? Response.json(views[name]) : new Response('', { status: 404 });
+    };
+    const { caches, store } = memoryCaches();
+    const imp = createAssetImport({ fetch, caches });
+    await imp.start({ type: 'zip', data: new Uint8Array(fs.readFileSync(zip)) });
+    const got = imp.get();
+    assert.deepEqual({ phase: got.phase, accepted: got.accepted, rejected: got.rejected, skipped: got.skipped, failed: got.failed },
+      { phase: 'complete', accepted: PACK_ART.length, rejected: 0, skipped: 1, failed: 0 }, 'every file accepted; the README is the one skip');
+    assert.deepEqual(fetched, ['/data/assets.json', '/data/local-assets.json', '/data/local-fx.json'], 'only the manifests are read');
+    for (const f of PACK_ART) {
+      const hit = [...store.keys()].find((url) => url.endsWith(`/${f.split('/').slice(2).map(encodeURIComponent).join('/')}`)
+        || url.endsWith(`/${f.split('/').slice(2).join('/')}`));
+      assert.ok(hit && /^\/(?:assets|fonts)\/~[0-9a-f]{16}\//.test(hit), `${f} is stored at its hashed URL`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(out, { recursive: true, force: true });
+  }
+});
+
+test('a --assets build of a development version needs --allow-dev', { skip: !hasZipTool && 'no zip / tar' }, () => {
+  const { dir, put } = assetCheckout();
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-package-out-'));
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    put('package.json', JSON.stringify({ ...pkg, version: '9.9.9-dev' }));
+    const refused = runTool(['--root', dir, '--assets', '--out', out]);
+    assert.equal(refused.status, 1);
+    assert.match(refused.stderr, /development version/);
+    assert.deepEqual(fs.readdirSync(out), []);
+    const dev = runTool(['--root', dir, '--assets', '--out', out, '--allow-dev']);
+    assert.equal(dev.status, 0, dev.stdout + dev.stderr);
+    assert.ok(fs.existsSync(path.join(out, 'Stronghold-Protocol-v9.9.9-dev-assets.zip')));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(out, { recursive: true, force: true });
   }
 });

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stronghold.local/schemas/ui.schema.json",
+  "title": "Interface plugin postMessage API v1",
+  "description": "Messages between the host page and a sandboxed ui plugin (DESIGN §32.8). A plugin cannot send a match intent. This file is the contract; shared/plugins/ui.js is what the server and the page enforce. No JSON-schema library is required.",
+  "$defs": {
+    "slot": {
+      "type": "string",
+      "enum": ["hud.right", "result.tab", "stats.tab", "room.panel"]
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "ready" } }
+    },
+    "slotRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "slot"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "slot" }, "slot": { "$ref": "#/$defs/slot" } }
+    },
+    "resize": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "height"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "resize" }, "height": { "type": "number" } }
+    },
+    "notice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "text"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "notice" }, "text": { "type": "string" } }
+    },
+    "statsRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "unitId"],
+      "properties": {
+        "v": { "const": 1 },
+        "t": { "const": "stats" },
+        "unitId": { "type": "integer" },
+        "fieldId": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "storageKey": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "storageKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "op"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "storage" }, "op": { "const": "keys" } }
+    },
+    "storageGet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "op", "key"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "storage" }, "op": { "const": "get" }, "key": { "$ref": "#/$defs/storageKey" } }
+    },
+    "storageSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "op", "key", "value"],
+      "properties": {
+        "v": { "const": 1 }, "t": { "const": "storage" }, "op": { "const": "set" },
+        "key": { "$ref": "#/$defs/storageKey" }, "value": {}
+      }
+    },
+    "storageDelete": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "t", "op", "key"],
+      "properties": { "v": { "const": 1 }, "t": { "const": "storage" }, "op": { "const": "delete" }, "key": { "$ref": "#/$defs/storageKey" } }
+    },
+    "pluginToHost": {
+      "oneOf": [
+        { "$ref": "#/$defs/ready" },
+        { "$ref": "#/$defs/slotRequest" },
+        { "$ref": "#/$defs/resize" },
+        { "$ref": "#/$defs/notice" },
+        { "$ref": "#/$defs/statsRequest" },
+        { "$ref": "#/$defs/storageKeys" },
+        { "$ref": "#/$defs/storageGet" },
+        { "$ref": "#/$defs/storageSet" },
+        { "$ref": "#/$defs/storageDelete" }
+      ]
+    }
+  },
+  "oneOf": [{ "$ref": "#/$defs/pluginToHost" }]
+}

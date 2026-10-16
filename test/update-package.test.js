@@ -398,3 +398,54 @@ test('the zip reader takes the UTF-8 name of Info-ZIP\'s Unicode Path field for 
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('0.2.6 → 0.3.0 update adds author resources, records retired files and preserves owner plugins on full/lite installs', { skip: !hasZipTool && 'no zip / tar' }, () => {
+  const co = fakeCheckout('0.2.6');
+  const out = tmp('030-out');
+  const inst = tmp('030-player');
+  // The retired page is a fixture to exercise removal; no particular real 0.2.6 page is asserted to be gone.
+  const retired = 'public/retired-fixture.html';
+  const added = ['tools/plugin.mjs', 'schemas/plugin.schema.json', 'docs/PLUGINS.md', 'docs/PLUGIN-GUIDE.md',
+    'docs/PLUGIN-DSL.md', 'docs/PLUGIN-API.md', 'plugins/README.md', 'plugins/AGENTS.md',
+    'plugins/_template/script/sim/index.js', 'plugins/_template/script/test/guard.test.js', 'test/helpers/battleHarness.js',
+    'server/plugins/scriptTestSetup.js', 'public/js/battle/simWorker.js'];
+  try {
+    put(co.dir, retired, '<!doctype html>old fixture');
+    assert.equal(co.git('add', '-A').status, 0);
+    for (const flag of [[], ['--lite']]) {
+      const r = runTool(['--root', co.dir, '--out', out, '--no-install', '--allow-dirty', ...flag]);
+      assert.equal(r.status, 0, r.stdout + r.stderr);
+    }
+    const baseZip = path.join(out, `${FOLDER}-v0.2.6.zip`);
+    bump(co, '0.3.0');
+    for (const file of added) put(co.dir, file, file.endsWith('.json') ? '{}\n' : '// author resource fixture\n');
+    fs.rmSync(path.join(co.dir, retired));
+    assert.equal(co.git('add', '-A').status, 0);
+    // Even an erroneously tracked owner plugin must not enter this release or its manifest.
+    for (const file of ['plugins/mine/plugin.json', 'plugins/config.json', 'plugins/_dist/private.zip']) put(co.dir, file, '{}\n');
+    assert.equal(co.git('add', '-A').status, 0);
+    const r = runTool(['--root', co.dir, '--out', out, '--no-install', '--allow-dirty', '--update', '--from', baseZip]);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const zip = path.join(out, `${FOLDER}-v0.3.0-update.zip`);
+    const payload = new Map(); readZip(zip, (name, data) => payload.set(name.slice(FOLDER.length + 1), data));
+    const update = parseUpdate(payload.get(UPDATE_FILE).toString());
+    assert.deepEqual(update.from, ['0.2.6']);
+    for (const file of added) assert.ok(update.files.has(file), file);
+    assert.deepEqual(update.removed, [{ path: retired, sha256: [sha('<!doctype html>old fixture')] }]);
+    assert.ok(![...payload.keys()].some(file => /plugins\/(mine|config|_dist)/.test(file)));
+    for (const suffix of ['', '-lite']) {
+      const destination = path.join(inst, suffix || 'full');
+      extract(path.join(out, `${FOLDER}-v0.2.6${suffix}.zip`), destination);
+      const root = path.join(destination, FOLDER);
+      put(root, 'plugins/mine/plugin.json', '{"owner":true}');
+      put(root, 'plugins/config.json', '{"rooms":"off"}');
+      extract(zip, destination);
+      assert.equal(checkInstall(root).state, 'ok');
+      const result = applyPendingUpdate(root, { log: quiet().log });
+      assert.equal(result.state, 'applied'); assert.deepEqual(result.deleted, [retired]);
+      for (const file of added) assert.ok(has(root, file), `${suffix}: ${file}`);
+      assert.equal(read(root, 'plugins/mine/plugin.json'), '{"owner":true}');
+      assert.equal(read(root, 'plugins/config.json'), '{"rooms":"off"}');
+    }
+  } finally { for (const dir of [co.dir, out, inst]) fs.rmSync(dir, { recursive: true, force: true }); }
+});

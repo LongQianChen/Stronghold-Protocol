@@ -46,8 +46,9 @@
 //   whose text gives no direction].
 
 import { num, traitBb, skillRec, up, giveSp } from '../shared/tier1.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { COLS } from '../../../constants.js';
+import { bodyInRange } from '../../../body.js';
 import { startCountdown } from '../../tokens.js';
 import { hypot } from '../../../detmath.js';
 
@@ -152,7 +153,7 @@ function cannonKit(t, owner) {
   const life = num(tokTalent(def, 'duration')?.bb?.duration, LIFE_FALLBACK);
   const boost = tokTalent(def, 'base_force_level')?.bb ?? {};                 // 蓄水炮强化: base_force_level, interval, sp
   const forceUp = num(boost.base_force_level);
-  const every = num(boost.interval), sp = num(boost.sp);
+  const every = stepOf('interval', num(boost.interval), 1), sp = num(boost.sp);
   const atkUp = num(tokTalent(def, 'atk', 'base_force_level')?.bb?.atk);      // PUS-X stage 2+: 温蒂 ATK +atk beside it
   const sk = def.skill ?? null;
   const sbb = sk?.bb ?? {};
@@ -170,7 +171,7 @@ function cannonKit(t, owner) {
       afterHit(battle, unit, target) {
         if (!target || !target.alive || target.side !== 'enemy' || target.isFlying) return;
         const ahead = new Set(absoluteRangeKeys(AHEAD, unit.tileR, unit.tileC, unit.dir, 0));
-        if (!ahead.has(Math.round(target.y) * COLS + Math.round(target.x))) return;
+        if (!bodyInRange(target, ahead)) return;
         battle.push(target, forceUp, { from: unit, dir: along(unit) });
       },
     },
@@ -207,7 +208,8 @@ function cannonKit(t, owner) {
         if (atkUp && !owner.findBuff(atkKey)) battle.addBuff(owner, { key: atkKey, mods: { atkPct: atkUp }, source: unit, tags: ['talent'] });
         if (!(every > 0) || !(sp > 0)) return;
         acc += dt;
-        while (acc + 1e-9 >= every) { acc -= every; giveSp(owner, sp); }
+        let guard = 0;
+        while (acc + 1e-9 >= every && guard++ < STEP_PER_TICK) { acc -= every; giveSp(owner, sp); } // loop-cap: stepOf interval
       }, { owner: unit });
     },
   };

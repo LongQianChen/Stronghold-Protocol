@@ -8,6 +8,7 @@
 //   node\LICENSE-node.txt    Node 自己的许可证（和 node.exe 一起从官方 zip 里取出来）
 //   app\                     游戏本体：**只收 git 跟踪的文件** + 生产依赖 + 素材，离线可玩
 //   启动游戏.bat             app\scripts\launch.mjs --no-setup
+//   启动游戏-插件沙箱.bat    the same with --scripts sandbox (script plugins in the SES sandbox, docs/PLUGINS.md §13)
 //   README-开箱即用.md       给玩家看的说明（含非官方 / 严禁盈利 / 素材版权声明）
 //   LICENSE / NOTICE.md / THIRD-PARTY-NOTICES.md
 //
@@ -66,6 +67,8 @@ const LEGAL_FILES = ['LICENSE', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md'];
  * 可用 —— 只带贴图不带清单，玩家拿到的是 68 MB 用不上的文件。它存在时就一起收。
  */
 const LOCAL_ASSET_MANIFEST = path.join('data', 'local-assets.json');
+/** 本机提取的官方战斗特效的文件清单（tools/local-extract/fx.py，DESIGN §33；文件在 public/assets/local/fx）。 */
+const LOCAL_FX_MANIFEST = path.join('data', 'local-fx.json');
 
 function parseArgs(argv) {
   const o = { out: '', node: true, force: false, nodeSpec: '', sha256: '' };
@@ -397,10 +400,12 @@ export function bundleReadme({ version, withNode }) {
 node\\LICENSE-node.txt    Node 自己的许可证（MIT）
 app\\                    游戏本体：server / shared / public（全部素材）/ data / scripts / tools
 启动游戏.bat             app\\scripts\\launch.mjs --no-setup
+启动游戏-插件沙箱.bat    同上，并开启插件脚本沙箱（--scripts sandbox）
 README-开箱即用.md       本文件
 LICENSE / NOTICE.md / THIRD-PARTY-NOTICES.md`
     : `app\\                    游戏本体：server / shared / public（全部素材）/ data / scripts / tools
 启动游戏.bat             app\\scripts\\launch.mjs --no-setup
+启动游戏-插件沙箱.bat    同上，并开启插件脚本沙箱（--scripts sandbox）
 README-开箱即用.md       本文件
 LICENSE / NOTICE.md / THIRD-PARTY-NOTICES.md
 
@@ -434,6 +439,7 @@ Noto Sans SC 这类网页字体（\`index.html\` 里那条外链这次没有改�
 \`\`\`
 本机当服务器   双击 启动游戏.bat：在这台电脑开服，浏览器自动打开；
                控制台会打印「发给朋友」的局域网地址（形如 http://192.168.1.23:3000）
+用脚本插件     双击 启动游戏-插件沙箱.bat：同上，脚本插件在沙箱里运行（房主在房间里选中才生效）
 连别人的服务器 不需要这个包，直接用浏览器打开对方的网址就行
 \`\`\`
 
@@ -530,6 +536,12 @@ async function main() {
     console.log(`    ! 有 public/assets/local 但没有 ${LOCAL_ASSET_MANIFEST}：贴图进了包也用不上，`
       + '先跑 node tools/setup.mjs --local 生成清单（或删掉该目录）');
   }
+  // 2c) 官方战斗特效的清单（本机提取过才有）：特效文件随 public/assets/local/fx 进包，靠这份 JSON 才会被采用。
+  const fxManifest = path.join(ROOT, LOCAL_FX_MANIFEST);
+  if (fs.existsSync(fxManifest)) {
+    await fsp.copyFile(fxManifest, path.join(appDir, LOCAL_FX_MANIFEST));
+    console.log(`    带上 ${LOCAL_FX_MANIFEST}（官方战斗特效的清单，文件本体在 public/assets/local/fx）`);
+  }
 
   // 3) 生产依赖
   await installProductionDeps(appDir);
@@ -557,6 +569,7 @@ async function main() {
   }
 
   await fsp.writeFile(path.join(out, '启动游戏.bat'), bat('"%NODE%" "%HERE%app\\scripts\\launch.mjs" --no-setup %*'), 'latin1');
+  await fsp.writeFile(path.join(out, '启动游戏-插件沙箱.bat'), bat('"%NODE%" "%HERE%app\\scripts\\launch.mjs" --no-setup --scripts sandbox %*'), 'latin1');
   await fsp.writeFile(path.join(out, 'README-开箱即用.md'), bundleReadme({ version: nodeVersion, withNode: !!o.node }), 'utf8');
 
   const total = await dirSize(out);

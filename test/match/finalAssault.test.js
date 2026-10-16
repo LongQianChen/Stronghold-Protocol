@@ -239,7 +239,10 @@ test('Hidden Core is skipped at Σ layers ≤ threshold, on FUNNY, or with team 
   const gd = new GameData(DATA, 'mode_multi_normal');
   assert.equal(hiddenEligible(gd, { layerSum: 1200, teamLp: 50 }), false);
   assert.equal(hiddenEligible(gd, { layerSum: 1201, teamLp: 50 }), true);
+  // team LP > 1: PRTS and the community's measurement (路标月报#2, GitHub #645) — 1 LP left does not enter
   assert.equal(hiddenEligible(gd, { layerSum: 5000, teamLp: 1 }), false);
+  assert.equal(hiddenEligible(gd, { layerSum: 5000, teamLp: 2 }), true);
+  assert.equal(hiddenEligible(new GameData(DATA, 'mode_single_hard'), { layerSum: 351, teamLp: 1 }), false);
   assert.equal(hiddenEligible(new GameData(DATA, 'mode_single_hard'), { layerSum: 351, teamLp: 2 }), true);
   assert.equal(hiddenEligible(new GameData(DATA, 'mode_single_hard'), { layerSum: 350, teamLp: 2 }), false);
   assert.equal(hiddenEligible(new GameData(DATA, 'mode_multi_funny'), { layerSum: 9999, teamLp: 99 }), false);

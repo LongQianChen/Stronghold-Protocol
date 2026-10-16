@@ -31,7 +31,7 @@ test('a point target exactly halfway is on the even tile: bodyKeys, bodyOnTile, 
   assert.equal(tileKeyOf({ x: 11.5, y: 2.5 }), 2 * COLS + 12);
 });
 
-test('the battle\'s enemy index puts an enemy at x = 10.5 on column 10, not 11', () => {
+test('the battle\'s tile index puts an enemy at x = 10.5 on column 10, not 11; its 0.1 collider is in range of both', () => {
   const h = makeBattle({
     kind: 'boss', content: 'none', autoFinish: false, timeLimit: 60,
     defs: {
@@ -48,6 +48,11 @@ test('the battle\'s enemy index puts an enemy at x = 10.5 on column 10, not 11',
   e.x = 10.5;
   e.y = 3;
   const u = h.unit('t_one');
+  // a tile rule (格子判定): the tile of the position
+  assert.deepEqual(h.b.enemiesOnTiles([3 * COLS + 10], u, { canHitFly: true }).map((x) => x.id), [e.id]);
+  assert.deepEqual(h.b.enemiesOnTiles([3 * COLS + 11], u, { canHitFly: true }).map((x) => x.id), []);
+  // a range (the owner's decision of 2026-10-14): its collider straddles the edge, so both columns reach it, listed once
   assert.deepEqual(h.b.enemiesInKeys([3 * COLS + 10], u, { canHitFly: true }).map((x) => x.id), [e.id]);
-  assert.deepEqual(h.b.enemiesInKeys([3 * COLS + 11], u, { canHitFly: true }).map((x) => x.id), []);
+  assert.deepEqual(h.b.enemiesInKeys([3 * COLS + 11], u, { canHitFly: true }).map((x) => x.id), [e.id]);
+  assert.deepEqual(h.b.enemiesInKeys([3 * COLS + 10, 3 * COLS + 11], u, { canHitFly: true }).map((x) => x.id), [e.id]);
 });

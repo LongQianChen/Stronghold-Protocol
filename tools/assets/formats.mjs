@@ -95,7 +95,7 @@ export function validate(kind, buf) {
   switch (kind) {
     case 'png': return isCompletePng(buf);
     case 'mp3': return isMp3(buf);
-    case 'font': return isSfnt(buf);
+    case 'font': return isSfnt(buf) || isWoff2(buf);
     case 'atlas': return isAtlasText(buf);
     case 'skel': return isSkelBinary(buf);
     case 'json':
@@ -113,7 +113,7 @@ export function kindOf(name) {
   const ext = String(name).toLowerCase().split('.').pop();
   if (ext === 'png') return 'png';
   if (ext === 'mp3') return 'mp3';
-  if (ext === 'otf' || ext === 'ttf') return 'font';
+  if (ext === 'otf' || ext === 'ttf' || ext === 'woff2') return 'font';
   if (ext === 'atlas') return 'atlas';
   if (ext === 'skel') return 'skel';
   if (ext === 'json') return 'json';

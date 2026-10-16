@@ -277,6 +277,39 @@ describe('drag controller', () => {
     assert.deepEqual(h.events.find((e) => e[0] === 'pieceDrop')[1].target, { area: 'outside', clientX: 250, clientY: 950 });
   });
 
+  // GitHub #602 (PR #646): picking a piece up zooms the board to the shop-collapsed camera while the pointer may stand
+  // still — refresh() judges the drag again at the last pointer, so the target, tileHover and the dragged piece follow
+  test('refresh(): a still pointer over a moving camera gets the tile now under it; no-op unless dragging', () => {
+    let shift = 0; // the "camera": the tile under a canvas point moves by `shift` columns
+    const events = [];
+    const pieces = [{ uid: 1, area: 'hand', idx: 0, x: 50, y: 550 }];
+    const c = createDragController({
+      hitPiece: (x, y) => pieces.find((p) => Math.abs(p.x - x) < 40 && Math.abs(p.y - y) < 40) || null,
+      pickTile: (x, y) => ({ row: 12 - Math.floor(y / 100), col: Math.floor(x / 100) + shift }),
+      emit: (name, p) => events.push([name, p]),
+    });
+    const ev = (type, x, y) => c[type]({ pointerId: 1, pointerType: 'touch', button: 0, x, y, clientX: x, clientY: y });
+    c.refresh();
+    assert.equal(events.length, 0, 'nothing to judge before a drag');
+    c.setEditable(true);
+    ev('pointerDown', 50, 550);
+    c.refresh();
+    assert.equal(events.filter((e) => e[0] === 'pieceDragMove').length, 0, 'a press is not a drag yet');
+    ev('pointerMove', 450, 350);
+    let mv = events.filter((e) => e[0] === 'pieceDragMove').pop()[1];
+    assert.deepEqual([mv.x, mv.y, mv.target], [450, 350, { area: 'board', row: 9, col: 4 }]);
+    shift = 1; // the zoom moved the board under the finger
+    c.refresh();
+    mv = events.filter((e) => e[0] === 'pieceDragMove').pop()[1];
+    assert.deepEqual([mv.x, mv.y, mv.target], [450, 350, { area: 'board', row: 9, col: 5 }], 'the same pointer, the tile under it now');
+    assert.deepEqual(events.filter((e) => e[0] === 'tileHover').pop()[1], { row: 9, col: 5, area: 'board', idx: undefined });
+    ev('pointerUp', 450, 350);
+    assert.deepEqual(events.find((e) => e[0] === 'pieceDrop')[1].target, { area: 'board', row: 9, col: 5 });
+    const n = events.length;
+    c.refresh();
+    assert.equal(events.length, n, 'after the drop: no-op');
+  });
+
   test('a throwing listener or hit-test never breaks the controller', () => {
     const c = createDragController({
       hitPiece: () => { throw new Error('boom'); },

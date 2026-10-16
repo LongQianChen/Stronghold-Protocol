@@ -29,12 +29,15 @@ export class MatchClientCombat {
     f.verifyJob = null;
   }
 
-  /** A client-combat field record: the JSON BattleSpec of its Battle options plus the authority / result state. */
+  /**
+   * A client-combat field record: the JSON BattleSpec of its Battle options plus the authority / result state. The spec
+   * names the room's content set (`cs`, opts.cs — DESIGN §32) when the match was given one.
+   */
   _ccField({ fieldId, kind, players, opts, boss = null }) {
     const seq = `${this.battlePrefix}.${this.round}.${++this._battleSeq}`;
     // protocol ids are ≤ 64 chars (shared/protocol.js isId): the field id is informational, the sequence is unique
     const battleId = seq.length + 1 + String(fieldId).length <= 64 ? `${seq}.${fieldId}` : seq;
-    const spec = buildBattleSpec({ ...opts, battleId, fieldId, kind, content: this.battleContent, boss });
+    const spec = buildBattleSpec({ ...opts, battleId, fieldId, kind, content: this.battleContent, boss, cs: this.cs, vs: this.vs });
     let total = 0;
     for (const x of spec.spawns) if (x && x.tag !== 'boss' && x.tag !== 'part' && x.countInTotal !== false) total += Math.max(1, Math.floor(Number(x.count) || 1));
     return {

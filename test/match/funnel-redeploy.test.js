@@ -9,7 +9,7 @@ test('Rockrock killed by a real enemy and automatically revived by Ermengard sta
   class ObservedBattle extends Battle {
     constructor(opts) {
       super(opts);
-      const log = { round: opts.round, deaths: [], deploys: [], firstHits: [] };
+      const log = { round: opts.round, deaths: [], deploys: [], firstHits: [], hits: [] };
       observed.push(log);
       const seen = new Set(), launches = new Map();
       this.on('death', c => {
@@ -31,6 +31,7 @@ test('Rockrock killed by a real enemy and automatically revived by Ermengard sta
       this.on('damaged', c => {
         const u = c.source;
         const launch = launches.get(c.dmg?.attackId);
+        if (u?.defId === 'chess_char_2_10_a' && launch) log.hits.push({ t: this.time, seq: launch.seq });
         if (u?.defId !== 'chess_char_2_10_a' || seen.has(u.deploySeq) || launch?.seq !== u.deploySeq) return;
         seen.add(u.deploySeq);
         log.firstHits.push({ t: this.time, launchAt: launch.t, seq: u.deploySeq, target: c.target.id,
@@ -56,8 +57,11 @@ test('Rockrock killed by a real enemy and automatically revived by Ermengard sta
     h.toPrep(7, { band: 'band_ermengard' });
     const log = observed.find(x => x.round === 6);
     assert.ok(log?.deaths.length > 0);
+    // a drone launched before the knockout still lands and steps the new ramp (professions.js installFunnel), so a pair
+    // with such a landing from the knockout's tick to the fresh drone's hit says nothing about the reset
+    const stale = (d, hit) => log.hits.some(x => x.seq <= d.seq && x.t >= d.t && x.t <= hit.t);
     const paired = log.deaths.map(d => ({ death: d, hit: log.firstHits.find(x => x.seq > d.seq) }))
-      .filter(x => x.hit && x.death.target === x.hit.target && x.death.scale > 0.2);
+      .filter(x => x.hit && x.death.target === x.hit.target && x.death.scale > 0.2 && !stale(x.death, x.hit));
     assert.ok(paired.length > 0, JSON.stringify(log));
     for (const { death, hit } of paired) {
       assert.equal(death.reason, 'killed');

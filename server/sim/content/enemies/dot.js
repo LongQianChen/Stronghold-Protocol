@@ -1,7 +1,7 @@
 // server/sim/content/enemies/dot.js — DOT 持续 kits (pulses, 污染秽蚀 / burning zones, bleeding) and their part of KITS
 // (split from content/enemies.js).
 
-import { SHELL_SPLASH_RADIUS, num, T, elem, hurt, areaAllies } from './helpers.js';
+import { SHELL_SPLASH_RADIUS, num, T, elem, hurt, areaAllies, castSlot } from './helpers.js';
 import { splashAttack, noAirTargets, resist, immuneTo, bleed, pollution, dmgZone, kitPolluted } from './archetypes.js';
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -75,8 +75,9 @@ function kitTank(ab, e) {
   const init = Math.min(max, Math.max(0, num(spd && spd.initSp, 0)));
   return [{
     spawn(b, e2, a) { a.sp = init; a.skill = false; e2.profile.canTarget = (u) => !!u.ground && !u.isFlying; },
-    // SP full: this attack is 秽蚀轰击 (a blocked hit lands at once, inside this attack, while `a.skill` is set)
-    before(c, b, e2, a) { a.skill = a.sp >= max; },
+    // SP full: this attack is 秽蚀轰击 (a blocked hit lands at once, inside this attack, while `a.skill` is set) — the
+    // client is told its skill slot (castSlot, display only)
+    before(c, b, e2, a) { a.skill = a.sp >= max; if (a.skill) castSlot(b, e2, sk); },
     hitOut(c, b, e2, a) { if (c.dmg.isAttack && !a.skill && c.target === e2.blockedBy) c.dmg.amount *= melee; },
     attack(c, b, e2, a) {
       if (!a.skill) { a.sp = Math.min(max, a.sp + 1); return; }

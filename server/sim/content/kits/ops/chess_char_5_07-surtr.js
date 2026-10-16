@@ -49,7 +49,7 @@ export default {
           if (!(peak > 0)) return;
           unit.mem.twilightT += dt;
           unit.mem.twilightAcc += dt;
-          while (unit.mem.twilightAcc >= iv && unit.alive) {
+          while (unit.mem.twilightAcc >= iv && unit.alive) { // loop-cap: interval floored before the loop
             unit.mem.twilightAcc -= iv;
             const rate = peak * Math.min(1, unit.mem.twilightT / ramp);
             if (rate > 0) battle.loseHp(unit, unit.s.maxHp * rate * iv, { source: unit, silent: true });

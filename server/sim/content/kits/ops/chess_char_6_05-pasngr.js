@@ -3,7 +3,7 @@
 
 import { absoluteRangeKeys, canTargetEnemy } from '../../../targeting.js';
 import { CHAIN_RADIUS } from '../../../constants.js';
-import { bodyDist, bodyInKeys } from '../../../body.js';
+import { bodyDist, bodyInRange } from '../../../body.js';
 import { num, bv, tbb, live, ANY, enemiesIn, batOf, N4, aura } from '../shared/tier6.js';
 import { powi } from '../../../detmath.js';
 
@@ -106,7 +106,7 @@ function pasngr(bb, chess, def) {
         const atk = num(t1.atk), spr = num(t1.sp_recovery_per_sec);
         aura(battle, unit, 0.25, () => {
           const near = new Set(absoluteRangeKeys(N4, unit.tileR, unit.tileC, 1, 0));
-          if (battle.enemies.some((e) => e.alive && !e.hidden && bodyInKeys(e, near))) return;
+          if (battle.enemies.some((e) => e.alive && !e.hidden && bodyInRange(e, near))) return;
           battle.addBuff(unit, { key: 'pasngr:lone', mods: { atkPct: atk, spRecoveryFlat: spr }, duration: 0.4, refresh: 'replace' });
         });
       } },

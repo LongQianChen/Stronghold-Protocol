@@ -1103,3 +1103,56 @@
   --bk-c: var(--red-premium);
 }
 .crash__box h2 { font-size: calc(.3 * var(--t)); }
+
+/* ---- plugins (DESIGN §32 P1a): the room's tag 原版 / 插件 ×N (ui/pluginTag.js), its 插件 panel and the title's list (ui/pluginPanel.js) ---- */
+.plugtag {
+  display: inline-flex; align-items: center; gap: .06rem; height: .3rem; padding: 0 .12rem;
+  border: 1px solid var(--line-2); background: rgba(0, 0, 0, .3); color: var(--text-lo);
+  font-size: calc(.13 * var(--t)); letter-spacing: .06em;
+}
+.plugtag .icon { width: .16rem; height: .16rem; }
+.plugtag.is-modded { color: #ffb066; border-color: rgba(255, 159, 67, .6); background: rgba(255, 159, 67, .1); }
+.plugtag--static { cursor: default; }
+.plugpanel { display: flex; flex-direction: column; gap: .12rem; }
+.plugpanel__lead { display: flex; align-items: center; flex-wrap: wrap; gap: .1rem; color: var(--text-md); font-size: calc(.15 * var(--t)); line-height: 1.7; }
+.plugpanel__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .08rem; max-height: 4.6rem; overflow: auto; }
+.plugrow { display: flex; align-items: flex-start; gap: .14rem; padding: .1rem .12rem; border: 1px solid var(--line); background: rgba(0, 0, 0, .25); }
+.plugrow.is-on { border-color: var(--mint-700); }
+.plugrow__switch { flex: none; }
+.plugrow__body { min-width: 0; display: flex; flex-direction: column; gap: .04rem; }
+.plugrow__name { display: flex; align-items: baseline; flex-wrap: wrap; gap: .08rem; font-size: calc(.16 * var(--t)); overflow-wrap: anywhere; }
+.plugrow__badge { padding: 0 .06rem; border: 1px solid var(--line-2); color: var(--text-lo); font-size: calc(.12 * var(--t)); }
+.plugrow__badge.is-unofficial { color: #ffb066; border-color: rgba(255, 159, 67, .5); }
+.plugrow__meta { display: flex; flex-wrap: wrap; gap: .12rem; font-size: calc(.13 * var(--t)); }
+.plugrow__warn, .plugpanel__warnings li { color: #ffb066; font-size: calc(.13 * var(--t)); line-height: 1.6; }
+.plugpanel__warnings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .04rem; }
+.plugpanel__warnings .icon { width: .15rem; height: .15rem; margin-right: .06rem; vertical-align: -.02rem; }
+.plugpanel__reapply { display: flex; flex-wrap: wrap; align-items: center; gap: .08rem .12rem; }
+.ui-slot { display: flex; flex-direction: column; gap: .04rem; min-width: 0; }
+.ui-slot:empty { display: none; }
+.ui-slot__frame { width: 100%; border: 0; background: transparent; color-scheme: normal; }
+.gm__ui-slot { position: absolute; z-index: 6; right: .16rem; bottom: .7rem; width: 2.6rem; pointer-events: auto; }
+.plugpanel__reapply .set-hint { margin: 0; }
+/* gameplay plugins (DESIGN §32.6 P1c): the unofficial marks (tag, panel rows, UnofficialMark of the briefing / HUD / result),
+   the room's plugin modes and this page's check of the room's content set */
+.plugtag.is-unofficial { color: #ff8a5c; border-color: rgba(255, 106, 61, .7); background: rgba(255, 106, 61, .12); }
+.plugtag__mod { margin-left: .04rem; padding: 0 .05rem; font-weight: 800; color: #1a0d08; background: #ff8a5c; letter-spacing: .04em; }
+.plugrow.is-content.is-on { border-color: rgba(255, 106, 61, .7); }
+.plugrow__badge.is-gameplay { color: #ff8a5c; border-color: rgba(255, 106, 61, .55); }
+.plugpanel__modes { display: flex; flex-wrap: wrap; align-items: center; gap: .08rem; }
+.plugpanel__modes-label { color: var(--text-md); font-size: calc(.14 * var(--t)); }
+.plugpanel__modes .set-hint { margin: 0; }
+.plugpanel__content { margin: 0; }
+.plugpanel__content.is-ready { color: var(--mint-400); }
+.plugpanel__content.is-warn { color: #ffb066; }
+.modmark {
+  display: inline-flex; align-items: center; height: .26rem; padding: 0 .1rem; border: 1px solid rgba(255, 106, 61, .75);
+  background: rgba(255, 106, 61, .14); color: #ff8a5c; font-size: calc(.13 * var(--t)); font-weight: 800; letter-spacing: .08em;
+  white-space: nowrap;
+}
+.modmark--compact { height: .2rem; padding: 0 .06rem; font-size: calc(.11 * var(--t)); }
+
+.plugin-settings { display: grid; gap: .06rem; margin-top: .08rem; }
+.plugin-settings__row { display: flex; gap: .1rem; align-items: center; justify-content: space-between; }
+.plugin-settings input, .plugin-settings select { color: var(--text-hi); background: var(--bg-2); border: 1px solid var(--line-2); padding: .03rem .06rem; max-width: 2rem; }
+.plugin-settings input[aria-invalid="true"] { border-color: var(--orange); }

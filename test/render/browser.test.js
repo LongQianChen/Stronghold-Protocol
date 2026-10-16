@@ -206,7 +206,9 @@ describe('render engine in headless Chrome', { skip }, () => {
   });
 
   test('fx gallery: every sim fx kind, projectile and status renders without errors; board art in use', async () => {
-    const { page, problems } = await open('scene=fx&panel=0', 1280, 720);
+    // the procedural table, so 官方特效 off: with the official layer on, an operator's official skill effects stand
+    // for the procedural activation burst and aura (render/app.js 'skill')
+    const { page, problems } = await open('scene=fx&panel=0&fx=off', 1280, 720);
     // cycle through the whole FX_KINDS table (one kind every 0.5 game s = 0.25 real s), watching the FX system: shots
     // in flight (every projectile kind incl. the boomerang) and 蕾缪安's S3 locks (the gallery plays it at 'lock')
     const kinds = await page.evaluate(async () => (await import('/js/render/fx.js')).FX_KINDS).then((k) => Object.keys(k).length);

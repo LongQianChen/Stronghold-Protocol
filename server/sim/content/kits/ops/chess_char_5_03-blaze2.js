@@ -99,7 +99,7 @@ export default {
         onTick({ battle, unit, dt }) {
           if (!(lose > 0)) return;
           unit.mem.blazeAcc = (unit.mem.blazeAcc ?? 0) + dt;
-          while (unit.mem.blazeAcc >= 1 && unit.alive) {
+          while (unit.mem.blazeAcc >= 1 && unit.alive) { // loop-cap: one-second step
             unit.mem.blazeAcc -= 1;
             battle.loseHp(unit, unit.s.maxHp * lose, { source: unit });
           }

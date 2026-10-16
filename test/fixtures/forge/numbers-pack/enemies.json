@@ -1,0 +1,7 @@
+{
+  "rose_hound": {
+    "name": "玫瑰犬",
+    "base": "enemy_1422_lrsldr",
+    "stats": { "maxHp": 6000 }
+  }
+}

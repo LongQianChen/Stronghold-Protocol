@@ -7,25 +7,31 @@
 //   node tools/package.mjs --update --from <base>[,<base>…]
 //                          → Stronghold-Protocol-v<version>-update.zip  only the files that differ from the earlier full
 //                            zips given as bases, to extract over an install of one of them (server/update.js)
-//   node tools/package.mjs [--lite | --update --from <bases>] [--dry-run [--list]] [--out <dir>] [--force] [--keep-stage]
-//                          [--no-install] [--allow-dirty] [--allow-dev] [--root <dir>]
+//   node tools/package.mjs --assets
+//                          → Stronghold-Protocol-v<version>-assets.zip  the example asset pack for the title screen's
+//                            导入素材包: only the art that import accepts from a host of this version, and a README.txt.
+//                            Not a release asset (the maintainer offers it for download elsewhere) — see below
+//   node tools/package.mjs [--lite | --update --from <bases> | --assets] [--dry-run [--list]] [--out <dir>] [--force]
+//                          [--keep-stage] [--no-install] [--allow-dirty] [--allow-dev] [--root <dir>]
 //
 // The zips hold one folder, Stronghold-Protocol/, with only what a player runs — an allowlist over `git ls-files`, so
 // untracked work, caches, logs and per-machine config never get in: server/, shared/, data/, public/ (not public/dev/),
 // packs/ (the content packs that ship with the repository, docs/PACKS.md; a pack installed on this machine and not
-// committed stays out),
-// the start scripts, the tools a player runs (setup, vendor = the postinstall, fetch-assets + tools/assets, doctor, and
+// committed stays out), plugins/ (only its readme, author guide and templates — docs/PLUGINS.md; a server's own plugins are git-ignored and
+// never ship), schemas/, the plugin author harness,
+// the start scripts, the tools a player runs (setup, vendor = the postinstall, fetch-assets + tools/assets, doctor, plugin, and
 // what setup starts: tools/local-extract, crop-board-atlas), the research tables the Node server (server/sim/
 // nodeData.js fallback) and fetch-assets read, package.json / package-lock.json, LICENSE / NOTICE.md /
-// THIRD-PARTY-NOTICES.md, README.md, CHANGELOG.md, docs/PLAYING.md and docs/DEPLOY.md. `npm ci --omit=dev` in the
+// THIRD-PARTY-NOTICES.md, README.md, CHANGELOG.md, the player and plugin author docs. `npm ci --omit=dev` in the
 // stage adds the production node_modules and (postinstall) public/vendor. The full zip adds the git-ignored art: the
 // files data/assets.json lists, public/fonts, and the local-client extraction (public/assets/local/,
 // data/local-assets.json) when present, including the 0.2.5 battlefield scenes under public/assets/local/scene/
 // when this machine extracted them. Missing scenes are not an error: the board keeps the metal tiles, and the
 // summary says so. Nothing else on disk ships, so art the data no longer lists (焰狐龙梓兰, left out of
 // 自选 in 0.2.0, or files of an old mapping) never ships even when this machine still has it. FULL_ZIP_JP_VOICE (below)
-// decides whether the full zip carries the Japanese voice dub too (default: yes).
-// Left out: test/, the maintainer tools (build-data, golden, botbench, i18n, check-imports, this file …),
+// decides whether the full zip carries the Japanese voice dub too (default: yes), FULL_ZIP_OPTIONAL_VOICE the English,
+// Korean and own-language dubs (default: yes, so the 0.3.0 full zip ships them; about +180 MB, measured after download).
+// Left out: test/ except test/helpers/battleHarness.js, the maintainer tools (build-data, golden, botbench, i18n, check-imports, this file …),
 // scripts/make-windows-bundle.mjs, the other docs (DESIGN, SIM, the research notes, docs/img …), public/dev/, handoff/,
 // .github/, types/, lint / editor / Docker files (Docker builds from a git clone).
 //
@@ -60,6 +66,17 @@
 // personal-info scan; it must hold exactly that) before it is zipped. --dry-run reads and checks the bases; the
 // comparison needs the built stage.
 //
+// --assets (docs/history/0.3.0.md §32.14.39) writes one folder, Stronghold-Protocol-v<version>-assets/, holding public/assets/…
+// and public/fonts/… and README.txt (what the pack is, the version whose manifests it matches, how to import it). The
+// art is what public/js/assetPack.js accepts from a host that has every listed file: its own plan of the three served
+// manifests (data/assets.json, data/local-assets.json, data/local-fx.json; importableArt), with the full zip's voice and
+// effect switches. The `public/` in every path makes the importer pick one prefix for the whole pack (detectAssetPrefix:
+// strip up to the last `public/`); the README is the one file it skips. Not in it: the manifests (the browser reads the
+// host's), files no manifest lists (local-client leftovers the full zip still carries), code. The full zip's checks:
+// every listed file on disk, no case clash, the personal-info scan of every file (art included), data/assets.json
+// committed (--allow-dirty skips that), a development version only with --allow-dev; the stage must hold exactly the
+// plan. No npm ci, no MANIFEST.json. Not a release asset: the maintainer offers it for download elsewhere (DEPLOY §7).
+//
 // --out defaults to <tmp>/stronghold-protocol-release and must be outside the repository. --no-install skips npm ci
 // (no node_modules, no public/vendor: a test build). Zipping needs `zip` (or a bsdtar `tar`, e.g. Windows 10+).
 
@@ -69,6 +86,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findSpecifiers } from './check-imports.mjs';
+import { rewriteManifest } from '../server/http/assetViews.js';
+import { mergeLocalManifests, planFromManifests } from '../public/js/assetPack.js';
 import { writePackIndex } from './packs.mjs';
 import { compareVersions, diffBases, manifestText, readBase, updateText } from './package-update.mjs';
 import {
@@ -84,18 +103,23 @@ export const FOLDER = 'Stronghold-Protocol';
 export const ROOT_FILES = ['package.json', 'package-lock.json', 'LICENSE', 'NOTICE.md', 'THIRD-PARTY-NOTICES.md', 'README.md', 'CHANGELOG.md'];
 /** The player docs. */
 export const PLAYER_DOCS = ['docs/PLAYING.md', 'docs/DEPLOY.md', 'docs/ANNOUNCEMENTS.md', 'docs/ASSET_CACHE.md', 'docs/SERVER_SETTINGS.md',
-  'docs/PLAYER_CAPACITY.md', 'docs/WIRE_PROTOCOL.md', 'docs/HTTP_CACHE.md', 'docs/development/README.md'];
+  'docs/PLAYER_CAPACITY.md', 'docs/WIRE_PROTOCOL.md', 'docs/HTTP_CACHE.md', 'docs/development/README.md',
+  'docs/PLUGINS.md', 'docs/PLUGIN-GUIDE.md', 'docs/PLUGIN-DSL.md', 'docs/PLUGIN-API.md', 'docs/plugin-catalog.example.json'];
+/** The author harness has no test-only dependencies; the rest of test/ stays out. */
+export const AUTHOR_TEST_FILES = ['test/helpers/battleHarness.js'];
+/** Only these repository-owned plugin resources ship, even if an owner's plugin was accidentally tracked. */
+export const isPluginResource = (rel) => rel === 'plugins/README.md' || rel === 'plugins/AGENTS.md' || rel.startsWith('plugins/_template/');
 /** Research tables read at run time: server/sim/nodeData.js (the Node sim's fallback) and tools/fetch-assets.mjs. */
 export const RUNTIME_RESEARCH = ['docs/research/03-operators.json', 'docs/research/05-enemies.json', 'docs/research/05-maps.json', 'docs/research/07-assets.json'];
 /** The start scripts (scripts/make-windows-bundle.mjs is the maintainer's Windows pack, docs/WINDOWS.md). */
 export const PLAYER_SCRIPTS = ['scripts/install-service-windows.ps1', 'scripts/launch.mjs', 'scripts/open-browser.mjs',
-  'scripts/run-server.cmd', 'scripts/start-windows.bat', 'scripts/start-windows.ps1', 'scripts/start.sh'];
+  'scripts/run-server.cmd', 'scripts/start-windows-sandbox.bat', 'scripts/start-windows.bat', 'scripts/start-windows.ps1', 'scripts/start.sh'];
 /** The tools a player runs (npm run setup / doctor / assets, the postinstall) and the ones setup starts. */
-export const PLAYER_TOOLS = ['tools/announcements.mjs', 'tools/asset-cache-pack.mjs', 'tools/crop-board-atlas.mjs', 'tools/doctor.mjs', 'tools/fetch-assets.mjs', 'tools/server-settings.mjs', 'tools/setup.mjs', 'tools/vendor.mjs'];
+export const PLAYER_TOOLS = ['tools/announcements.mjs', 'tools/asset-cache-pack.mjs', 'tools/crop-board-atlas.mjs', 'tools/doctor.mjs', 'tools/fetch-assets.mjs', 'tools/fetch-stats-assets.mjs', 'tools/plugin.mjs', 'tools/server-settings.mjs', 'tools/setup.mjs', 'tools/vendor.mjs'];
 /** Whole tool directories: fetch-assets' modules, the local-client extraction setup runs. */
 export const PLAYER_TOOL_DIRS = ['tools/assets/', 'tools/asset-cache/', 'tools/local-extract/'];
 /** Whole runtime directories (their tracked files). */
-export const RUNTIME_DIRS = ['server/', 'shared/', 'data/', 'public/', 'packs/'];
+export const RUNTIME_DIRS = ['server/', 'shared/', 'data/', 'public/', 'packs/', 'schemas/'];
 /** Written into the stage, never taken from the checkout: the pack index of the shipped packs. */
 export const GENERATED_PACK_INDEX = 'packs/index.json';
 /** Whether shipped files include a content pack (then the stage gets GENERATED_PACK_INDEX). @param {string[]} files */
@@ -105,7 +129,7 @@ const NOT_TRACKED_SHIP = ['public/dev/', 'public/assets/', 'public/fonts/', 'pub
 /** The npm scripts a player runs: each `node <file>` of them must ship. */
 export const PLAYER_NPM_SCRIPTS = ['start', 'setup', 'doctor', 'launch', 'postinstall', 'vendor', 'assets', 'assets:pack'];
 /** Markdown copied into the zip. Relative links to anything else are rewritten at stage time. */
-export const PLAYER_MARKDOWN = [...ROOT_FILES, ...PLAYER_DOCS].filter((f) => f.endsWith('.md'));
+export const PLAYER_MARKDOWN = [...ROOT_FILES, ...PLAYER_DOCS, 'plugins/README.md', 'plugins/AGENTS.md'].filter((f) => f.endsWith('.md'));
 /** Where a packaged doc link points when the file itself is not in the zip. */
 export const GITHUB_REPO = 'https://github.com/sganggs/Stronghold-Protocol';
 
@@ -120,8 +144,30 @@ export const GITHUB_REPO = 'https://github.com/sganggs/Stronghold-Protocol';
 export const FULL_ZIP_JP_VOICE = true;
 /** Where the JP dub lies (plan.mjs voiceAlt: audio/voice/<lang>/<charId>/<file>). */
 export const JP_VOICE_DIR = 'public/assets/audio/voice/jp/';
+
+/**
+ * THE SWITCH for the English, Korean and own-language dubs in the full zip (`audio.voiceEn` / `audio.voiceKr` /
+ * `audio.voiceNative` of data/assets.json, tools/assets/plan.mjs VOICE_OPTIONAL_TREES: about 180 MB on disk, the
+ * coordinator checks the measured size after download). true (0.3.0): the full zip ships them. false holds them
+ * back (`held`) — setup downloads them on the first start, a missing line plays the Chinese one until then
+ * (public/js/audio.js voiceLine), and an update never deletes a player's copy. Independent of FULL_ZIP_JP_VOICE.
+ * The lite zip carries no art either way.
+ */
+export const FULL_ZIP_OPTIONAL_VOICE = true;
+/** Where those dubs lie (plan.mjs voiceAlt / nativeVoiceAlt). */
+export const OPTIONAL_VOICE_DIRS = Object.freeze(['public/assets/audio/voice/en/', 'public/assets/audio/voice/kr/', 'public/assets/audio/voice/native/']);
 /** Extracted official battlefield scenes (0.2.5 asset pack). Already ignored with public/assets/. */
 const SCENE_ART_PREFIX = 'public/assets/local/scene/';
+/**
+ * The official battle effects (tools/local-extract/fx.py, DESIGN §33: public/assets/local/fx/ and their file list
+ * data/local-fx.json; the `used` set is ~12,000 files, ~190 MB on disk, ~53 MB in a zip). true (the maintainer's decision
+ * of 2026-10-15): the full zip — and an update zip built from it — ships the folder and data/local-fx.json when this
+ * machine extracted them, so a host of the full package has the 设置「官方特效」 without its own client. false: they
+ * are held back (`fxHeld`). The lite zip carries no art either way (no online source has the effects).
+ */
+export const FULL_ZIP_FX = true;
+/** Where the extracted effects lie. */
+export const FX_ART_PREFIX = 'public/assets/local/fx/';
 
 /**
  * Refused in a plan and in a stage: 0.1.x's list (owner-only notes, the promo project, caches, per-machine config) and
@@ -146,6 +192,8 @@ export function isRefused(rel) {
   const base = parts[parts.length - 1];
   if (base === '.env' || base.startsWith('.env.')) return true;
   if (parts.some((s) => s.startsWith('.venv'))) return true;
+  if (p.startsWith('plugins/') && !isPluginResource(p)) return true;
+  if (AUTHOR_TEST_FILES.includes(p)) return false;
   return REFUSE.some((r) => p === r || p.startsWith(`${r}/`));
 }
 
@@ -161,8 +209,9 @@ export function isJunk(rel) {
 /** Whether a tracked file belongs in the player package. */
 export function isPlayerFile(rel) {
   const p = posixRel(rel);
-  if (!p || isRefused(p) || isJunk(p) || p === 'data/local-assets.json' || p === GENERATED_PACK_INDEX) return false;
+  if (!p || isRefused(p) || isJunk(p) || p === 'data/local-assets.json' || p === 'data/local-fx.json' || p === GENERATED_PACK_INDEX) return false;
   if (NOT_TRACKED_SHIP.some((d) => p.startsWith(d))) return false;
+  if (isPluginResource(p) || AUTHOR_TEST_FILES.includes(p)) return true;
   if (RUNTIME_DIRS.some((d) => p.startsWith(d)) || PLAYER_TOOL_DIRS.some((d) => p.startsWith(d))) return true;
   return ROOT_FILES.includes(p) || PLAYER_DOCS.includes(p) || RUNTIME_RESEARCH.includes(p) || PLAYER_SCRIPTS.includes(p) || PLAYER_TOOLS.includes(p);
 }
@@ -261,41 +310,49 @@ export const manifestFiles = listedArtFiles;
 
 /**
  * The art of a full package: every file data/assets.json lists, public/fonts, public/assets/local/ and
- * data/local-assets.json (when present). `missing`: listed files not on disk; `orphans`: files under public/assets
+ * data/local-assets.json (when present); the official effects (public/assets/local/fx/ with data/local-fx.json) only
+ * with `fx` (FULL_ZIP_FX), else they are `fxHeld`. `missing`: listed files not on disk; `orphans`: files under public/assets
  * that nothing lists (left out); `held`: listed files the zip holds back on purpose — the JP voice dub when `jpVoice`
- * (FULL_ZIP_JP_VOICE) is off: neither shipped nor missing, and never deleted by an update.
+ * (FULL_ZIP_JP_VOICE) is off, the English / Korean / own-language dubs when `optionalVoice` (FULL_ZIP_OPTIONAL_VOICE)
+ * is off: neither shipped nor missing, and never deleted by an update.
  * `scenes`: the files under public/assets/local/scene/ (the 0.2.5 battlefield scenes). They are also in `files`.
  * A lite plan and a machine that has not extracted them return `scenes: []`; packaging still succeeds.
  */
-export function artPlan(root, { lite = false, jpVoice = FULL_ZIP_JP_VOICE } = {}) {
-  if (lite) return { files: [], missing: [], orphans: [], held: [], local: false, scenes: [] };
+export function artPlan(root, { lite = false, jpVoice = FULL_ZIP_JP_VOICE, optionalVoice = FULL_ZIP_OPTIONAL_VOICE, fx = FULL_ZIP_FX } = {}) {
+  if (lite) return { files: [], missing: [], orphans: [], held: [], fxHeld: [], local: false, scenes: [] };
   const listed = manifestFiles(readJson(path.join(root, 'data', 'assets.json')) ?? {});
   const local = isFile(path.join(root, 'data', 'local-assets.json'));
   if (local) for (const f of manifestFiles(readJson(path.join(root, 'data', 'local-assets.json')) ?? {})) listed.add(f);
   const files = new Set();
   const missing = [];
   const held = [];
+  const fxHeld = [];
   for (const f of listed) {
     if (!jpVoice && f.startsWith(JP_VOICE_DIR)) held.push(f);
+    else if (!optionalVoice && OPTIONAL_VOICE_DIRS.some((d) => f.startsWith(d))) held.push(f);
     else if (isFile(path.join(root, f))) files.add(f);
     else missing.push(f);
   }
   for (const f of listTree(root, 'public/fonts')) files.add(f);
-  if (local) {
-    for (const f of listTree(root, 'public/assets/local')) files.add(f);
-    files.add('data/local-assets.json');
+  const fxList = isFile(path.join(root, 'data', 'local-fx.json'));
+  for (const f of listTree(root, 'public/assets/local')) {
+    if (!f.startsWith(FX_ART_PREFIX)) { if (local) files.add(f); } else if (fx && fxList) files.add(f); else fxHeld.push(f);
   }
+  if (local) files.add('data/local-assets.json');
+  if (fx && fxList) files.add('data/local-fx.json');
   // without case: on Windows / macOS a file whose name differs only in case is the listed one (fetch-assets orphanFiles)
-  const lower = new Set([...files, ...held].map((f) => f.toLowerCase()));
+  const lower = new Set([...files, ...held, ...fxHeld].map((f) => f.toLowerCase()));
   const orphans = listTree(root, 'public/assets').filter((f) => !lower.has(f.toLowerCase()));
   const sorted = [...files].sort();
   return {
-    files: sorted, missing: missing.sort(), orphans, held: held.sort(), local,
+    files: sorted, missing: missing.sort(), orphans, held: held.sort(), fxHeld: fxHeld.sort(), local,
     scenes: sorted.filter((f) => f.startsWith(SCENE_ART_PREFIX)),
   };
 }
 
 const URL_MOUNTS = [['/data/', 'data/'], ['/shared/', 'shared/'], ['/sim/', 'server/sim/']];
+/** Source-only trial scenarios: trialOptions omits them and trialScenario refuses them when absent in a release. */
+const OPTIONAL_IMPORTS = new Map([['server/studio/trialScenario.js', new Set(['../../tools/golden.mjs'])]]);
 
 /** The repository path an import specifier of `fromRel` names, or null (an npm package or a Node builtin). */
 export function resolveSpecifier(fromRel, spec) {
@@ -319,6 +376,7 @@ export function importProblems(root, files) {
     let src;
     try { src = fs.readFileSync(path.join(root, rel), 'utf8'); } catch { continue; }
     for (const { spec, line } of findSpecifiers(src)) {
+      if (OPTIONAL_IMPORTS.get(rel)?.has(spec)) continue;
       const target = resolveSpecifier(rel, spec);
       if (!target || shipped.has(target) || target.startsWith('public/vendor/') || !isFile(path.join(root, target))) continue;
       out.push(`${rel}:${line} imports ${spec} (not shipped)`);
@@ -352,7 +410,7 @@ export function playerScriptTargets(cmd) {
 
 /**
  * Honest in a player zip: every `node <file>` it names is shipped, and it names at least one. `eslint`, `tsc` and
- * `node --test` (no file, and test/ is not shipped) are not.
+ * `node --test` (no named file; only the author harness ships) are not.
  * @param {string} cmd
  * @param {Set<string> | string[]} shipped
  */
@@ -527,13 +585,14 @@ function groupOf(rel) {
  * scan and `measure: false` the node_modules / public/vendor sizes (tests that only want the selection).
  * @param {string} root
  * @param {{ lite?: boolean, paths?: string[], allowDirty?: boolean, env?: object, scan?: boolean, measure?: boolean,
- *   jpVoice?: boolean }} [opts] jpVoice: the full zip's JP dub (default FULL_ZIP_JP_VOICE)
+ *   jpVoice?: boolean, optionalVoice?: boolean }} [opts] jpVoice: the full zip's JP dub (default FULL_ZIP_JP_VOICE);
+ *   optionalVoice: the English / Korean / own-language dubs (default FULL_ZIP_OPTIONAL_VOICE)
  */
 export function plan(root, opts = {}) {
   const lite = !!opts.lite;
   const all = (opts.paths || trackedFiles(root)).map(posixRel);
   const { keep, drop } = selectTracked(all, { root });
-  const art = artPlan(root, { lite, jpVoice: opts.jpVoice ?? FULL_ZIP_JP_VOICE });
+  const art = artPlan(root, { lite, jpVoice: opts.jpVoice ?? FULL_ZIP_JP_VOICE, optionalVoice: opts.optionalVoice ?? FULL_ZIP_OPTIONAL_VOICE });
   const pkg = readJson(path.join(root, 'package.json')) || {};
   const lock = readJson(path.join(root, 'package-lock.json')) || {};
   const generated = shipsPacks(keep) ? [GENERATED_PACK_INDEX] : [];
@@ -576,7 +635,7 @@ export function plan(root, opts = {}) {
   const dropBytes = Object.values(dropped).reduce((n, g) => n + g.bytes, 0);
   return {
     version: pkg.version || '0.0.0', lite, tracked: keep, art: art.files, generated, files, dropped, orphans: art.orphans,
-    held: art.held, localArt: art.local, problems, names: names.length, scanned,
+    held: art.held, fxHeld: art.fxHeld, localArt: art.local, problems, names: names.length, scanned,
     scenes: { files: art.scenes || [], bytes: sumBytes(root, art.scenes || []) },
     bytes: {
       tracked: trackedBytes, art: artBytes, modules: modulesBytes, vendor: vendorBytes,
@@ -609,7 +668,8 @@ export function formatSummary(p) {
   const groups = Object.entries(p.dropped).sort((a, b) => b[1].bytes - a[1].bytes);
   if (groups.length) lines.push(`left out: ${groups.map(([g, v]) => `${g} ${v.files} (${MB(v.bytes)})`).join(', ')}`);
   if (!p.lite && p.orphans.length) lines.push(`left out art: ${p.orphans.length} files under public/assets that nothing lists (${MB(p.bytes.orphans)})`);
-  if (!p.lite && p.held?.length) lines.push(`held back: ${p.held.length} files of the JP voice dub (FULL_ZIP_JP_VOICE off: setup downloads them on the first start)`);
+  if (!p.lite && p.held?.length) lines.push(`held back: ${p.held.length} voice files (FULL_ZIP_JP_VOICE / FULL_ZIP_OPTIONAL_VOICE off: setup downloads them on the first start)`);
+  if (!p.lite && p.fxHeld?.length) lines.push(`held back: ${p.fxHeld.length} official effect files (public/assets/local/fx with data/local-fx.json, FULL_ZIP_FX off: extracted on this machine, not shipped)`);
   lines.push(`personal-info scan: ${p.scanned} files, ${p.names ? `home paths + ${p.names} account name(s)` : 'home paths only (no account name to refuse)'}`);
   lines.push(p.problems.length ? `PROBLEMS (${p.problems.length}):\n${p.problems.map((x) => `  ${x}`).join('\n')}` : 'checks: ok');
   return lines.join('\n') + '\n';
@@ -625,15 +685,16 @@ export function packageOutIsUnsafe(out, root = REPO) {
 }
 
 /**
- * Zip `cwd`/FOLDER into `zipPath`: Info-ZIP `zip`, else a bsdtar `tar --format zip` (Windows 10+, macOS). bsdtar writes
+ * Zip `cwd`/`folder` (FOLDER unless named: the asset pack's folder) into `zipPath`: Info-ZIP `zip`, else a bsdtar
+ * `tar --format zip` (Windows 10+, macOS). bsdtar writes
  * the names in UTF-8 (flag bit 11) only when told: its default is the system code page, which loses a name it cannot
  * spell (卫戍 becomes ?? on Windows code page 1252) and leaves no UTF-8 copy for a reader.
  */
-export function zipFolder(cwd, zipPath) {
+export function zipFolder(cwd, zipPath, folder = FOLDER) {
   // deflate everything: storing PNG / MP3 as they are made the full zip 8.5 MB larger and saved no real time
-  const z = spawnSync('zip', ['-q', '-r', '-X', zipPath, FOLDER], { cwd, stdio: 'inherit' });
+  const z = spawnSync('zip', ['-q', '-r', '-X', zipPath, folder], { cwd, stdio: 'inherit' });
   if (!z.error && z.status === 0) return;
-  const t = spawnSync('tar', ['-c', '--format', 'zip', '--options', 'zip:hdrcharset=UTF-8', '-f', zipPath, FOLDER], { cwd, stdio: 'inherit' });
+  const t = spawnSync('tar', ['-c', '--format', 'zip', '--options', 'zip:hdrcharset=UTF-8', '-f', zipPath, folder], { cwd, stdio: 'inherit' });
   if (t.error || t.status !== 0 || !isFile(zipPath)) throw new Error('zipping failed: install `zip` (or a bsdtar `tar`)');
 }
 
@@ -656,7 +717,9 @@ export function stageProblems(stage, planned, { env = process.env, libsPlanned =
   for (const f of held) if (!planned.has(f)) problems.push(`in the stage but not planned: ${f}`);
   const have = new Set(held);
   for (const f of planned) if (!have.has(f)) problems.push(`planned but not staged: ${f}`);
-  for (const r of REFUSE) if (fs.existsSync(path.join(stage, r))) problems.push(`refused: ${r} is in the stage`);
+  // test/ is present for the one author helper; check its leaves, and every plugin leaf, against the same allowlist.
+  for (const r of REFUSE) if (r !== 'test' && fs.existsSync(path.join(stage, r))) problems.push(`refused: ${r} is in the stage`);
+  for (const f of staged) if ((f.startsWith('test/') || f.startsWith('plugins/')) && isRefused(f)) problems.push(`refused: ${f} is in the stage`);
   const names = scanNames(env);
   const rest = staged.filter((f) => !isLib(f));
   for (const h of scanFiles(stage, rest.filter((f) => !META_FILES.has(f)), { home: true, names })) problems.push(`personal info: ${h}`);
@@ -724,7 +787,9 @@ function makeStage(root, p, stage, { install, env, log }) {
     const r = spawnSync(npm, ['ci', '--omit=dev', '--no-audit', '--no-fund'], { cwd: stage, stdio: 'inherit', shell: process.platform === 'win32' });
     if (r.error || r.status !== 0) throw new Error('npm ci --omit=dev failed in the stage');
     fs.rmSync(path.join(stage, 'node_modules', '.cache'), { recursive: true, force: true });
-    if (!isFile(path.join(stage, 'public', 'vendor', 'pixi.min.js'))) throw new Error('public/vendor/pixi.min.js missing after npm ci (postinstall tools/vendor.mjs)');
+    for (const file of ['pixi.min.js', 'ses.umd.js', 'acorn.mjs']) {
+      if (!isFile(path.join(stage, 'public', 'vendor', file))) throw new Error(`public/vendor/${file} missing after npm ci (postinstall tools/vendor.mjs)`);
+    }
   }
   const files = new Map();
   for (const f of listTree(stage, '', { junk: true })) if (inManifest(f)) files.set(f, digestOf(stage, f));
@@ -749,6 +814,196 @@ export function build(root, p, { out, install = true, force = false, keepStage =
   const staged = makeStage(root, p, stage, { install, env, log });
   log(`zipping ${staged.length} files (${MB(sumBytes(stage, staged))}) → ${zipPath}`);
   zipFolder(work, zipPath);
+  if (!keepStage) fs.rmSync(work, { recursive: true, force: true });
+  return { zipPath, zipBytes: fileBytes(zipPath), files: staged.length, stage: keepStage ? stage : null };
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The asset pack (--assets)
+
+/** The example asset pack's folder inside its zip, and the zip's name without `.zip`. @param {string} version */
+export const assetPackName = (version) => `${FOLDER}-v${version}-assets`;
+/** The bilingual text at the root of the asset pack's folder (the one entry the importer skips). */
+export const ASSET_PACK_README = 'README.txt';
+/** The served manifests whose art the title screen's import checks (public/js/assetPack.js reads the host's copies). */
+export const IMPORT_MANIFESTS = Object.freeze(['data/assets.json', 'data/local-assets.json', 'data/local-fx.json']);
+
+const STAND_IN_HASH = '0'.repeat(16);
+/** An asset index that has a hash for every file: the served manifests of a host with every listed file on disk. */
+const EVERY_FILE_HASHED = Object.freeze({ hashOf: () => STAND_IN_HASH, modelHash: () => STAND_IN_HASH });
+
+/**
+ * The art files of the three manifests that the title screen's import checks, as public/… paths (sorted): the
+ * importer's own plan (assetPack.js planFromManifests, mergeLocalManifests) of the manifests as a host serves them
+ * (server/http/assetViews.js rewriteManifest — here every URL with a stand-in hash, as on a host that has every listed
+ * file). Standalone files and whole Spine models (with the default `<skel>.png` page when a model lists no textures);
+ * left out like the importer leaves them out: a URL the server never hashes (a query, an empty or `..` segment) and
+ * art of local-assets.json outside its `groups`.
+ * @param {object | null} assets data/assets.json
+ * @param {object | null} local data/local-assets.json
+ * @param {object | null} fx data/local-fx.json
+ * @returns {string[]}
+ */
+export function importableArt(assets, local, fx) {
+  const view = (doc, name) => (doc && typeof doc === 'object' ? rewriteManifest(doc, name, EVERY_FILE_HASHED).doc : null);
+  const plan = planFromManifests(view(assets, 'assets.json'), mergeLocalManifests(view(local, 'local-assets.json'), view(fx, 'local-fx.json')));
+  return [...plan.rels].map((rel) => `public/${rel}`).sort();
+}
+
+/**
+ * Everything the asset pack would hold, with every check (no copying). `files`: importableArt of this checkout's
+ * manifests, with the full zip's switches — `jpVoice` / `optionalVoice` (FULL_ZIP_JP_VOICE / FULL_ZIP_OPTIONAL_VOICE)
+ * hold voice files back (`held`), `fx` (FULL_ZIP_FX) off or no data/local-fx.json leaves the effects out; `missing`:
+ * listed, not on disk; `notListed`: what the full zip ships from public/ and the import would skip (no manifest lists
+ * it: local-client leftovers, an unlisted font), left out. `scan: false` skips the personal-info scan (tests).
+ * @param {string} root
+ * @param {{ allowDirty?: boolean, env?: object, scan?: boolean, jpVoice?: boolean, optionalVoice?: boolean, fx?: boolean }} [opts]
+ */
+export function assetPackPlan(root, opts = {}) {
+  const jpVoice = opts.jpVoice ?? FULL_ZIP_JP_VOICE;
+  const optionalVoice = opts.optionalVoice ?? FULL_ZIP_OPTIONAL_VOICE;
+  const fx = opts.fx ?? FULL_ZIP_FX;
+  const pkg = readJson(path.join(root, 'package.json')) || {};
+  const version = pkg.version || '0.0.0';
+  const assets = readJson(path.join(root, 'data', 'assets.json'));
+  const local = readJson(path.join(root, 'data', 'local-assets.json'));
+  const fxDoc = fx ? readJson(path.join(root, 'data', 'local-fx.json')) : null;
+  const files = [];
+  const missing = [];
+  const held = [];
+  for (const f of importableArt(assets, local, fxDoc)) {
+    if ((!jpVoice && f.startsWith(JP_VOICE_DIR)) || (!optionalVoice && OPTIONAL_VOICE_DIRS.some((d) => f.startsWith(d)))) held.push(f);
+    else if (isFile(path.join(root, f))) files.push(f);
+    else missing.push(f);
+  }
+  const problems = [];
+  if (!assets) problems.push('data/assets.json is missing or not JSON: run npm run setup first');
+  for (const f of missing) problems.push(`missing art: ${f} (a manifest lists it; run npm run setup)`);
+  if (assets && !files.some((f) => f.startsWith('public/assets/'))) problems.push('no art under public/assets: run npm run setup first');
+  const byCase = new Map();
+  for (const f of files) {
+    const k = f.toLowerCase();
+    if (byCase.has(k)) problems.push(`paths differ only in case (one file on Windows / macOS): ${byCase.get(k)} / ${f}`);
+    else byCase.set(k, f);
+  }
+  // the importer strips each path up to its last `public/` (detectAssetPrefix): a second one would move the file
+  for (const f of files) if (f.slice('public/'.length).includes('public/')) problems.push(`${f}: a public/ folder inside an art path misleads the import's prefix`);
+  if (!opts.allowDirty) for (const f of dirtyFiles(root, ['data/assets.json'])) problems.push(`uncommitted change: ${f} (the pack must match the released manifest: commit it, or --allow-dirty)`);
+  const names = scanNames(opts.env || process.env);
+  let scanned = 0;
+  if (opts.scan !== false) {
+    for (const h of scanFiles(root, files, { home: true, names })) problems.push(`personal info: ${h}`);
+    scanned = files.length;
+  }
+  const inPack = new Set([...files, ...held]);
+  const notListed = artPlan(root, { jpVoice, optionalVoice, fx }).files.filter((f) => f.startsWith('public/') && !inPack.has(f));
+  return {
+    version, name: assetPackName(version), files, missing, held, notListed, fx: !!fxDoc, local: !!local, problems,
+    names: names.length, scanned, bytes: { art: sumBytes(root, files), notListed: sumBytes(root, notListed) },
+  };
+}
+
+export function formatAssetSummary(p) {
+  const lists = ['data/assets.json', p.local ? 'data/local-assets.json' : null, p.fx ? 'data/local-fx.json' : null].filter(Boolean);
+  const lines = [
+    `asset pack: ${p.name}.zip · version ${p.version} (for the title screen's 导入素材包; not a release asset)`,
+    `art: ${p.files.length} files, ${MB(p.bytes.art)} — what the import accepts from a host of this version: the files ${lists.join(', ')} list`,
+  ];
+  if (!p.local) lines.push('local-client art: none (no data/local-assets.json here)');
+  if (!p.fx) lines.push('official effects: none (no data/local-fx.json here, or FULL_ZIP_FX off)');
+  if (p.held.length) lines.push(`held back: ${p.held.length} voice files (FULL_ZIP_JP_VOICE / FULL_ZIP_OPTIONAL_VOICE off, as in the full zip)`);
+  if (p.notListed.length) lines.push(`left out: ${p.notListed.length} files the full zip ships from public/ that no manifest lists (${MB(p.bytes.notListed)}): the import would skip them`);
+  lines.push(`personal-info scan: ${p.scanned} files, ${p.names ? `home paths + ${p.names} account name(s)` : 'home paths only (no account name to refuse)'}`);
+  lines.push(p.problems.length ? `PROBLEMS (${p.problems.length}):\n${p.problems.map((x) => `  ${x}`).join('\n')}` : 'checks: ok');
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * README.txt of the asset pack (Chinese, then English; UTF-8 with a BOM so every text editor reads it as UTF-8).
+ * @param {{ version: string, files: string[], bytes: { art: number }, local: boolean, fx: boolean }} p
+ */
+export function assetPackReadme(p) {
+  const v = `v${p.version}`;
+  const lists = ['data/assets.json', p.local ? 'data/local-assets.json' : null, p.fx ? 'data/local-fx.json' : null].filter(Boolean);
+  const notice = `${GITHUB_REPO}/blob/${releaseTag(p.version)}/NOTICE.md`;
+  const size = MB(p.bytes.art);
+  const zh = [
+    `卫戍协议：盟约 ${v} 素材包`,
+    `Stronghold Protocol: Alliance ${v} asset pack`,
+    '',
+    '【这是什么】',
+    `游戏的美术、Spine 模型、音频和字体，共 ${p.files.length} 个文件（${size}），给游戏标题画面的「导入素材包」使用：`,
+    '导入以后，这些文件直接从你的浏览器读取，不再从开服的电脑下载，省下服务器的流量。',
+    '它不是安装包，不能用来开服；开服请用 Releases 里的完整包或精简包。',
+    '',
+    '【对应的版本】',
+    `这些文件和 ${v} 的素材清单一致：`,
+    `  ${lists.join('、')}`,
+    '导入时浏览器把每个文件的 SHA-256 和服务器的清单比对，只收下一致的文件。服务器是其他版本时，内容变了的',
+    '文件「校验不符」，那个版本不再列出的文件被「跳过」，都不会收下，游戏照常从服务器加载它们。',
+    '',
+    '【怎么导入】',
+    '1. 用 HTTPS 地址或本机的 http://localhost 打开游戏（http://局域网IP 不能导入，浏览器不允许）。',
+    '2. 在标题画面点「导入素材包」，再点「选择 zip」选这个文件，或把它拖进窗口；',
+    '   解压以后也可以点「选择文件夹」，选解压出来的文件夹。',
+    '3. 等进度走完。结果里「跳过 1 个」是这份说明本身。',
+    '导入的素材存在这个浏览器里，按网址分开：换了域名或端口要重新导入。「清除已导入的素材」只删除浏览器里的副本。',
+    '',
+    '【版权】',
+    '素材的版权归上海鹰角网络科技有限公司及其授权方（Yostar 等）所有，不适用本项目的 GPL-3.0 许可证。',
+    '仅限非商业用途，不得出售或付费分发。完整声明见 NOTICE.md：',
+    notice,
+  ];
+  const en = [
+    '[What this is]',
+    `The game's art, Spine models, audio and fonts: ${p.files.length} files (${size}) for "Import asset pack" on the game's`,
+    'title screen. Once imported, your browser reads these files itself instead of downloading them from the host, which',
+    'saves the host\'s bandwidth. It is not an installation package and cannot run a server: hosts use the full or lite',
+    'package from the Releases page.',
+    '',
+    '[Version]',
+    `The files match the ${v} asset lists:`,
+    `  ${lists.join(', ')}`,
+    'The browser compares each file\'s SHA-256 with the server\'s lists and keeps only the files that match. On a server of',
+    'another version, changed files fail the check ("hash mismatch") and files that version does not list are skipped;',
+    'the game loads those from the server as usual.',
+    '',
+    '[How to import]',
+    '1. Open the game over HTTPS, or at http://localhost on the computer that runs the server (a plain http:// LAN address',
+    '   cannot import: the browser does not allow it).',
+    '2. On the title screen press "Import asset pack", then "Choose zip" and pick this file, or drop it on the dialog.',
+    '   After unzipping, "Choose folder" takes the unzipped folder too.',
+    '3. Wait for the progress bar. The one skipped file in the result is this text.',
+    'Imported files stay in this browser, per address: a new host name or port needs a new import. "Clear imported',
+    'assets" deletes only the browser\'s copy.',
+    '',
+    '[Copyright]',
+    'The assets are (c) Hypergryph and its licensors (Yostar and others) and are not covered by this project\'s GPL-3.0',
+    'licence. Non-commercial use only: do not sell or charge for them. The full notice is NOTICE.md:',
+    notice,
+  ];
+  return `\ufeff${[...zh, '', '----------------------------------------------------------------', '', ...en].join('\n')}\n`;
+}
+
+/**
+ * Copy the asset pack's files into <out>/<name>/<name>, write README.txt, check the stage (exactly the plan and the
+ * README, the refusal list, the personal-info scan) and zip it as <out>/<name>.zip (<name> = assetPackName).
+ */
+export function buildAssetPack(root, p, { out, force = false, keepStage = false, env = process.env, log = console.log } = {}) {
+  if (p.problems.length) throw new Error('refusing to build: the plan has problems (see the summary)');
+  const dest = path.resolve(out);
+  if (packageOutIsUnsafe(dest, root)) throw new Error(`refusing to write into the repository or a parent of it: ${dest}`);
+  const work = path.join(dest, p.name);
+  const stage = path.join(work, p.name);
+  const zipPath = path.join(dest, `${p.name}.zip`);
+  freshTargets([work, zipPath], force);
+  log(`copying ${p.files.length} files → ${stage}`);
+  for (const rel of p.files) copyInto(root, stage, rel);
+  fs.writeFileSync(path.join(stage, ASSET_PACK_README), assetPackReadme(p));
+  const { staged, problems } = stageProblems(stage, new Set([...p.files, ASSET_PACK_README]), { env });
+  if (problems.length) throw new Error(`refusing to zip ${stage}:\n${problems.map((x) => `  ${x}`).join('\n')}`);
+  log(`zipping ${staged.length} files (${MB(sumBytes(stage, staged))}) → ${zipPath}`);
+  zipFolder(work, zipPath, p.name);
   if (!keepStage) fs.rmSync(work, { recursive: true, force: true });
   return { zipPath, zipBytes: fileBytes(zipPath), files: staged.length, stage: keepStage ? stage : null };
 }
@@ -818,7 +1073,7 @@ export function buildUpdate(root, p, bases, { out, install = true, force = false
     }
   }
   // a path no update deletes (a per-machine name such as node_modules/x/.env.example) stays behind, named in the summary
-  // …nor a file this zip holds back on purpose (the JP dub with FULL_ZIP_JP_VOICE off): the manifest still lists it
+  // …nor a file this zip holds back on purpose (a voice dub with FULL_ZIP_JP_VOICE / FULL_ZIP_OPTIONAL_VOICE off): the manifest still lists it
   const heldBack = new Set(p.held || []);
   const diff = diffBases(next, bases, { removable: (rel) => !removalProblem(rel) && !heldBack.has(rel) });
   for (const rel of diff.left) {
@@ -868,17 +1123,18 @@ export function formatUpdate(r, version) {
   return lines.join('\n') + '\n';
 }
 
-const USAGE = 'usage: node tools/package.mjs [--lite | --update --from <base zip or folder>[,<…>]] [--dry-run [--list]] [--out <dir>] [--force] [--keep-stage] [--no-install] [--allow-dirty] [--allow-dev] [--root <dir>]';
+const USAGE = 'usage: node tools/package.mjs [--lite | --update --from <base zip or folder>[,<…>] | --assets] [--dry-run [--list]] [--out <dir>] [--force] [--keep-stage] [--no-install] [--allow-dirty] [--allow-dev] [--root <dir>]';
 
 /** Whether `version` is a development (pre-release) version, e.g. 0.2.0-dev. */
 export const isDevVersion = (version) => /-/.test(String(version || ''));
 
 export function parseArgs(argv) {
-  const o = { lite: false, update: false, from: [], dryRun: false, list: false, out: '', force: false, keepStage: false, install: true, allowDirty: false, allowDev: false, root: REPO, help: false };
+  const o = { lite: false, update: false, assets: false, from: [], dryRun: false, list: false, out: '', force: false, keepStage: false, install: true, allowDirty: false, allowDev: false, root: REPO, help: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--lite') o.lite = true;
     else if (a === '--update') o.update = true;
+    else if (a === '--assets') o.assets = true;
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--list') o.list = true;
     else if (a === '--force') o.force = true;
@@ -901,6 +1157,7 @@ export function parseArgs(argv) {
     if (o.from.length && !o.update) throw new Error(`--from goes with --update\n${USAGE}`);
     if (o.update && !o.from.length) throw new Error(`--update needs --from <earlier full zip or folder>[,<…>]\n${USAGE}`);
     if (o.update && o.lite) throw new Error(`--update is compared from the full stage: no --lite\n${USAGE}`);
+    if (o.assets && (o.lite || o.update)) throw new Error(`--assets builds the asset pack alone: no --lite or --update\n${USAGE}`);
   }
   return o;
 }
@@ -909,6 +1166,7 @@ function main(argv) {
   let o;
   try { o = parseArgs(argv); } catch (e) { console.error(`package: ${e.message}`); return 2; }
   if (o.help) { console.log(USAGE); return 0; }
+  if (o.assets) return mainAssets(o);
   let p;
   try { p = plan(o.root, { lite: o.lite, allowDirty: o.allowDirty }); } catch (e) { console.error(`package: ${e.message}`); return 1; }
   process.stdout.write(formatSummary(p));
@@ -939,6 +1197,31 @@ function main(argv) {
     }
     const r = build(o.root, p, opts);
     console.log(`zip: ${r.zipPath} (${MB(r.zipBytes)}, ${r.files} files)${r.stage ? ` · stage kept: ${r.stage}` : ''}`);
+    return 0;
+  } catch (e) {
+    console.error(`package: ${e.message}`);
+    return 1;
+  }
+}
+
+/** --assets: the asset pack's plan, its summary, and (without --dry-run) the zip. */
+function mainAssets(o) {
+  let p;
+  try { p = assetPackPlan(o.root, { allowDirty: o.allowDirty }); } catch (e) { console.error(`package: ${e.message}`); return 1; }
+  process.stdout.write(formatAssetSummary(p));
+  if (o.dryRun) {
+    if (o.list) for (const f of [...p.files, ASSET_PACK_README]) process.stdout.write(`file ${f}\n`);
+    return p.problems.length ? 1 : 0;
+  }
+  if (p.problems.length) return 1;
+  if (isDevVersion(p.version) && !o.allowDev) {
+    console.error(`package: v${p.version} is a development version — the asset pack names the version whose manifests it matches; --allow-dev builds a test pack named after it`);
+    return 1;
+  }
+  try {
+    const r = buildAssetPack(o.root, p, { out: o.out || path.join(os.tmpdir(), 'stronghold-protocol-release'), force: o.force, keepStage: o.keepStage });
+    console.log(`zip: ${r.zipPath} (${MB(r.zipBytes)}, ${r.files} files)${r.stage ? ` · stage kept: ${r.stage}` : ''}`);
+    console.log('not a release asset: offer it for download elsewhere (docs/DEPLOY.md §7)');
     return 0;
   } catch (e) {
     console.error(`package: ${e.message}`);

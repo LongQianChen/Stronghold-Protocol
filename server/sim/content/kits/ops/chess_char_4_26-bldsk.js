@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_4_26-bldsk.js — 华法琳 (char_171_bldsk) kit, tier 4.
 // Conventions of the tier-4 kits: ../shared/tier4.js; kit contract and rules: ../README.md.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { num, tbb, keySet, isSel, alt, installLowHpHealBonus, withDefaults } from '../shared/tier4.js';
 
 export default withDefaults({
@@ -35,7 +35,7 @@ export default withDefaults({
       talents: [{ install(battle, unit) { // 血液样本回收: an enemy falls in range ⇒ +2 SP to her and a random ally in range
         battle.on('death', (c) => {
           const e = c.unit;
-          if (c.reason !== 'killed' || e.side !== 'enemy' || !unit.alive || !unit.deployed || !bodyInKeys(e, keySet(unit))) return;
+          if (c.reason !== 'killed' || e.side !== 'enemy' || !unit.alive || !unit.deployed || !bodyInRange(e, keySet(unit))) return;
           unit.skill?.gainSp(num(t0['bldsk_t_1[self].sp'], 2), 'talent');
           // SP cannot be gained while a timed skill runs (engine gainSp ignores it): such allies are not picked
           const pick = battle.rng.pick(battle.alliesInGrid(unit).filter((a) => a !== unit && a.skill && !a.skill.noSkill && a.skill.kind !== 'passive' && !(a.skill.active && a.skill.isTimed)));

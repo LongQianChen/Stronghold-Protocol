@@ -65,7 +65,10 @@ export function parseSkel(bytes, atlasRegions) {
   const r = loadRuntime();
   const missing = new Set();
   const bin = new r.SkeletonBinary(makeLoader(r, atlasRegions, missing));
-  const data = bin.readSkeletonData(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+  // the runtime reads `bytes.buffer` from its start (BinaryInput: new DataView(data.buffer)), so a view into a larger
+  // buffer — a small file fs.readFileSync took from Node's buffer pool — is copied into one of its own first
+  const own = bytes instanceof Uint8Array && bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength;
+  const data = bin.readSkeletonData(own ? bytes : new Uint8Array(bytes));
   const animations = data.animations.map((a) => a.name);
   const durations = {};
   const hits = {};

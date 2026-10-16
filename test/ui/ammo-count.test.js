@@ -42,7 +42,7 @@ test('the settings dialog has the toggle and a hint that the official interface 
 
 test('the field view takes the setting at creation and live (setSettings); the units read it from their shared settings', () => {
   const app = read('public/js/render/app.js');
-  assert.match(app, /const settings = \{ damageNumbers: true, officialDamageNumbers: false, ammoCount: false, quality: 'high', \.\.\.\(opts\.settings \|\| \{\}\) \};/);
+  assert.match(app, /const settings = \{ damageNumbers: true, officialDamageNumbers: false, ammoCount: false, mysticEnergy: false, quality: 'high', officialFx: 'auto', \.\.\.\(opts\.settings \|\| \{\}\) \};/);
   assert.match(app, /if \(typeof s\.ammoCount === 'boolean'\) settings\.ammoCount = s\.ammoCount;/);
   const units = read('public/js/render/units.js');
   assert.match(units, /this\._updateAmmoCount\(showSp && !!ammo && this\.ctx\.settings\?\.ammoCount === true, x0 \+ bw \/ 2, rowsTop, s\)/);

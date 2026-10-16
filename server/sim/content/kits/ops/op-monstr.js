@@ -118,7 +118,7 @@ function chainFrom(battle, unit, main, base, { count, step, extra, mainDone = fa
   let calm = free(main) ? 1 + extra : 0;
   const seen = new Set([main.id]);
   let cur = main;
-  while (counted < count) {
+  while (counted < count) { // loop-cap: chain stops when the next ally is missing
     const next = chainHealNext(battle, unit, cur, seen);
     if (!next) break;
     seen.add(next.id);

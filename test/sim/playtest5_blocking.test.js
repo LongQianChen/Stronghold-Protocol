@@ -170,9 +170,8 @@ test('#4: a blocker attacks the enemy it blocks even when it stands outside its 
 
 test('#4 (revised by the user after playtest #6): a ranged operator on a melee tile also hits and casts for the enemy it holds behind it', () => {
   // The playtest #5 QA had made blocked-first melee-only (PRTS 索敌的概念 "阻挡（近战限定）"); the user's rule after
-  // playtest #6 — "阻挡了就一定要能打到": officially the collision pushes a blocked enemy to its blocker's front, so
-  // whatever blocks an enemy can hit it. Facing LEFT, the range (9,6),(9,5) never holds the enemy blocked at x ≈ 6.71;
-  // the ranged blocker hits it and casts its DEFAULT skill like a melee one (帮助: the blocked enemy satisfies the
+  // playtest #6 — "阻挡了就一定要能打到": whatever blocks an enemy can hit it, where it stands. Facing LEFT, the range
+  // (9,6),(9,5) never holds the enemy blocked at x ≈ 6.71 (its 0.1 collider ends at 6.61); the ranged blocker hits it and casts its DEFAULT skill like a melee one (帮助: the blocked enemy satisfies the
   // target condition).
   const run = (id, profession) => {
     const h = makeBattle({

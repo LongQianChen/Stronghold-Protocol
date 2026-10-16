@@ -47,7 +47,7 @@
 
 import { num, talentBb, moduleBb, traitBb, skillRec, up, batMod } from '../shared/tier1.js';
 import { canTargetEnemy } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { hasHp } from '../../../damage.js';
 
 const S1 = 'skchr_ascln_1';
@@ -107,7 +107,7 @@ function missCut(st, e, type) {
   let cut = 0;
   for (const s of st.srcs) {
     const v = type === 'arts' ? s.arts : s.phys;
-    if (v > cut && up(s.unit) && s3On(s.unit) && s.unit.rangeKeySet && bodyInKeys(e, s.unit.rangeKeySet)) cut = v;
+    if (v > cut && up(s.unit) && s3On(s.unit) && s.unit.rangeKeySet && bodyInRange(e, s.unit.rangeKeySet)) cut = v;
   }
   return Math.min(1, cut);
 }
@@ -236,7 +236,7 @@ export default {
           // a ground enemy of her range knocked out ⇒ one 死亡拘审 layer on the selectable ground enemies within the radius
           battle.on('death', (ctx) => {
             const v = ctx.unit;
-            if (ctx.reason !== 'killed' || !v || v.side !== 'enemy' || v.isFlying || !up(unit) || !unit.skill?.active || !unit.rangeKeySet || !bodyInKeys(v, unit.rangeKeySet)) return;
+            if (ctx.reason !== 'killed' || !v || v.side !== 'enemy' || v.isFlying || !up(unit) || !unit.skill?.active || !unit.rangeKeySet || !bodyInRange(v, unit.rangeKeySet)) return;
             battle.fx('aoe', { x: v.x, y: v.y, radius, id: unit.id, skill: 'ascln:endowment' });
             for (const e of battle.foesInRadius(v.x, v.y, radius, true)) {
               if (e !== v && !e.isFlying && canTargetEnemy(unit, e, ANY)) addDread(battle, unit, e, t0);

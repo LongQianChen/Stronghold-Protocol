@@ -47,6 +47,7 @@
 //   (the basic strategy), the skill prefabs cast with no target and keep the SP spent (skchr_haak_2 / _3 `_allowNoTarget`
 //   1, `_checkHasTargetBeforeDoCast` 0, `_recoverSpIfNoTarget` 0) and PRTS 阿 has no note on it.
 
+import { textCount } from '../../../../../shared/plugins/textNumber.js';
 import { num, talentBb, moduleBb, moduleOn, skillRec, statBuff, toggleBuff, up } from '../shared/tier1.js';
 import { toLocal } from '../../../dir.js';
 import { COLS } from '../../../constants.js';
@@ -100,7 +101,7 @@ export function frontAlly(battle, unit, heal = false) {
 function stimulant(battle, unit, { damage, shots, dur, mods, key }) {
   const t = frontAlly(battle, unit);
   if (!t) return;
-  for (let i = 0; i < shots && t.alive && unit.alive; i++) {
+  for (let i = 0; i < shots && t.alive && unit.alive; i++) { // loop-cap: textCount attack-times
     battle.dealDamage(unit, t, { amount: damage, type: 'phys', isSkill: true, tags: ['skill', TAG_STIM] });
   }
   battle.fx('volley', { x: t.x, y: t.y, id: unit.id, target: t.id, n: shots, skill: key });
@@ -145,7 +146,7 @@ export default {
     const stim = (id, key, mods) => {
       const rec = skillRec(chess, id);
       const b = rec?.bb ?? {};
-      const shots = Math.max(1, Math.floor(num(+(/攻击(\d+)次/.exec(String(rec?.desc ?? ''))?.[1]), SHOTS_FALLBACK)));
+      const shots = Math.max(1, Math.floor(textCount(String(rec?.desc ?? ''), /攻击(\d+)次/, SHOTS_FALLBACK, 'attack-times')));
       const dur = num(rec?.duration, 0);
       return {
         kind: 'duration',

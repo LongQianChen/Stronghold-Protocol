@@ -64,6 +64,7 @@
 //   time of resistible statuses is not modelled [ASSUMED].
 
 import { num, talentBb, moduleBb, traitBb, skillRec, batMod, up } from '../shared/tier1.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { tacticalPoint } from '../shared/tier3.js';
 import { COLS, FORCED_EXIT } from '../../../constants.js';
 
@@ -113,12 +114,16 @@ function dpTicker(unit, { total, step = 1, iv, first = iv }) {
 }
 function dpTick(battle, unit, dt) {
   const d = unit.mem.closurDp;
-  if (!d || !(d.iv > 0) || !(d.step > 0)) return;
+  if (!d) return;
+  const iv = stepOf('interval', d.iv, d.iv);
+  const step = stepOf('cost', d.step, d.step);
+  if (!(iv > 0) || !(step > 0)) return;
   d.t += dt;
-  while (d.t + 1e-9 >= d.next && d.given + d.step <= d.total + 1e-9) {
-    d.given += d.step;
-    d.next += d.iv;
-    battle.addDp(unit.ownerId, d.step);
+  let guard = 0;
+  while (d.t + 1e-9 >= d.next && d.given + step <= d.total + 1e-9 && guard++ < STEP_PER_TICK) { // loop-cap: stepOf interval/cost
+    d.given += step;
+    d.next += iv;
+    battle.addDp(unit.ownerId, step);
   }
 }
 function dpEnd(battle, unit, reason) {

@@ -130,17 +130,21 @@ export function resetOps(ops, charId) {
  * of the 干员调配 roster or the 自选 owned pool, `isOperator` — shared/protocol.js cultivationCharIds), the rest dropped one
  * by one; defaults dropped.
  * @param {Record<string, any>} ops @param {(charId: string) => boolean} isOperator
+ * @param {(charId: string) => boolean} [changesWithPotential] shared/protocol.js charPotentialChanges. A non-default
+ * potential that does not change the operator is omitted; a non-default 练度 on that same entry is kept. The server
+ * still rejects a raw message that contains the illegal potential.
  * @returns {Record<string, { potential?: number, cultivate?: number }>}
  */
-export function sanitizeOps(ops, isOperator) {
+export function sanitizeOps(ops, isOperator, changesWithPotential = null) {
   const out = {};
   for (const [id, e] of Object.entries(ops || {})) {
     if (Object.keys(out).length >= LOADOUT_LIMITS.ops) break;
     const one = {};
     if (isPotential(e?.potential)) one.potential = e.potential;
     if (isCultivate(e?.cultivate)) one.cultivate = e.cultivate;
+    if (one.potential != null && one.potential !== POTENTIAL_DEFAULT && typeof changesWithPotential === 'function' && changesWithPotential(id) === false) delete one.potential;
     if (!Object.keys(one).length) continue;
-    const res = checkLoadoutOps({ [id]: one }, isOperator);
+    const res = checkLoadoutOps({ [id]: one }, isOperator, changesWithPotential);
     if (res.ok && res.ops[id]) {
       const x = {};
       if (res.ops[id].potential !== POTENTIAL_DEFAULT) x.potential = res.ops[id].potential;
@@ -373,6 +377,14 @@ export function rosterOf(list) {
     .sort((a, b) => (a.tier ?? 0) - (b.tier ?? 0) || (a.shopSortId ?? 0) - (b.shopSortId ?? 0) || String(a.chessId).localeCompare(String(b.chessId)));
 }
 
+/** A stored potential that the screen does not edit is not a visible change. Omitted `potentialCounts` keeps the old rule. */
+function opsVisibleChange(ops, charId, potentialCounts) {
+  const cur = opsOf(ops, charId);
+  if (cur.cultivate !== CULTIVATE_DEFAULT) return true;
+  if (typeof potentialCounts === 'function' && potentialCounts(charId) === false) return false;
+  return cur.potential !== POTENTIAL_DEFAULT;
+}
+
 /**
  * Apply the screen's filters.
  * @param {any[]} roster rosterOf(...)
@@ -381,8 +393,10 @@ export function rosterOf(list) {
  * @param {(id: string) => any} getChess
  * @param {(id: string) => any} [getBond] bond lookup (the search also matches bond names)
  * @param {Record<string, any>|null} [ops] the per-operator 潜能 / 练度 (changedOnly counts them too)
+ * @param {(charId: string) => boolean} [potentialCounts] false hides a potential-only change (no curve)
  */
-export function filterRoster(roster, f = {}, entries = {}, getChess = () => null, getBond = () => null, ops = null) {
+
+export function filterRoster(roster, f = {}, entries = {}, getChess = () => null, getBond = () => null, ops = null, potentialCounts = null) {
   const q = String(f.query || '').trim().toLowerCase();
   return roster.filter((c) => {
     if (f.tier && c.tier !== f.tier) return false;
@@ -390,7 +404,7 @@ export function filterRoster(roster, f = {}, entries = {}, getChess = () => null
     if (f.bond && !(Array.isArray(c.bonds) && c.bonds.includes(f.bond))) return false;
     if (f.changedOnly) {
       const golden = c.goldenId ? getChess(c.goldenId) : null;
-      if (!effectiveChoice(entries, c, golden).changed && !opsOf(ops, c.charId).changed) return false;
+      if (!effectiveChoice(entries, c, golden).changed && !opsVisibleChange(ops, c.charId, potentialCounts)) return false;
     }
     if (q) {
       const hay = [c.name, c.appellation, c.subProfessionName, t(PROF_NAME[c.profession]), ...(c.bonds || []).map((b) => getBond(b)?.name)]
@@ -403,13 +417,13 @@ export function filterRoster(roster, f = {}, entries = {}, getChess = () => null
 
 /** Number of chess whose choice differs from the defaults (only loadout slots of the loaded data count: an entry of a
  *  retired / hidden chess is never sent nor applied) — with `ops` (0.2.2), also those whose operator's 潜能 / 练度 differ. */
-export function changedCount(entries, getChess, ops = null, roster = null) {
+export function changedCount(entries, getChess, ops = null, roster = null, potentialCounts = null) {
   const ids = new Set(Object.keys(entries || {}));
-  if (ops && Object.keys(ops).length && Array.isArray(roster)) for (const c of roster) if (opsOf(ops, c.charId).changed) ids.add(c.chessId);
+  if (ops && Object.keys(ops).length && Array.isArray(roster)) for (const c of roster) if (opsVisibleChange(ops, c.charId, potentialCounts)) ids.add(c.chessId);
   let n = 0;
   for (const id of ids) {
     const { base, golden } = recordsOf(id, getChess);
-    if (isLoadoutSlot(base) && base.chessId === id && (effectiveChoice(entries, base, golden).changed || opsOf(ops, base.charId).changed)) n++;
+    if (isLoadoutSlot(base) && base.chessId === id && (effectiveChoice(entries, base, golden).changed || opsVisibleChange(ops, base.charId, potentialCounts))) n++;
   }
   return n;
 }

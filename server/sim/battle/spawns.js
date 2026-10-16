@@ -49,7 +49,7 @@ export class BattleSpawns {
 
   _processSpawns() {
     const now = this.time + 1e-9;
-    while (this._pending.length && this._pending[0].time <= now) {
+    while (this._pending.length && this._pending[0].time <= now) { // loop-cap: pending spawn queue
       const p = this._pending.shift();
       this._safe(() => this.spawnEnemy(p.enemyKey, { ...p, _precounted: p.precounted }), 'spawnEnemy');
     }

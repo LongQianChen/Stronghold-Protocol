@@ -27,7 +27,7 @@
 //   and module effects check the selected module (moduleIs / the module-merged trait & talent blackboards).
 //   `node tools/kit-coverage.mjs --tier 4 --strict`; tests: test/content/kits_alt_t4.test.js.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { canTargetEnemy, sortEnemyTargets } from '../../../targeting.js';
 import { normalizeChess } from '../../../simdata.js';
 
@@ -51,7 +51,7 @@ const keySet = (unit) => unit.rangeKeySet || new Set(unit.rangeKeys || []);
 function enemiesOnRange(battle, unit, keys = null) {
   const set = keys || keySet(unit);
   const out = [];
-  for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInKeys(e, set)) out.push(e);
+  for (const e of battle.enemies) if (e.alive && !e.hidden && bodyInRange(e, set)) out.push(e);
   return out;
 }
 /** Targetable enemies in the unit's current range (flyers included), best targets first. */

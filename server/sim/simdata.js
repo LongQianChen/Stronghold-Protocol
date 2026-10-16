@@ -430,7 +430,7 @@ function portalAppear(cps) {
   for (let i = 0; i < cps.length; i++) {
     if (cps[i].type !== 'DISAPPEAR') continue;
     let j = i + 1;
-    while (j < cps.length && cps[j].type === 'WAIT') j++;
+    while (j < cps.length && cps[j].type === 'WAIT') j++; // loop-cap: checkpoint index
     if (cps[j] && cps[j].type === 'MOVE') cps.splice(j, 0, { type: 'APPEAR', pos: cps[j].pos.slice(), time: 0 });
   }
 }

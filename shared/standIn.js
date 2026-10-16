@@ -101,6 +101,7 @@ export function composeUnitRecord(identity, unit, form, { skillIndex, moduleId =
     out.talentsBase = stripPotential(form.talents);
     out.modules = (mods || []).map((m) => ({ ...stripPotential(m), isDefault: m.uniEquipId === moduleId }));
   }
+  for (const k of ['kitRef', 'skillSpec', 'talentMods', 'dsl', 'pluginId']) if (Object.hasOwn(form, k) || Object.hasOwn(unit, k)) out[k] = form[k] ?? unit[k];
   if (standInFor) out.standInFor = standInFor;
   return out;
 }

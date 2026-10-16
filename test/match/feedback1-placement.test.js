@@ -181,7 +181,7 @@ test('#9 re-orienting the tactician: a summon still inside the new range stays, 
   m.dispose();
 });
 
-test('#9 hand and temp full: a re-orientation that would push 狼群 out is refused (HAND_FULL); a move drops it until the next round', () => {
+test('#9 full visible bench: a re-orientation is refused (HAND_FULL); moving the owner queues its wolf stack', () => {
   const { h, m, ps } = prep();
   const vigil = give(m, ps, VIGIL);
   assert.deepEqual(move(m, vigil.uid, board(10, 4), 'RIGHT'), { ok: true });
@@ -208,7 +208,9 @@ test('#9 hand and temp full: a re-orientation that would push 狼群 out is refu
   // range (rows 8–10, cols 9–12) leaves the wolf out: it leaves the board — no illegal placement reaches the battle
   assert.deepEqual(move(m, vigil.uid, board(9, 9), 'RIGHT'), { ok: true });
   assert.equal(ps.board.get('11,5'), undefined, 'outside her range with nowhere to go: removed');
-  assert.ok(toasts.some((t) => t.includes('狼群') && t.includes('下回合返还')), toasts.join(' / '));
+  assert.ok(!toasts.some((t) => t.includes('狼群') && t.includes('下回合返还')), toasts.join(' / '));
+  assert.equal(stackOf(ps, WOLF), wolf, 'the original stack is retained in overflow');
+  assert.equal(ps.temp.length, 6);
   assert.equal(ps.battleInput().units.filter((u) => u.kind === 'token').length, 0);
   checkInvariants(m);
   // …and its stack comes back at the next round start (grantTokensFor, "干员所属召唤物会于下一回合返还")

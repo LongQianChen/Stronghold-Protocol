@@ -35,9 +35,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { Grid, DEPLOY_REFUSED_TILES } from '../server/sim/grid.js';
+import { DEPLOY_REFUSED_TILES } from '../server/sim/grid.js';
+import { validateReferences } from '../shared/plugins/validate.js';
+import { computeGroundPaths } from '../server/sim/groundPaths.js';
 import { bandBondIds } from '../shared/bandBonds.js';
-import { statusKey, composeUnitRecord, standInRecord, unitForm } from '../shared/standIn.js';
+import { statusKey, composeUnitRecord } from '../shared/standIn.js';
 import { extendedGrid } from '../shared/loadoutRecord.js';
 import { FULL_RANK, atRank, stripPotential } from '../shared/potential.js';
 
@@ -2730,23 +2732,6 @@ function tileGlyph(t) {
   }
 }
 
-/**
- * Official ground route (research 08 §3.4, the same code the sim runs: server/sim/grid.js flow field — 4-direction
- * SPFA from the goal, crates cost 1000, Bresenham line-of-sight smoothing) as the tiles an enemy crosses, start and goal
- * included. The whole 19×21 map is walkable like in the client.
- * @param {object} stage { rows, legend }
- * @param {Array<{pos:number[], role:string}>} devices active devices to apply (crates = cost 1000, platforms/mounds = blocked)
- */
-function officialPath(stage, devices, start, end) {
-  const g = new Grid(stage, { r0: 0, r1: 18, c0: 0, c1: 20 });
-  for (const d of devices) {
-    if (!d.pos) continue;
-    if (d.role === 'crate') g.setObstacle(d.pos[0], d.pos[1], true, 'crate');
-    else g.setObstacle(d.pos[0], d.pos[1], true);
-  }
-  return g.findPath(start[0], start[1], end[0], end[1]);
-}
-
 /** Gameplay role of known stage devices. */
 const DEVICE_ROLES = {
   trap_1105_accrate: 'crate', trap_1106_achplat: 'platform', trap_032_mound: 'mound', trap_013_blower: 'blower',
@@ -2934,22 +2919,7 @@ function buildStages(ctx, modesById) {
     };
 
     // Helper ground routes (the official flow field + smoothing, as crossed tiles), without / with the active devices.
-    const gridStage = { rows, legend: glyphTiles };
-    const pairs = [
-      [[9, 10], [9, 2]], [[12, 10], [9, 2]], [[9, 18], [9, 2]], [[12, 18], [9, 2]],
-      [[2, 10], [2, 2]], [[5, 10], [2, 2]], [[2, 10], [1, 3]], [[5, 10], [1, 3]],
-      [[2, 10], [2, 18]], [[5, 10], [2, 18]], [[2, 10], [1, 17]], [[5, 10], [1, 17]],
-    ];
-    const groundPaths = {}, groundPathsWithDevices = {};
-    for (const [a, b] of pairs) {
-      const k = `${a.join(',')}->${b.join(',')}`;
-      const passable = (p) => tileAt(p[0], p[1])?.passableMask === 'ALL';
-      if (!passable(a) || !passable(b)) continue;
-      const p1 = officialPath(gridStage, [], a, b);
-      if (p1) groundPaths[k] = p1;
-      const p2 = officialPath(gridStage, activeBlocking, a, b);
-      if (p2) groundPathsWithDevices[k] = p2;
-    }
+    const { groundPaths, groundPathsWithDevices } = computeGroundPaths({ rows, tiles: glyphTiles, devices });
     const modes = [...(sd?.mode || [])];
     const o = lv.options || {};
     out[stageId] = {
@@ -3491,10 +3461,16 @@ function buildChoices(ctx, effects, items, chess) {
       pool_equip_normal: { kind: 'equip', rule: 'shopEligible', maxTier: 'shopLevel', assumed: true },
       pool_equip_shop_1: { kind: 'equip', rule: 'shopEligible', tiers: [1], assumed: true },
       // 凯瑟琳 定向投放 (up_shop_add_special_goods): every shop-eligible item, whatever the shop level — players' first-hand
-      // report (community, 2026-10-06): 「原版凯瑟琳1升2都能有6本装备」; the pool itself is server-side, uniform [ASSUMED]
-      // (until 0.2.0 it was capped at the shop level, so the 1 → 2 offer only ever showed tiers I–II)
-      pool_equip_kathe: { kind: 'equip', rule: 'shopEligible', assumed: true },
-      pool_equip_narant: { kind: 'equip', rule: 'shopEligible', maxTier: 'shopLevel', assumed: true },
+      // report (community, 2026-10-06): 「原版凯瑟琳1升2都能有6本装备」 — plus 突变细胞, which the shop never sells
+      // (maintainer, 2026-10-14: the official offer can roll it at any 调度中心 level, #631). The pool is server-side
+      // and the official table names it but not its weights, so the draw stays uniform [ASSUMED]. `also` is appended
+      // by Match.rollItemId; the shop item slot does not read it. Until 0.2.0 the pool was capped at the shop level.
+      pool_equip_kathe: { kind: 'equip', rule: 'shopEligible', also: [itemByName('突变细胞')], assumed: true },
+      // 娜仁图亚 见者有份 (preparation_start_add_special_goods_every_n_round): the blackboard names no tier cap. Players'
+      // first-hand report (community, 2026-10-14): the two equips can be above the current shop level. Same shape as
+      // 凯瑟琳 — every shop-eligible item, uniform [ASSUMED] (until 0.3.0 it was capped at the shop level, so an even
+      // round at level 1–2 never showed tier III+)
+      pool_equip_narant: { kind: 'equip', rule: 'shopEligible', assumed: true },
       // "获得一件带有随机特殊效果的维式重锤": the 4 hammers with a special effect (never sold, SHOP_EXCLUDED_ITEMS); the
       // weights are server-side (PRTS 11-25 note: "装备【灼燃维式重锤】的出现概率调整") — uniform [ASSUMED]
       pool_equip_vict: { kind: 'equip', items: ['灼燃维式重锤', '坚固维式重锤', '加速维式重锤', '战栗维式重锤'].map(itemByName), assumed: true },
@@ -3702,6 +3678,8 @@ function buildConfig(ctx, waves, stages, bands, chess, items) {
       formula: 'one pool for every boss field ("所有人将一起对敌方领袖造成伤害"; the mirrored copies of a pair field share it, "两侧的敌方领袖共享生命值（敌方领袖的总生命值不变）") = bloodPoint[difficulty] × share. perPlayer true (the owner\'s decision of 2026-10-06, PR #209): co-op share = coop × the players alive when the fight starts (bots and AI 托管 seats count, eliminated and departed seats do not), at most aliveFull; solo share = solo (1). perPlayer false (the fixed pool of 0.1.x, 「保持固定血量」): co-op share = coop whatever the count (× alive / aliveFull with aliveScaling, the alive / 4 proportion [ASSUMED]: 巴哈姆特 12294); solo was 0.25 [ASSUMED]',
       perPlayer: true, coop: 1, solo: 1, aliveFull: 4, aliveScaling: false, aliveAssumed: true, unaffectedByEnemyScale: true,
     },
+    // minTeamLpExclusive 1 = LP > 1 (at least 2 left): PRTS's user-contributed text, which the community's measurement
+    // (Bilibili 路标月报#2, cited on GitHub #645) matches — kept by the owner on 2026-10-15
     hiddenCore: { single: 350, multi: 1200, minTeamLpExclusive: 1, difficulties: ['NORMAL', 'HARD', 'ABYSS'], checkedAfterRound: 14 },
     dp: { init: 10, perSec: 1, max: 99 },
     unite: { maxHelpers: 2, helperOrder: 'unitsOnField>activeBond>undownedUnits; pair: unitsOnField>activeBond>activeLayers>undownedUnits, first = right field (PRTS 帮助)', layerGainsEnabled: false, keepsHpSpPositions: true, leakedEnemyFullHp: true,
@@ -3859,48 +3837,14 @@ function attachPotential(passes) {
 
 // ===== validation ===============================================================================
 
-/** Recursively find non-finite numbers (NaN/Infinity would silently become null in JSON). */
-function findNonFinite(obj, path, out) {
-  if (typeof obj === 'number') { if (!Number.isFinite(obj)) out.push(path); return; }
-  if (!obj || typeof obj !== 'object') return;
-  if (Array.isArray(obj)) { obj.forEach((v, i) => findNonFinite(v, `${path}[${i}]`, out)); return; }
-  for (const [k, v] of Object.entries(obj)) findNonFinite(v, `${path}.${k}`, out);
-}
-
-/**
- * Cross-file referential integrity checks. Returns a list of error strings (empty = OK).
- * The same invariants are asserted by test/data.test.js.
- */
 function validateAll(f) {
-  const errors = [];
-  const err = (m) => errors.push(m);
-  const { config, chess, bonds, garrisons, items, bands, effects, choices, enemies, factions, waves, stages, bosses, tokens, backups } = f;
-  for (const [name, obj] of Object.entries(f)) {
-    const bad = [];
-    findNonFinite(obj, name, bad);
-    bad.slice(0, 5).forEach((p) => err(`non-finite number at ${p}`));
-  }
+  const errors = validateReferences(f);
+  const err = m => errors.push(m);
+  const { chess, bonds, bands, items, tokens, backups, stages } = f;
   const visible = Object.values(chess).filter((c) => !c.isGolden && c.visible);
   if (Object.keys(bonds).length !== 23) err(`expected 23 bonds, got ${Object.keys(bonds).length}`);
   if (Object.keys(bands).length !== 40) err(`expected 40 bands, got ${Object.keys(bands).length}`);
   if (visible.length !== 112) err(`expected 112 visible non-DIY chess, got ${visible.length}`);
-  for (const c of Object.values(chess)) {
-    if (!chess[c.baseId]) err(`chess ${c.chessId}: baseId missing`);
-    if (c.goldenId && !chess[c.goldenId]) err(`chess ${c.chessId}: goldenId missing`);
-    for (const b of c.bonds) if (!bonds[b]) err(`chess ${c.chessId}: bond ${b} missing`);
-    for (const g of c.garrisonIds) if (!garrisons[g]) err(`chess ${c.chessId}: garrison ${g} missing`);
-    for (const t of c.tokens) if (!tokens[t]) err(`chess ${c.chessId}: token ${t} missing`);
-    for (const t of c.talents || []) if (t.tokenKey && !c.tokens.includes(t.tokenKey)) err(`chess ${c.chessId}: talent token ${t.tokenKey} not in tokens`);
-    if (c.isDiy) continue;
-    if (!c.stats) err(`chess ${c.chessId}: no stats`);
-    if (!c.skill) err(`chess ${c.chessId}: no resolvable skill`);
-    if (!Array.isArray(c.rangeGrid)) err(`chess ${c.chessId}: no range grid`);
-    // DESIGN §16 loadout choices
-    if (!Array.isArray(c.skills) || c.skills.filter((s) => s.isDefault).length !== 1 || c.skills.find((s) => s.isDefault)?.skillId !== c.skill?.skillId) err(`chess ${c.chessId}: skills[] without exactly one default = skill`);
-    if (c.modules && (c.modules.filter((m) => m.isDefault).length !== (c.module?.active ? 1 : 0) || !c.statsBase || !c.traitBase || !c.talentsBase)) err(`chess ${c.chessId}: inconsistent module choices`);
-    // 高台 legality is read from the trait text at place time (shared/highGround.js), never a field on the record
-    if (c.placement !== undefined) err(`chess ${c.chessId}: placement is not a data field`);
-  }
   // the deliberate trigger deviations (DESIGN §21.29, §22.10) still override an official TAKE_DAMAGE row, on the normal
   // chess and its elite alike (a DEFAULT one may resolve to the owner's ACTIVE_RANGE on top: 深巡 S2)
   const deviationHolds = (rule, trig) => trig.rawRule === 'TAKE_DAMAGE' && (trig.rule === rule || (ACTIVE_RANGE_OVER.has(rule) && trig.rule === 'ACTIVE_RANGE'));
@@ -3927,52 +3871,7 @@ function validateAll(f) {
       }
     }
   }
-  // 补位 / 自选 (data/backups.json, DATA.md §18): a PRESET chess is its own backup; every NORMAL chess (both forms)
-  // composes into its stand-in (shared/standIn.js standInRecord) with the chess's skill and module; every DIY slot is a
-  // DIY chess and every prototype pick of its tier has a form for both slot statuses; derived bonds exist
   if (backups) {
-    for (const c of Object.values(chess)) {
-      const b = c.backup;
-      if (c.chessType === 'PRESET' && b?.charId !== c.charId) err(`chess ${c.chessId}: a PRESET chess's backup must be itself`);
-      if (c.chessType === 'DIY' && b?.charId !== null) err(`chess ${c.chessId}: a DIY slot has no backup`);
-      if (c.chessType !== 'NORMAL') continue;
-      const r = standInRecord(c, backups);
-      if (!r) { err(`chess ${c.chessId}: no stand-in ${b?.charId}@${statusKey(c.status)} in backups.json`); continue; }
-      if (!r.stats || !Array.isArray(r.rangeGrid) || !r.trait) err(`chess ${c.chessId}: stand-in ${b.charId} without stats / range / trait`);
-      if (r.skill?.index !== b.skillIndex || r.skills.filter((s) => s.isDefault).length !== 1) err(`chess ${c.chessId}: stand-in skill ${b.skillIndex} is not unlocked at ${statusKey(c.status)}`);
-      if (b.uniEquipId && c.status.equipLevel > 0 && !r.module?.active) err(`chess ${c.chessId}: stand-in module ${b.uniEquipId} has no level ${c.status.equipLevel}`);
-      if (r.tokens.length) err(`chess ${c.chessId}: stand-in ${b.charId} summons ${r.tokens.join(', ')} (no tokens.json variant)`);
-    }
-    for (const [id, s] of Object.entries(backups.diy.slots)) {
-      const slot = chess[id], golden = chess[s.goldenId];
-      if (!slot?.isDiy || slot.isGolden || slot.tier !== s.tier || !golden?.isDiy) { err(`DIY slot ${id}: not a DIY chess pair of tier ${s.tier}`); continue; }
-      if (!backups.diy.prototypes[s.tier]?.length) err(`DIY slot ${id}: no prototype picks`);
-      for (const p of backups.diy.prototypes[s.tier] || []) {
-        for (const rec of [slot, golden]) if (!unitForm(backups, p, rec.status)) err(`DIY slot ${rec.chessId}: prototype ${p} has no form ${statusKey(rec.status)}`);
-        // the locked selection exists at both slot forms (the module at the elite's stage)
-        const lk = backups.diy.locked?.[s.tier]?.[p];
-        if (!lk) { err(`DIY slot ${id}: prototype ${p} has no locked selection`); continue; }
-        for (const rec of [slot, golden]) {
-          const f = unitForm(backups, p, rec.status);
-          if (f && !f.skills.some((x) => x.index === lk.skillIndex)) err(`DIY slot ${rec.chessId}: prototype ${p} has no skill ${lk.skillIndex} at ${statusKey(rec.status)}`);
-          if (f && lk.uniEquipId && rec.status.equipLevel > 0 && !f.modules.some((m) => m.uniEquipId === lk.uniEquipId)) err(`DIY slot ${rec.chessId}: prototype ${p} has no module ${lk.uniEquipId} at ${statusKey(rec.status)}`);
-        }
-      }
-      // every owned pick: a form at both slot statuses with every skill, and at the elite every module of the character
-      for (const p of backups.diy.ownedPool) {
-        const u = backups.units[p];
-        for (const rec of [slot, golden]) {
-          const f = unitForm(backups, p, rec.status);
-          if (!f) { err(`DIY slot ${rec.chessId}: owned pick ${p} has no form ${statusKey(rec.status)}`); continue; }
-          if (f.skills.length !== 3) err(`DIY slot ${rec.chessId}: owned pick ${p} has ${f.skills.length} skills at ${statusKey(rec.status)}`);
-          const ids = Object.keys(u.moduleNames).filter((m) => u.moduleNames[m].typeName !== 'ORIGINAL');
-          if (rec.status.equipLevel > 0 && JSON.stringify(f.modules.map((m) => m.uniEquipId)) !== JSON.stringify(ids)) err(`DIY slot ${rec.chessId}: owned pick ${p} modules ${f.modules.map((m) => m.uniEquipId)} ≠ ${ids}`);
-          for (const t of f.tokens) if (!backups.tokens?.[t]?.variants?.[`${p}@${statusKey(rec.status)}`]) err(`DIY pick ${p}@${statusKey(rec.status)}: summon ${t} has no variant in backups.json tokens`);
-        }
-      }
-    }
-    for (const [id, o] of Object.entries(backups.diy.operators)) for (const b of o.bonds) if (!bonds[b]) err(`DIY pick ${id}: bond ${b} missing`);
-    for (const id of Object.keys(backups.tokens || {})) if (tokens[id]) err(`backups.json token ${id} is also a tokens.json record`);
     // the 重装 stand-ins' deviations (STANDIN_TRIGGER_DEVIATIONS) still override an official TAKE_DAMAGE row, on every form
     for (const [charId, skillsOf] of Object.entries(STANDIN_TRIGGER_DEVIATIONS)) {
       const forms = Object.values(backups.units[charId]?.forms || {});
@@ -3986,58 +3885,6 @@ function validateAll(f) {
       }
     }
   }
-  for (const b of Object.values(bonds)) {
-    for (const m of b.members) if (!chess[m]) err(`bond ${b.bondId}: member ${m} missing`);
-    if (!b.thresholds.length) err(`bond ${b.bondId}: no thresholds`);
-    if (!effects[b.effectId]) err(`bond ${b.bondId}: effect ${b.effectId} missing`);
-  }
-  for (const it of Object.values(items)) {
-    if (!effects[it.effectId]) err(`item ${it.id}: effect missing`);
-    if (it.goldenId && !items[it.goldenId]) err(`item ${it.id}: golden missing`);
-    if (it.giveBondId && !bonds[it.giveBondId]) err(`item ${it.id}: giveBond ${it.giveBondId} missing`);
-    if (it.requiresBondId && !bonds[it.requiresBondId]) err(`item ${it.id}: requiresBond ${it.requiresBondId} missing`);
-  }
-  for (const b of Object.values(bands)) if (!effects[b.effectId]) err(`band ${b.bandId}: effect missing`);
-  for (const b of Object.values(bands)) for (const id of b.bondIds || []) if (!bonds[id]) err(`band ${b.bandId}: bond ${id} missing`);
-  for (const w of Object.values(waves)) {
-    for (const sp of w.spawns) {
-      if (sp.action) continue;
-      if (!enemies[sp.key]) err(`wave ${w.id}: enemy ${sp.key} missing`);
-      if (!w.routes[sp.routeIndex]) err(`wave ${w.id}: route ${sp.routeIndex} missing`);
-    }
-    for (const [bn, phases] of Object.entries(w.branches)) for (const sp of phases.flat()) {
-      if (sp.action) continue;
-      if (!enemies[sp.key]) err(`wave ${w.id} branch ${bn}: enemy ${sp.key} missing`);
-      if (!w.extraRoutes[sp.routeIndex]) err(`wave ${w.id} branch ${bn}: extraRoute ${sp.routeIndex} missing`);
-    }
-    for (const k of Object.keys(w.overrides)) if (!enemies[k]) err(`wave ${w.id}: override for unknown enemy ${k}`);
-  }
-  for (const s of Object.values(stages)) {
-    if (s.rows.length !== 19 || s.rows.some((r) => r.length !== 21)) err(`stage ${s.id}: not 19x21`);
-    if (s.rows.some((r) => r.includes('?'))) err(`stage ${s.id}: unknown tile glyph`);
-    if (s.name !== s.id && /[A-Za-z]/.test(s.name)) err(`stage ${s.id}: Latin text in player-facing name "${s.name}"`);
-  }
-  // the escaped level of 1 / 2 helpers (config.unite.templates) has its map record (kind 'unite'; no field uses it)
-  for (const [n, id] of Object.entries(config.unite.templates)) {
-    if (stages[id]?.kind !== 'unite' || stages[id].helpers !== Number(n) || stages[id].active) err(`unite template ${id}: no inactive 联防 stage for ${n} helper(s)`);
-  }
-  for (const m of Object.values(config.modes)) {
-    for (const [r, rd] of Object.entries(m.rounds)) {
-      const tpls = rd.template ? [rd.template] : Object.values(rd.bossTemplates || {});
-      if (!tpls.length) err(`mode ${m.modeId} round ${r}: no template`);
-      for (const t of tpls) if (!waves[t]) err(`mode ${m.modeId} round ${r}: template ${t} missing`);
-    }
-    for (const s of m.stages) if (!stages[s]) err(`mode ${m.modeId}: stage ${s} missing`);
-    for (const b of [...m.activeBondIds, ...m.inactiveBondIds]) if (!bonds[b]) err(`mode ${m.modeId}: bond ${b} missing`);
-  }
-  for (const b of Object.values(bosses)) if (!enemies[b.enemyKey]) err(`boss ${b.bossId}: enemy missing`);
-  for (const e of Object.values(factions.entries)) {
-    for (const k of [e.key, ...e.N.map((x) => x.key), ...e.E.map((x) => x.key)]) if (!enemies[k]) err(`faction ${e.key}: enemy ${k} missing`);
-  }
-  for (const card of choices.cards.bounty) for (const a of card.adds) if (a.enemyKey && !enemies[a.enemyKey]) err(`bounty ${card.effectId}: enemy ${a.enemyKey} missing`);
-  for (const [pid, p] of Object.entries(choices.pools)) {
-    for (const id of [...(p.items || []), ...(p.weighted || []).map((x) => x[0])]) if (!id || !(items[id] || chess[id])) err(`pool ${pid}: unresolved entry ${id}`);
-  }
   for (const id of Object.keys(SHOP_EXCLUDED_ITEMS)) if (!items[id] || items[id].itemType !== 'EQUIP' || items[id].isGolden) err(`SHOP_EXCLUDED_ITEMS: ${id} is not a normal EQUIP item`);
   for (const [id, fl] of Object.entries(TOKEN_ABNORMAL)) {
     if (!tokens[id]) err(`TOKEN_ABNORMAL: ${id} is not a token`);
@@ -4048,16 +3895,8 @@ function validateAll(f) {
     if (!t || t.kind !== 'summon') err(`TOKEN_POSITION_CORRECTIONS: ${id} is not a summon`);
     else if (t.position !== pos || !['MELEE', 'RANGED', 'ALL'].includes(pos)) err(`TOKEN_POSITION_CORRECTIONS: ${id}: position ${t.position}`);
   }
-  for (const t of Object.values(tokens)) {
-    if (!t.stats) err(`token ${t.tokenId}: no stats`);
-    for (const [o, v] of Object.entries(t.variants || {})) if (!Array.isArray(v.sources) || !v.sources.length) err(`token ${t.tokenId}@${o}: no sources`);
-  }
-  for (const e of Object.values(enemies)) {
-    const s = e.stats;
-    // DESIGN §5.5 contract: rangeRadius > 0 ⇔ attacks units it is not blocked by (never for MELEE).
-    if (!(s.rangeRadius >= 0) || (e.applyWay === 'MELEE' && s.rangeRadius !== 0)) err(`enemy ${e.key}: rangeRadius ${s.rangeRadius} (${e.applyWay})`);
-    // bat 0 would mean "attack every tick"; aspd 0 is official only for a few skill-driven leaders.
-    if (!(s.maxHp > 0) || !(s.bat > 0) || !(s.aspd >= 0) || !(s.moveSpeed >= 0) || !(s.lpr >= 0)) err(`enemy ${e.key}: bad core stats ${JSON.stringify({ maxHp: s.maxHp, bat: s.bat, aspd: s.aspd, moveSpeed: s.moveSpeed, lpr: s.lpr })}`);
+  for (const s of Object.values(stages)) {
+    if (s.name !== s.id && /[A-Za-z]/.test(s.name)) err(`stage ${s.id}: Latin text in player-facing name "${s.name}"`);
   }
   return errors;
 }

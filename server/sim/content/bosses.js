@@ -67,13 +67,14 @@
 // fx kinds: 'beam' 'shell' 'explode' 'telegraph' 'charge' 'link' 'dash' 'column' 'tide' 'rockfall' 'tentacle' 'equip'
 //   'sword' 'vest' 'blink' 'summon' 'grow' 'phase' 'lpLoss' (x, y + extra {id, r, tiles, kind, tx, ty …}).
 
-import { MOVE_SCALE } from '../constants.js';
+import { MOVE_SCALE, MAX_ALIVE_ENEMIES } from '../constants.js';
 import { aggroCmp, areaSelectable } from '../targeting.js';
 import { compileRoute } from '../ai.js';
 import { normalizeRoute } from '../simdata.js';
 import {
   ensureInstalled, abOf, attach, T, elem, hurt, targetsNear, allTargets, byPriority, areaAllies, areaAlliesInTiles, fieldAllies,
   remainingRoute, stayRoute, stepToward, setHits, hitCount, lpLoss, blinkForward, canCast, unbalancedNow, absorbArts, nthOf,
+  castSlot,
 } from './enemies.js';
 import { hypot, powi } from '../detmath.js';
 
@@ -220,8 +221,8 @@ function branchRoute(tpl, name) {
   return (s && tpl.extraRoutes && tpl.extraRoutes[s.routeIndex]) || null;
 }
 
-/** Spawn one phase of a template branch. Returns the spawned enemies. */
-function branchSpawn(b, tpl, name, phaseIdx, { fallback = null, mods = null, at = null } = {}) {
+/** Spawn one phase of a template branch. Returns the spawned enemies. The loop stops at MAX_ALIVE_ENEMIES and does not allocate a refusal per extra count. */
+export function branchSpawn(b, tpl, name, phaseIdx, { fallback = null, mods = null, at = null } = {}) {
   const br = tpl && tpl.branches && tpl.branches[name];
   if (!Array.isArray(br) || !br.length) return fallback ? fallback() : [];
   const phase = br[Math.max(0, Math.min(phaseIdx, br.length - 1))] || [];
@@ -232,9 +233,14 @@ function branchSpawn(b, tpl, name, phaseIdx, { fallback = null, mods = null, at 
     const key = (s.slot && b.opts && b.opts.slotKeys && b.opts.slotKeys[s.slot]) || s.key || s.enemyKey;
     if (!key || !String(key).startsWith('enemy_')) continue;
     const route = tpl.extraRoutes && tpl.extraRoutes[s.routeIndex];
-    for (let i = 0; i < Math.max(1, s.count ?? 1); i++) {
+    const raw = s.count ?? 1;
+    const want = typeof raw === 'number' && Number.isFinite(raw) ? Math.max(1, raw) : 1;
+    const cap = Math.min(MAX_ALIVE_ENEMIES, want);
+    for (let i = 0; i < cap; i++) {
+      if (b.enemies.length >= MAX_ALIVE_ENEMIES && b.aliveEnemies().length >= MAX_ALIVE_ENEMIES) break;
       const u = b.spawnEnemy(key, { route: route || (at ? toGoal(b, at.x, at.y) : undefined), pos: route ? undefined : at ? [at.y, at.x] : undefined, tag: s.tag ?? null, countInTotal: s.unharmful ? false : undefined, mods });
-      if (u) out.push(u);
+      if (!u) break;
+      out.push(u);
     }
   }
   return out;
@@ -397,7 +403,7 @@ function kitHelm(ab, e, b, tpl) {
       },
     },
     s1 && {
-      cd: s1.cd, icd: s1.icd, cond: (b2) => shellTargets(b2).length > 0,
+      cd: s1.cd, icd: s1.icd, sk: s1, cond: (b2) => shellTargets(b2).length > 0,
       // 【灭顶之灾】 one shell, also below 20 %: the handbook's "额外发射<刺胄之弹>" is wrong in game (PRTS 能力修正 原因 6
       // "描述与游戏实际表现不符合": "【灭顶之灾】不会额外发射") and no blackboard holds a second shell (skill 1 has none)
       fire(b2, e2) {
@@ -406,7 +412,7 @@ function kitHelm(ab, e, b, tpl) {
       },
     },
     s2 && {
-      cd: s2.cd, icd: s2.icd,
+      cd: s2.cd, icd: s2.icd, sk: s2,
       // 【死亡集群】: a drone on the branch route; when it dies (PRTS 能力修正 "该无人机单位死亡时", whoever kills it) the leader
       // loses hp_ratio × max HP. Drone HP: `summon.hp_ratio` (隐秘核心 only) scales it [ASSUMED: the summon's max HP]; the
       // `max_hp` 0.5 both copies carry is not read [ASSUMED] — no source says what it does (PRTS 技能 lists the 2 % only,
@@ -547,7 +553,7 @@ function kitBlade(ab, e, b, tpl) {
       },
     },
     s && {
-      cd: s.cd, icd: s.icd, cond: (b2) => P.state === 'hover' && opsOnly(allTargets(b2, e)).length > 0, // 存在至少1名可选我方干员
+      cd: s.cd, icd: s.icd, sk: s, cond: (b2) => P.state === 'hover' && opsOnly(allTargets(b2, e)).length > 0, // 存在至少1名可选我方干员
       fire(b2, e2) { // 【掷剑】/【掷锤】 → 出击模式
         const t = opsOnly(b2.allies()).sort((p, q) => p.s.atk - q.s.atk || aggroCmp(p, q))[0];
         if (!t) return;
@@ -608,7 +614,7 @@ function kitGun(ab, e, b) {
       },
     },
     s1 && {
-      cd: s1.cd, icd: s1.icd, cond: (b2) => groundTargets(b2).length > 0 && !P.charge,
+      cd: s1.cd, icd: s1.icd, sk: s1, cond: (b2) => groundTargets(b2).length > 0 && !P.charge,
       fire(b2, e2) { // 【最终之罚】 charge at the highest-DEF ground unit
         const t = groundTargets(b2).sort((p, q) => q.s.def - p.s.def || aggroCmp(p, q))[0];
         if (!t) return;
@@ -641,7 +647,7 @@ function kitGun(ab, e, b) {
       },
     });
     if (s2) list.push({
-      cd: s2.cd, icd: s2.icd, cond: (b2) => b2.enemies.some((o) => o.alive && isSpring(o)),
+      cd: s2.cd, icd: s2.icd, sk: s2, cond: (b2) => b2.enemies.some((o) => o.alive && isSpring(o)),
       fire(b2, e2) { // 【末日布道】 springs chase 铳 for the whole 5 s gain, invulnerable, trampling operators (kitSpring)
         // PRTS “碎铳之簧” 追逐模式 "不进行普通攻击": `disarm` for the dash (until 0.1.3 it kept shooting while it ran).
         // Each gun casts on its own data timer, and a cast takes every spring — on a pair field the later of the two
@@ -729,6 +735,8 @@ function kitSpring(ab, e) {
     // while shielded, every (spCost+1)-th attack (enemy SP +1 per attack, as 粉碎攻坚手's official text) adds the shield's
     // special attack on that attack's target
     (kind === 'element' || kind === 'hits') && sk && {
+      // the shielded (spCost+1)-th attack is the skill's: its slot for the client (castSlot, display only)
+      before(c, b, e2, a) { if (P.up && ((a.n ?? 0) + 1) % nthOf(sk) === 0) castSlot(b, e2, sk); },
       attack(c, b, e2, a) {
         if (!P.up) return;
         a.n = (a.n ?? 0) + 1;
@@ -805,7 +813,7 @@ function kitEcho(ab, e) {
       taken(c, b, e2) { const s = c.source || c.credit; if (s && s.side === 'ally') echoHit(b, e2); }, // 受到伤害时以自身为中心造成一次范围伤害 (a 无来源 burst too)
     },
     s && {
-      cd: s.cd, icd: s.icd,
+      cd: s.cd, icd: s.icd, sk: s,
       fire(b, e2) { // 合奏
         const gold = e2.mem.ab.form === 'gold';
         const r = gold ? ECHO_ENSEMBLE_RADIUS.gold : ECHO_ENSEMBLE_RADIUS.dark;
@@ -854,7 +862,7 @@ function kitPipe(ab, e, b, tpl) {
       death(c, b2) { for (const o of b2.aliveEnemies()) if (o.defId === 'enemy_9022_acdumm') b2.kill(o, null); }, // 弦 leaves with 管
     },
     s && {
-      cd: s.cd, icd: s.icd, cond: (b2) => echoesOf(b2, 'dark').length > 0,
+      cd: s.cd, icd: s.icd, sk: s, cond: (b2) => echoesOf(b2, 'dark').length > 0,
       fire(b2, e2) { // 【裂管之奏】 three strikes on every dark echo
         const r = s.bb.range_radius ?? 0, ep = s.bb.ep_damage_ratio ?? 0;
         for (const echo of echoesOf(b2, 'dark')) for (let k = 0; k < 3; k++) b2.after(k * PIPE_STRIKE_GAP, () => {
@@ -874,7 +882,7 @@ function kitString(ab, e, b, tpl) {
     pipeCore(ab, e, b, tpl, { form: 'gold', prefix: 'acdumm' }),
     { spawn(b2, e2) { b2.addBuff(e2, { key: 'boss:eternal', persist: true, flags: { invulnerable: true, untargetable: true } }); } }, // 永久无敌
     s && {
-      cd: s.cd, icd: s.icd, cond: (b2) => echoesOf(b2, 'gold').length > 0,
+      cd: s.cd, icd: s.icd, sk: s, cond: (b2) => echoesOf(b2, 'gold').length > 0,
       fire(b2, e2) { // 【断弦之奏】 AoE on every gold echo, which then turns dark
         const r = s.bb.range_radius ?? 0, ep = s.bb.ep_damage_ratio ?? 0;
         for (const echo of echoesOf(b2, 'gold')) {
@@ -899,7 +907,7 @@ function kitQuintus(ab, e, b, tpl) {
     const s = ab.sk[name];
     if (!s) return null;
     const kind = name.replace(/G\d$/, '');
-    const a = { cd: s.cd, icd: s.icd, stage, cond: () => P.stage === stage, fire: (b2, e2) => QUINTUS[kind](b2, e2, s, P, tpl) };
+    const a = { cd: s.cd, icd: s.icd, sk: s, stage, cond: () => P.stage === stage, fire: (b2, e2) => QUINTUS[kind](b2, e2, s, P, tpl) };
     skills.push(a);
     return a;
   };
@@ -983,7 +991,7 @@ function lucienCore(ab, e) {
       // cast with a target in the radius (PRTS 技能 "需要目标"; 不祥幻影 "仅在半径2范围内存在我方单位时触发"): the trigger
       // selection (targetsNear — PRTS 选择器 "所有触发选择器通常不无视迷彩"): an airborne (起飞) operator evades a ground
       // leader (对地规避 — counting her spent the skill on nobody, §21.22), nor does an unblocking 隐匿 or 迷彩 one count
-      cd: s.cd, icd: s.icd, cond: (b) => targetsNear(b, e, LUCIEN_AOE_RADIUS).length > 0,
+      cd: s.cd, icd: s.icd, sk: s, cond: (b) => targetsNear(b, e, LUCIEN_AOE_RADIUS).length > 0,
       fire(b, e2) {
         // "该技能伤害无视迷彩": an area selection (areaAllies) — a 迷彩 operator is hit, an unblocking 隐匿 one not
         b.fx('explode', { x: e2.x, y: e2.y, r: LUCIEN_AOE_RADIUS, kind: 'crimsonAoe' });
@@ -996,7 +1004,7 @@ function lucienCore(ab, e) {
 function kitLucien(ab, e) {
   const s = ab.sk.blink;
   return [...lucienCore(ab, e), s && {
-    cd: s.cd, icd: s.icd, cond: () => !!e.blockedBy,
+    cd: s.cd, icd: s.icd, sk: s, cond: () => !!e.blockedBy,
     fire(b, e2) { // blink past the blocker, leaving a 不祥幻影 on its path
       const route = remainingRoute(e2);
       const from = blinkForward(b, e2, s.bb.dist ?? 1.5);
@@ -1023,6 +1031,7 @@ function kitLion(ab, e, b) {
     const sk = P.adv && eqA ? eqA : eq;
     const t = b2.rng.pick(targetsNear(b2, e2, range()));
     if (!t) return false;
+    castSlot(b2, e2, sk);   // 【王权号令】: equip / equipA (display only)
     const r0 = t.tileR, c0 = t.tileC;
     const tiles = [[r0, c0], [r0 + 1, c0], [r0 - 1, c0], [r0, c0 + 1], [r0, c0 - 1]];
     b2.fx('telegraph', { x: c0, y: r0, r: 1, kind: 'royalDecree', tiles: 'plus', id: e2.id });
@@ -1041,6 +1050,7 @@ function kitLion(ab, e, b) {
   const animate = (b2, e2) => { // 【莫非王土】 the latest equipment (2 at ≤50 %)
     const n = P.adv && stA ? stA.bb.max_target ?? 2 : 1;
     const sk = P.adv && stA ? stA : st;
+    castSlot(b2, e2, sk);   // store / storeA (display only)
     for (const q of equipment(b2).slice(-n)) {
       if (q.defId === 'enemy_10028_vtswd') {
         const t = b2.rng.pick(targetsNear(b2, e2, range()));
@@ -1081,7 +1091,7 @@ function kitLion(ab, e, b) {
       dealt(c, b2, e2) { if (!P.wand) return; P.wand = false; if (disarm > 0) b2.applyStatus(c.target, 'disarm', { duration: disarm, source: e2 }); },
     },
     su && {
-      cd: su.cd, icd: su.icd,
+      cd: su.cd, icd: su.icd, sk: su,
       fire(b2, e2) { // 【斥退】 "对场上所有我方单位…": every operator it can select (fieldAllies)
         b2.fx('telegraph', { x: e2.x, y: e2.y, r: 99, kind: 'repel', id: e2.id });
         for (const u of fieldAllies(b2, e2)) hurt(b2, e2, u, e2.s.atk * (su.bb.atk_scale ?? 0), 'arts');
@@ -1130,7 +1140,7 @@ function kitDeer(ab, e) {
       },
     },
     lasso && {
-      cd: lasso.cd, icd: lasso.icd, cond: (b) => allTargets(b, e).length > 0,
+      cd: lasso.cd, icd: lasso.icd, sk: lasso, cond: (b) => allTargets(b, e).length > 0,
       fire(b, e2) { // 【自然涌动】 stun + arts per second
         const n = P.low ? skN : (lasso.bb.max_target ?? 1);
         const dur = lasso.bb.projectile_life_time ?? 0;
@@ -1143,7 +1153,7 @@ function kitDeer(ab, e) {
       },
     },
     doom && {
-      cd: doom.cd, icd: doom.icd,
+      cd: doom.cd, icd: doom.icd, sk: doom,
       fire(b, e2) {
         b.fx('telegraph', { x: e2.x, y: e2.y, r: 99, kind: 'samiDoom', id: e2.id });
         for (const u of fieldAllies(b, e2)) hurt(b, e2, u, e2.s.atk * (doom.bb.atk_scale ?? 0), 'arts');

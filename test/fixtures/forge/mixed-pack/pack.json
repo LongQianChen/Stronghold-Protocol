@@ -1,0 +1,20 @@
+{
+  "id": "rose-mixed",
+  "name": "玫瑰混合",
+  "version": "1.0.0",
+  "author": "rose",
+  "license": "CC0-1.0",
+  "description": "A Forge-style pack with pieces the importer must refuse.",
+  "content": ["bonds"],
+  "overrides": ["bonds:deputShip"],
+  "art": { "chars": { "char_102_texas": { "portrait": "chars/rose.png" } } },
+  "client": {
+    "panels": [
+      { "id": "rose-hud", "slot": "screen.game.hud", "module": "panels/hud.js", "name": "玫瑰条", "readonly": true },
+      { "id": "rose-over", "slot": "root.overlays", "module": "panels/over.js", "name": "覆盖层" }
+    ]
+  },
+  "server": { "preDispatch": "server/pre.js" },
+  "routes": ["GET /rose"],
+  "i18n": { "en": "i18n/en.json" }
+}

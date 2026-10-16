@@ -76,8 +76,9 @@ describe('#6 the server names its offers (m.private shop.rewardOffer source / la
     for (const s of offer.slots) {
       assert.equal(s.kind, 'item');
       assert.equal(s.price, 0);
-      // any tier since 0.2.0 (community report of 2026-10-06: 「原版凯瑟琳1升2都能有6本装备」), shop items only
-      assert.ok(DATA.items[s.id] && DATA.items[s.id].itemType === 'EQUIP' && !DATA.items[s.id].shopExcluded, s.id);
+      // any tier since 0.2.0 (community report of 2026-10-06: 「原版凯瑟琳1升2都能有6本装备」).
+      // 突变细胞 joined the pool on 2026-10-14 (#631); the shop slot still never sells it.
+      assert.ok(DATA.items[s.id] && DATA.items[s.id].itemType === 'EQUIP' && !DATA.items[s.id].isGolden && (s.id === 'chess_item_5_08_e_a' || !DATA.items[s.id].shopExcluded), s.id);
     }
     const want = offer.slots[1].id;
     const funds = ps.funds;
@@ -223,3 +224,10 @@ describe('#6 the shop bar draws the offer by its slots and names it', () => {
     assert.ok([...walk(mp)].flatMap((n) => (typeof n.props?.children === 'string' ? [n.props.children] : [])).includes('晋升奖励待选择'));
   });
 });
+
+test('#617: a reward offer replaces the whole shop row — the equipment slot hides too, and only the offer\'s cards arm', () => {
+  const src = readFileSync(path.join(ROOT, 'public/js/ui/shopBar.js'), 'utf8');
+  assert.match(src, /\$\{showReward \? null : html`<div class="shopbar__item">/, 'the equipment column is not drawn under a reward offer');
+  assert.match(src, /if \(showReward\) reward\.slots\.forEach\([^\n]*\n\s*else slots\.forEach/, 'the shop slots are not armable meanwhile');
+});
+

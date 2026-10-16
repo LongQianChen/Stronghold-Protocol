@@ -2,6 +2,7 @@
 // Conventions of the tier-4 kits: ../shared/tier4.js; kit contract and rules: ../README.md.
 
 import { canTargetEnemy, sortEnemyTargets } from '../../../targeting.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import {
   AURA, num, tbb, grid, nationOf, targetsInGrid, whileDeployed, pulse, toggleBuff, skillActive, isSel, alt,
   withDefaults,
@@ -55,12 +56,17 @@ export default withDefaults({
         // the 60 % dodge is rolled on its own in the `hit` hook below (independent of other dodge sources such as her
         // talent's 22 %: 1 − (1−p)(1−q), never an additive 80 % + 22 % = 100 % immunity)
         mods: { atkPct: num(bb.atk), batPct: Math.max(-0.9, num(bb.base_attack_time, 1) - 1), blockCnt: num(bb.block_cnt, 1) },
-        onStart({ battle, unit, skill }) { unit.mem.flame = { acc: 0, given: 0, step: skill.duration / Math.max(1, total) }; battle.fx('flame', { x: unit.x, y: unit.y, id: unit.id }); },
+        onStart({ battle, unit, skill }) {
+          const raw = skill.duration / Math.max(1, total);
+          unit.mem.flame = { acc: 0, given: 0, step: stepOf('interval', raw, raw) };
+          battle.fx('flame', { x: unit.x, y: unit.y, id: unit.id });
+        },
         onTick({ battle, unit, dt }) {
           const F = unit.mem.flame;
           if (!F) return;
           F.acc += dt;
-          while (F.acc + 1e-9 >= F.step && F.given < total) { F.acc -= F.step; F.given++; battle.addDp(unit.ownerId, per); }
+          let guard = 0;
+          while (F.acc + 1e-9 >= F.step && F.given < total && guard++ < STEP_PER_TICK) { F.acc -= F.step; F.given++; battle.addDp(unit.ownerId, per); } // loop-cap: stepOf interval
         },
         onEnd({ battle, unit, reason }) {
           const F = unit.mem.flame;

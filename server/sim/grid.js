@@ -351,7 +351,7 @@ export class Grid {
     dist[dest] = 0;
     push(dest);
     inQ[dest] = 1;
-    while (qh < qt) {
+    while (qh < qt) { // loop-cap: BFS queue
       const cur = q[qh++];
       inQ[cur] = 0;
       const r = (cur / COLS) | 0, c = cur - r * COLS;
@@ -378,7 +378,7 @@ export class Grid {
     if (!f.len) f.len = new Float64Array(ROWS * COLS).fill(-1);
     const stack = [];
     let x = k;
-    while (x >= 0 && f.len[x] < 0) {
+    while (x >= 0 && f.len[x] < 0) { // loop-cap: flow parent chain
       if (x === f.dest || f.next[x] < 0) { f.len[x] = 0; break; }
       stack.push(x);
       x = f.next[x];
@@ -405,7 +405,7 @@ export class Grid {
     if (f.dist[start] < 0) return null;
     const out = [[sr, sc]];
     let k = start, guard = ROWS * COLS;
-    while (k !== goal && guard-- > 0) {
+    while (k !== goal && guard-- > 0) { // loop-cap: path guard
       k = f.next[k];
       if (k < 0) return null;
       out.push([(k / COLS) | 0, k % COLS]);
@@ -462,7 +462,7 @@ function smoothChains(parent, dist, los, begin) {
     if (dist[n] < 0 || next[n] < 0) continue;
     if (begin) begin(n);
     let b = next[n];
-    while (next[b] >= 0 && los(n, next[b])) b = next[b];
+    while (next[b] >= 0 && los(n, next[b])) b = next[b]; // loop-cap: line-of-sight chain on the grid
     next[n] = b;
   }
   return next;
@@ -482,7 +482,7 @@ function bresenhamClear(a, b, clear) {
   const sr = r1 > r ? 1 : -1, sc = c1 > c ? 1 : -1;
   let err = dc - dr;
   if (!clear(r, c)) return false;
-  while (r !== r1 || c !== c1) {
+  while (r !== r1 || c !== c1) { // loop-cap: one cell per step on a grid segment
     const e2 = 2 * err;
     let nr = r, nc = c;
     if (e2 > -dr) { err -= dr; nc += sc; }
@@ -501,7 +501,7 @@ function segmentClear(a, b, clear) {
   if (r !== r1 && c !== c1) return false;
   const sr = Math.sign(r1 - r), sc = Math.sign(c1 - c);
   if (!clear(r, c)) return false;
-  while (r !== r1 || c !== c1) {
+  while (r !== r1 || c !== c1) { // loop-cap: one cell per step on a grid segment
     r += sr; c += sc;
     if (!clear(r, c)) return false;
   }
@@ -517,7 +517,7 @@ export function bresenhamTiles(a, b) {
   let err = dc - dr;
   const out = [[r, c]];
   let guard = 256;
-  while ((r !== r1 || c !== c1) && guard-- > 0) {
+  while ((r !== r1 || c !== c1) && guard-- > 0) { // loop-cap: cell walk guard
     const e2 = 2 * err;
     if (e2 > -dr) { err -= dr; c += sc; }
     if (e2 < dc) { err += dc; r += sr; }

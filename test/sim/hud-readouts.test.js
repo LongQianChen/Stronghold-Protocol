@@ -1,16 +1,21 @@
 // test/sim/hud-readouts.test.js — the optional b.snap lists behind the HP-bar readouts (R22-HUD; PR #303 and #378 by
 // @IceCodeNew, PR #383 by @Convey123): `ammo` (a running ammo skill's rounds — 隐现's S2 holds 14 in the data), `wolves`
-// (伺夜's 狼群 count) and, in test/content/op_hsgma2.test.js, `neg` (斩业星熊's 我执 pool). All three are display only: the
-// nine-field unit tuples are unchanged and no sim state reads them. The client side is test/render/hud-readouts.test.js.
+// (伺夜's 狼群 count), `energy` (a 秘术师's stored attack energies — snapshot.js mysticView) and, in
+// test/content/op_hsgma2.test.js, `neg` (斩业星熊's 我执 pool). All of them are display only: the nine-field unit tuples
+// are unchanged and no sim state reads them. The client side is test/render/hud-readouts.test.js.
 // Run: node --test test/sim/hud-readouts.test.js
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeBattle, enemyRec, checkInvariants } from '../helpers/battleHarness.js';
-import { unitInfo, unitTuple } from '../../server/sim/snapshot.js';
+import { unitInfo, unitTuple, mysticView } from '../../server/sim/snapshot.js';
+import { getDefaultSource } from '../../server/sim/simdata.js';
 
 const DUMMY = { enemies: { enemy_dummy: enemyRec({ key: 'enemy_dummy', hp: 1e7, speed: 0 }) } };
 const INSIDE = 'chess_char_1_01_a';   // 隐现: the chess skill index 1 is skchr_inside_2 (AMMO, attack@trigger_time 14)
+const MYSTIC = 'chess_char_1_17_a';        // 深靛: 秘术师 (the trait times 3)
+const MYSTIC_ELITE = 'chess_char_1_17_b';  // 深靛 elite (MSC-X, the trait times 4)
+const VEEN = 'char_4226_veen';             // 维伊: 秘术师 whose kit keeps 转置能量 of its own (kit op-veen.js)
 
 test('隐现 S2: b.snap `ammo` carries the whole rounds left and the 14-round magazine of the data; the tuple keeps its SP fraction', () => {
   const h = makeBattle({
@@ -95,3 +100,86 @@ for (const placed of [false, true]) {
     assert.deepEqual(h.b.errors, []);
   });
 }
+
+/** 深靛 with the talent's random 柔光缚目 bind removed (prob 0): the store runs on its own here. */
+function mysticField({ id = MYSTIC, enemies = [] } = {}) {
+  const r = getDefaultSource().rawChess(id);
+  const chess = { [id]: { ...r, talents: r.talents.map((t) => ({ ...t, bb: { ...t.bb, prob: 0 } })) } };
+  return makeBattle({
+    seed: 3, autoFinish: false, timeLimit: 300, captureNoisy: true,
+    defs: { chess, enemies: { e: enemyRec({ key: 'e', hp: 1e9, speed: 0 }) } },
+    units: [{ chessId: id, row: 10, col: 4 }], enemies,
+  });
+}
+
+test('mysticView: [stored energies, the trait\'s cap], zero included — anything that is not a 秘术师 count is null', () => {
+  const u = (o) => ({ side: 'ally', trait: { stored: 0 }, profile: { storeMax: 3 }, ...o });
+  assert.deepEqual(mysticView(u({})), [0, 3], 'zero is a count, not an absent state');
+  assert.deepEqual(mysticView(u({ trait: { stored: 2 } })), [2, 3]);
+  assert.deepEqual(mysticView(u({ trait: { stored: 9 } })), [3, 3], 'clamped to the cap');
+  assert.deepEqual(mysticView(u({ trait: { stored: 4 }, profile: { storeMax: 4 } })), [4, 4], '深靛 elite (MSC-X, times 4)');
+  assert.equal(mysticView(u({ trait: {} })), null, 'a kit that keeps a store of its own never sets trait.stored (维伊, 黑键)');
+  assert.equal(mysticView(u({ trait: undefined })), null, 'not a 秘术师 at all');
+  assert.equal(mysticView(u({ trait: { stored: 0.5 } })), null, 'a fractional count is no count');
+  assert.equal(mysticView(u({ trait: { stored: -1 } })), null);
+  assert.equal(mysticView(u({ profile: {} })), null, 'no cap: no readout');
+  assert.equal(mysticView(u({ profile: { storeMax: 0 } })), null);
+  assert.equal(mysticView(u({ side: 'enemy' })), null, 'enemies are never counted');
+});
+
+test('深靛: b.snap `energy` counts the stored energies under the HP bar — 1/3 at the first attack check, 3/3 full, 0/3 once they leave with an attack', () => {
+  const h = mysticField();
+  const u = h.unit(MYSTIC);
+  const row = () => (h.b.snapshot().energy || []).find((e) => e[0] === u.id);
+  assert.equal(h.b.snapshot().energy, undefined, 'nothing stored yet: no list at all');
+  h.step();
+  assert.equal(u.trait.stored, 1, 'no valid target: the first attack check stores one');
+  assert.deepEqual(row(), [u.id, 1, 3]);
+  assert.ok(h.runUntil(() => u.trait.stored === 3, 30), 'one per attack interval up to the trait times');
+  assert.deepEqual(row(), [u.id, 3, 3], '最多3个');
+  assert.equal(u.profile.storeMax, 3);
+  h.spawn('e', { pos: [10, 6] });
+  assert.ok(h.runUntil(() => u.trait.stored === 0, 5), 'a target in range: the lot leaves with that attack');
+  assert.deepEqual(row(), [u.id, 0, 3], 'zero is a count: she is still a 秘术师 on the field');
+  assert.equal(h.b.snapshot().units.find((t) => t[0] === u.id).length, 9, 'the tuple is not widened');
+  checkInvariants(h.b);
+  assert.deepEqual(h.b.errors, []);
+});
+
+test('深靛 elite (the MSC-X module): the same row runs to the module\'s 4', () => {
+  const h = mysticField({ id: MYSTIC_ELITE });
+  const u = h.unit(MYSTIC_ELITE);
+  assert.equal(u.profile.storeMax, 4);
+  assert.ok(h.runUntil(() => u.trait.stored === 4, 45));
+  assert.deepEqual((h.b.snapshot().energy || []).find((e) => e[0] === u.id), [u.id, 4, 4]);
+  assert.deepEqual(h.b.errors, []);
+});
+
+test('only a 秘术师 has the row — 隐现 (a 速射手) never does — and a 秘术师 off the field drops out of the list', () => {
+  const h = makeBattle({
+    defs: DUMMY, timeLimit: 200, seed: 7,
+    units: [{ chessId: INSIDE, row: 10, col: 3 }, { chessId: MYSTIC, row: 11, col: 4 }],
+    enemies: [],
+  });
+  const u = h.unit(MYSTIC);
+  h.step();
+  assert.deepEqual(h.b.snapshot().energy, [[u.id, 1, 3]], 'one row, for the 秘术师 alone');
+  u.deployed = false;                        // off the field: no row (the unit is not in the snapshot either)
+  assert.equal(h.b.snapshot().energy, undefined);
+  u.deployed = true;
+  checkInvariants(h.b);
+  assert.deepEqual(h.b.errors, []);
+});
+
+test('a 秘术师 whose kit keeps a store of its own (维伊\'s 转置能量) reports no `energy` row: her count is not the trait\'s', () => {
+  const h = makeBattle({
+    defs: { enemies: { e: enemyRec({ key: 'e', hp: 1e9, speed: 0 }) } }, timeLimit: 300, autoFinish: false, seed: 5,
+    units: [{ uid: 1, diy: { slot: 'chess_char_5_diy1_a', charId: VEEN, skillIndex: 0, uniEquipId: null }, elite: false, row: 10, col: 5 }],
+  });
+  const u = h.unit(1);
+  assert.ok(h.runUntil(() => (u.trait.veen?.t ?? 0) > 0, 60), 'she stores 转置能量 with no target on the field');
+  assert.equal(u.trait.stored, undefined, 'the shared trait counter is never touched');
+  assert.equal(h.b.snapshot().energy, undefined, 'nothing to count: no row, and no misleading zero');
+  checkInvariants(h.b);
+  assert.deepEqual(h.b.errors, []);
+});

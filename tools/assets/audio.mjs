@@ -366,6 +366,31 @@ export function resolveSpec(spec, bank) {
 
 /** Voice dump folder per language (under sound_beta_2). */
 export const VOICE_DIRS = Object.freeze({ cn: 'voice_cn', jp: 'voice', en: 'voice_en', kr: 'voice_kr' });
+/** Folder of the operators' own-language dubs (意大利语 / 俄文 / 西班牙语 / 中文-方言 …) under sound_beta_2. */
+export const VOICE_CUSTOM_DIR = 'voice_custom';
+
+/**
+ * The own-language dub of each operator that has one: charword `voiceLangDict` entries whose language is of
+ * `groupType` CUSTOM in `voiceLangTypeDict` (collab voices, LINKAGE, are not). The dub's folder under
+ * VOICE_CUSTOM_DIR is its word key in lower case (`char_102_texas_ITA` → `char_102_texas_ita`; some dubs, e.g.
+ * char_196_sunbr's 俄文, keep the base word key), holding the same `cn_nnn.mp3` file names as the base dubs.
+ * @param {any} charword parsed excel/charword_table.json
+ * @returns {Map<string, {dir:string, type:string}>} charId → its folder under VOICE_CUSTOM_DIR and the official
+ *   voiceLangType (ITA / GER / RUS / FRE / SPA / CN_TOPOLECT …); the first CUSTOM dub when there are several
+ */
+export function nativeVoiceDirs(charword) {
+  const types = charword?.voiceLangTypeDict;
+  const out = new Map();
+  if (!types || typeof types !== 'object') return out;
+  for (const [charId, rec] of Object.entries(charword?.voiceLangDict || {})) {
+    for (const [type, e] of Object.entries(rec?.dict || {})) {
+      if (types[type]?.groupType !== 'CUSTOM' || out.has(charId)) continue;
+      const wk = typeof e?.wordkey === 'string' ? e.wordkey : '';
+      if (/^[a-z0-9_]+$/i.test(wk)) out.set(charId, { dir: wk.toLowerCase(), type });
+    }
+  }
+  return out;
+}
 
 /** Official `placeType` → the manifest's voice slot (public/js/audio.js VOICE_PRIORITY / VOICE_COOLDOWN_MS). */
 export const VOICE_SLOTS = Object.freeze({

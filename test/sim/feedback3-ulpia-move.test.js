@@ -78,7 +78,9 @@ test('乌尔比安 S3: the 【移动】 and the 【返回】 are free redeploys 
   close(u.skill.sp, gift, 0.1, 'the SP after the return = the ration only (7 cleared)');
   const late = stuns.filter((s) => Math.abs(s.d - grenade.stun) < 1e-9 && s.t > grenade.duration + 0.05);
   assert.ok(late.length > 0, `grenade stuns after ${grenade.duration} s (window from the landing at ${castT.toFixed(2)})`);
-  assert.ok(late.every((s) => s.t <= castT + grenade.duration + 1e-6), 'and none past it');
+  // and none past it — but the 【返回】 is a deployment too (deploy effects fire), so its own window counts (round 40:
+  // an attack due as its target leaves range now fires, DESIGN §32.14.9)
+  assert.ok(late.every((s) => s.t <= castT + grenade.duration + 1e-6 || (s.t >= endT - 1e-6 && s.t <= endT + grenade.duration + 1e-6)), 'and none past it');
   assert.equal(h.hooksOf('death').filter((c) => c.unit === u).length, 0, 'never an exit');
   assert.equal(h.eventsOf('die').filter((e) => e[1] === u.id).length, 0, 'no die, so no FORCED_EXIT and no knock-out');
   assert.equal(b._perPlayer.p1.deaths, 0, 'the redeploy count (knock-outs) stays 0');

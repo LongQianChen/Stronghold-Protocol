@@ -156,7 +156,9 @@ describe('client leftovers — mock harness', { skip: !ENABLED && 'set SP_E2E=1 
     assert.match(pend, /DOT/);
     assert.match(pend, /\d+\s*秒后全队生命值开始流失/);
     const secs = Number(pend.match(/(\d+)\s*秒后/)[1]);
-    assert.ok(secs > 10 && secs <= 18, `drain in ${secs} s`);
+    // the mock sets the drain 18 s after its script ran; the page is read after networkidle0, which waits for the
+    // official effects the board preloads (about 8 s here), so only the range is checked
+    assert.ok(secs > 0 && secs <= 18, `drain in ${secs} s`);
     assert.equal(await page.$eval('.gtop__right .countdown', (el) => el.getAttribute('aria-label')), '剩余0秒');
     await page.screenshot({ path: path.join(OUT, 'leftover-fa-overtime.png') });
     assert.deepEqual(problems, []);

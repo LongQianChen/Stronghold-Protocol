@@ -12,14 +12,16 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
-import { BoardScene, sceneGroupVisible } from '../../public/js/render/board3d/scene.js';
+import { BoardScene, sceneGroupVisible, LIGHTING } from '../../public/js/render/board3d/scene.js';
+import { parseObj } from '../../public/js/render/board3d/obj.js';
+import { TILE_H } from '../../public/js/render/style.js';
 import { AREAS } from '../../public/js/render/board3d/layout.js';
 import { resolveUvTable } from '../../public/js/render/board3d/atlas.js';
 import { presetCamera } from '../../public/js/render/projection.js';
-import { sceneMaterial, sceneWaterMaterial, sceneBlend, focusUniforms, SCENE_LIGHT } from '../../public/js/render/board3d/materials.js';
+import { sceneMaterial, sceneWaterMaterial, sceneBlend, sceneEnvTexture, focusUniforms, SCENE_LIGHT, waterMaterial, applyWaterMaterial, WATER_DEFAULTS, SCENE_WATER_DEFAULTS, WATER_TUNING } from '../../public/js/render/board3d/materials.js';
 import {
   parseSceneChunks, sceneGroupRects, loadScenePack, sceneListed, resetBoardPack, sceneGroup, sceneMaterialKey, mergeSceneChunks,
-  SCENE_TEX_GROUP, SCENE_VERSION, SCENE_VERTEX_BYTES,
+  SCENE_TEX_GROUP, SCENE_VERSION, SCENE_VERTEX_BYTES, isSceneWater, sceneWaterInfo,
 } from '../../public/js/render/board3d/load.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -171,17 +173,18 @@ print(json.dumps({str(k): v for k, v in s.hidden_groups(raw, objs).items()}))`);
     assert.deepEqual(out, { 11: 'HIDDEN@1', 12: 'HIDDEN@1', 21: 'HIDDEN@1', 13: 'HIDDEN@2' }, 'pointers to objects of the file; an unknown id is no pointer');
   });
 
-  test('decode_rgbm: the RGBM light as (L / LIGHT_RANGE)^(1/2.2); a page without alpha is kept', { skip: !HAS_PIL && 'no Pillow' }, () => {
+  test('decode_rgbm: the RGBM light in display space as 5 · A · RGB / LIGHT_RANGE; a page without alpha is kept', { skip: !HAS_PIL && 'no Pillow' }, () => {
     const out = py(`from PIL import Image
-img = Image.new('RGBA', (2, 1)); img.putdata([(255, 128, 0, 51), (255, 255, 255, 255)])
+img = Image.new('RGBA', (3, 1)); img.putdata([(255, 128, 0, 51), (255, 255, 255, 255), (40, 20, 10, 255)])
 d = s.decode_rgbm(img)
-print(json.dumps({'mode': d.mode, 'px': list(d.getdata()), 'range': s.LIGHT_RANGE, 'plain': s.decode_rgbm(Image.new('RGB', (1, 1), (9, 8, 7))).getpixel((0, 0))}))`);
+print(json.dumps({'mode': d.mode, 'px': list(d.getdata()), 'range': s.LIGHT_RANGE, 'encoding': s.LIGHT_ENCODING, 'plain': s.decode_rgbm(Image.new('RGB', (1, 1), (9, 8, 7))).getpixel((0, 0))}))`);
     assert.equal(out.mode, 'RGB');
-    // texel (1, 0.5, 0, A = 0.2): L = 5^2.2 · 0.2^2.2 · rgb → stored (L / range)^(1/2.2) = (5^2.2 / range)^(1/2.2) · 0.2 · rgb^(1/2.2)
-    const k = (5 ** 2.2 / out.range) ** (1 / 2.2);
-    const want = [1, 128 / 255, 0].map((c) => Math.round(255 * Math.min(1, k * 0.2) * c ** (1 / 2.2)));
-    for (let i = 0; i < 3; i++) assert.ok(Math.abs(out.px[0][i] - want[i]) <= 2, `channel ${i}: ${out.px[0][i]} vs ${want[i]}`);
+    assert.equal(out.encoding, 'gamma');
+    // texel (1, 0.5, 0, A = 0.2): Unity's gamma-space RGBM value 5 · 0.2 · rgb, stored / range
+    const want = (px, a) => px.map((c) => Math.min(255, Math.round(255 * 5 * a * (c / 255) / out.range)));
+    assert.deepEqual(out.px[0], want([255, 128, 0], 0.2));
     assert.deepEqual(out.px[1], [255, 255, 255], 'clamped at the range');
+    assert.deepEqual(out.px[2], want([40, 20, 10], 1), 'a bright multiplier does not clamp a dark colour');
     assert.deepEqual(out.plain, [9, 8, 7]);
   });
 
@@ -284,6 +287,15 @@ describe('scene chunks (load.js)', () => {
       assert.ok(pack.images.tex.TX_A && pack.images.lm[0]);
       assert.deepEqual(Object.keys(pack.groups).sort(), ['HIDDEN@1', 'HIDDEN@2', 'HIDDEN@3']);
       assert.equal(await loadScenePack(store, 'act2autochess_m02'), pack, 'cached');
+      assert.deepEqual(pack.images.data, {});
+      assert.equal(pack.images.env, null, 'a scene extracted before the reflection atlas');
+      resetBoardPack();
+      Object.assign(urls, { [`${group}|env`]: '/s/env.png', [`${SCENE_TEX_GROUP}|TX_N`]: '/t/TX_N.webp', [`${SCENE_TEX_GROUP}|TX_M`]: '/t/TX_M.webp' });
+      const first = Object.keys(doc.materials || {})[0] || 'M';
+      json = { ...doc, env: { size: 128, mips: 8, range: 1.5 }, materials: { ...doc.materials, [first]: { ...(doc.materials || {})[first], normalMap: 'TX_N', glossMap: 'TX_M' } } };
+      const lit = await loadScenePack(store, 'act2autochess_m02');
+      assert.ok(lit.images.data.TX_N && lit.images.data.TX_M && lit.images.env, 'the normal / gloss maps and the reflection atlas');
+      assert.ok(!lit.images.tex.TX_N && !lit.images.tex.TX_M, 'data maps stay out of the sRGB textures');
       resetBoardPack();
       json = { ...doc, version: SCENE_VERSION + 1 };
       assert.equal(await loadScenePack(store, 'act2autochess_m02'), null, 'unknown version → the procedural board');
@@ -302,22 +314,47 @@ describe('scene materials', () => {
     assert.equal(sceneBlend(null), 'opaque');
   });
 
-  test('sceneMaterial: linear albedo tint, lightmap range, key light, cutoff; unlit fallback without a lightmap page', () => {
+  test('sceneMaterial: display-space tint, lightmap range by encoding, key light, cutoff; unlit fallback without a lightmap page', () => {
     const focus = focusUniforms(THREE);
     const map = new THREE.Texture(), lm = new THREE.Texture();
     const info = { keywords: ['_ALPHATEST_ON'], colors: { _Color: [0.5, 1, 1, 1] }, floats: { _Cutoff: 0.4, _ShadowStrength: 0.9 } };
-    const m = sceneMaterial(THREE, { map, lightMap: lm, info, lightRange: 8, light: { dir: [0, 0, 2], color: [1, 1, 1], intensity: 1.1 } }, focus);
+    const light = { dir: [0, 0, 2], color: [1, 0.5, 1], intensity: 1.1 };
+    const m = sceneMaterial(THREE, { map, lightMap: lm, info, lightRange: 3, lightEncoding: 'gamma', light }, focus);
     assert.equal(m.uniforms.uMap.value, map);
     assert.equal(m.uniforms.uLm.value, lm);
-    assert.ok(Math.abs(m.uniforms.uColor.value.x - 0.5 ** 2.2) < 1e-6, 'authored in gamma space');
+    assert.equal(m.uniforms.uColor.value.x, 0.5, 'the tint multiplies display values, as in the gamma-space client');
     assert.equal(m.uniforms.uCutoff.value, 0.4);
-    assert.equal(m.uniforms.uShadow.value, 0.9);
-    assert.equal(m.uniforms.uLmScale.value, 8 * SCENE_LIGHT.indirect);
+    assert.equal(m.uniforms.uShadow, undefined, '_ShadowStrength scales the realtime shadow map only: the baked shadow is used whole');
+    assert.ok(/shade = lm\.a;/.test(m.fragmentShader));
+    assert.equal(m.uniforms.uLmScale.value, 3 * SCENE_LIGHT.indirect);
     assert.deepEqual(m.uniforms.uLightDir.value.toArray(), [0, 0, 1], 'normalised');
     assert.ok(Math.abs(m.uniforms.uLightColor.value.x - 1.1 * SCENE_LIGHT.direct) < 1e-6);
+    assert.ok(Math.abs(m.uniforms.uLightColor.value.y - 0.55 * SCENE_LIGHT.direct) < 1e-6, 'the light colour is not linearised');
     assert.equal(m.uniforms.uFocus, focus.uFocus, 'the shared focus falloff');
+    assert.equal(m.uniforms.uFocusDim, focus.uFocusDim);
     assert.equal(m.transparent, false);
-    assert.ok(m.defines.SCENE_MAP && m.defines.SCENE_LM);
+    assert.ok(m.defines.SCENE_MAP && m.defines.SCENE_LM && !m.defines.SCENE_LM_V1);
+    assert.ok(!m.defines.SCENE_PBS && !m.defines.SCENE_NORMAL && !m.defines.SCENE_GLOSS, 'no reflection atlas → the plain sum');
+    assert.equal(m.uniforms.uEnvScale.value, 0);
+    // with the scene's reflection: the client's BRDF, its maps and the material's surface values
+    const env = new THREE.CubeTexture(), nrm = new THREE.Texture(), gloss = new THREE.Texture();
+    const surf = { ...info, floats: { ...info.floats, _BumpScale: 0.5, _Metallic: 0.25, _Glossiness: 0.3, _GlossMapScale: 0.8 } };
+    const full = sceneMaterial(THREE, { map, lightMap: lm, info: surf, lightRange: 3, lightEncoding: 'gamma', light, env, envRange: 1.5, normalMap: nrm, glossMap: gloss }, focus);
+    assert.ok(full.defines.SCENE_PBS && full.defines.SCENE_NORMAL && full.defines.SCENE_GLOSS);
+    assert.equal(full.uniforms.uEnv.value, env);
+    assert.equal(full.uniforms.uEnvScale.value, 1.5);
+    assert.equal(full.uniforms.uNormal.value, nrm);
+    assert.equal(full.uniforms.uGlossMap.value, gloss);
+    assert.deepEqual(full.uniforms.uSurface.value.toArray(), [0.5, 0.25, 0.8], 'bump scale, metallic, the gloss map\'s scale');
+    const flat = sceneMaterial(THREE, { map, info: surf, env, light }, focus);
+    assert.ok(flat.defines.SCENE_PBS && !flat.defines.SCENE_NORMAL && !flat.defines.SCENE_GLOSS);
+    assert.deepEqual(flat.uniforms.uSurface.value.toArray(), [0.5, 0.25, 0.3], 'without a gloss map: _Metallic / _Glossiness');
+    for (const term of ['0.779083729', '0.220916301', 'textureLod(uEnv', '0.28 * r2 * rough']) assert.ok(full.fragmentShader.includes(term), term);
+    assert.equal(sceneEnvTexture(THREE, {}, { size: 128, mips: 8 }), null, 'no DOM canvas (Node) → no reflection');
+    // a scene extracted before lightEncoding: the page holds (L / 8)^(1/2.2), read back in the shader
+    const old = sceneMaterial(THREE, { map, lightMap: lm, info, lightRange: 8, light }, focus);
+    assert.ok(old.defines.SCENE_LM_V1);
+    assert.ok(Math.abs(old.uniforms.uLmScale.value - 8 ** (1 / 2.2) * SCENE_LIGHT.indirect) < 1e-9);
     const bare = sceneMaterial(THREE, { info: { keywords: ['_ALPHABLEND_ON'] } }, focus);
     assert.equal(bare.uniforms.uLmScale.value, 0);
     assert.equal(bare.uniforms.uAmbient.value, SCENE_LIGHT.ambient);
@@ -329,6 +366,229 @@ describe('scene materials', () => {
     assert.deepEqual(w.uniforms.uDeep.value.toArray(), [0, 0.27, 0.4, 0.67]);
     assert.equal(w.transparent, true);
     assert.ok(!w.defines.WATER_MAPS, 'no water maps: a flat tint');
+  });
+});
+
+describe('shared board / scene water (#549, port of #555 onto #571)', () => {
+  const focus = focusUniforms(THREE);
+  const record = (extra = {}) => ({ shader: 'Torappu/Scene/StylizedWater', kind: 'water', ...extra });
+  const vec = (m, name) => m.uniforms[name].value.toArray();
+
+  test('surface selection uses shader or name, excludes platform decals and validates an explicit pick', () => {
+    const plain = { kind: 'lit' }, byName = { kind: 'water' }, a = record(), b = record();
+    const decal = { kind: 'water', shader: 'Torappu/Scene/DynamicWaterTile' };
+    const materials = { rock: plain, other_water12: byName, sea: a, sea2: b, platform_water: decal };
+    assert.equal(sceneWaterInfo({ materials }), a, 'shader wins over name fallback');
+    assert.equal(sceneWaterInfo({ materials, waterMaterial: 'sea2' }), b);
+    assert.equal(sceneWaterInfo({ materials, waterMaterial: 'platform_water' }), a, 'decal cannot override a surface');
+    assert.equal(sceneWaterInfo({ materials: { other_water12: byName, platform_water: decal } }), byName);
+    for (const doc of [null, {}, { materials: [] }, { materials: { rock: plain, platform: decal, bad: null } }]) {
+      assert.equal(sceneWaterInfo(doc), null);
+    }
+    assert.equal(isSceneWater({ shader: 'Torappu/Scene/StylizedWater' }, 'any_theme'), true, 'kind is not required');
+    assert.equal(isSceneWater({ shader: 42 }, 'other_WATER2'), true, 'old extraction without a shader name');
+    assert.equal(isSceneWater(decal, 'platform_water'), false);
+    assert.equal(sceneMaterialKey({ material: 'other_water2', lightmap: 3 }, byName), 'other_water2|');
+    assert.equal(sceneMaterialKey({ material: 'sea', lightmap: 3 }, { shader: a.shader }), 'sea|');
+  });
+
+  test('every official parameter maps to its uniform, with field fallbacks and a board-space sun', () => {
+    const info = record({
+      colors: { _DeepWaterColor: [0.1, 0.2, 0.3, 0.4], _ShallowWaterColor: [0.5, 0.6, 0.7, 0.8],
+        _WaterSpeed: [0.2, 0.3, 0, 0], _FlowSpeed: [-0.1, 0.4, 0, 0], _SunDir: [0, 0, -2, 0] },
+      floats: { _Tiling: 0.8, _NormalTiling: 0.9, _BumpScale: 0.4, _CausticsTiling: 0.3,
+        _CausticsSpeed: 0.1, _CausticsBrightness: 0.5, _SkyStrength: 0.6, _WaterColorIntensity: 1.2, _Glossiness: 0.5 },
+    });
+    const w = waterMaterial(THREE, {}, focus, info);
+    assert.deepEqual(vec(w, 'uDeep'), info.colors._DeepWaterColor);
+    assert.deepEqual(vec(w, 'uShallow'), info.colors._ShallowWaterColor);
+    assert.deepEqual(vec(w, 'uWaterSpeed'), [0.2, 0.3]);
+    assert.deepEqual(vec(w, 'uFlowSpeed'), [-0.1, 0.4]);
+    assert.deepEqual(vec(w, 'uSunDir'), [0, 0, 1]);
+    assert.deepEqual(vec(w, 'uViewDir'), [0, 0, 0], 'use actual camera on scene water');
+    for (const [name, expected] of Object.entries({ uTiling: 0.8, uNormalTiling: 0.9, uBumpScale: 0.4,
+      uCausticsTiling: 0.3, uCausticsSpeed: 0.1, uCausticsGain: 0.5 * WATER_TUNING.causticsGain,
+      uSkyStrength: 0.6 * WATER_TUNING.skyGain, uColorIntensity: 1.2, uSpecPower: 64 })) {
+      assert.equal(w.uniforms[name].value, expected, name);
+    }
+    assert.equal(sceneWaterMaterial, waterMaterial, 'compatibility entry point is the same function');
+    assert.equal(w.uniforms.uFocus, focus.uFocus);
+    applyWaterMaterial(w, record({ colors: { _DeepWaterColor: [0, NaN] }, floats: { _Tiling: Infinity, _BumpScale: 0, _Glossiness: 0 } }));
+    assert.deepEqual(vec(w, 'uDeep'), SCENE_WATER_DEFAULTS.deep, 'invalid components fall back individually');
+    assert.equal(w.uniforms.uTiling.value, SCENE_WATER_DEFAULTS.tiling);
+    assert.equal(w.uniforms.uBumpScale.value, 0, 'valid zero is retained');
+    assert.equal(w.uniforms.uSpecPower.value, 2);
+  });
+
+  test('no-record defaults retain procedural animation, opacity and approximately its displayed colour', () => {
+    assert.deepEqual(WATER_DEFAULTS, {
+      deep: [0.189748, 0.484529, 0.556393, 0.9], shallow: [0.331830, 0.708370, 0.767376, 0.9],
+      tiling: 0.45, normalTiling: 0.765, bumpScale: 1 / 2.2,
+      waterSpeed: [0.03, 0.021], flowSpeed: [-0.025, 0.017],
+      causticsTiling: 0.6, causticsSpeed: 0.02, causticsBrightness: 1,
+      sunDir: [-0.45, -0.3, 0.84], viewDir: [0, -0.5, 0.866], skyStrength: 0, colorIntensity: 1, specPower: 40,
+      wet: [0.35, 0.45], causticsTint: [0.28, 0.25, 0.23], specTint: [0.8, 0.65, 0.6],
+    });
+    const w = waterMaterial(THREE, {}, focus);
+    for (const [name, field] of [['uDeep', 'deep'], ['uShallow', 'shallow'], ['uWaterSpeed', 'waterSpeed'],
+      ['uFlowSpeed', 'flowSpeed'], ['uWet', 'wet'], ['uCausticsTint', 'causticsTint'], ['uSpecTint', 'specTint']]) {
+      assert.deepEqual(vec(w, name), WATER_DEFAULTS[field]);
+    }
+    assert.equal(w.uniforms.uTiling.value, 0.45);
+    assert.equal(w.uniforms.uNormalTiling.value, 0.765);
+    assert.equal(w.uniforms.uBumpScale.value, 1 / 2.2);
+    assert.equal(w.uniforms.uCausticsGain.value, 1);
+    assert.equal(w.uniforms.uSkyStrength.value, 0);
+    assert.equal(w.uniforms.uSpecPower.value, 40);
+    assert.equal(w.uniforms.uAlphaLift.value, 0);
+    // CPU colour reference for a flat normal, no glint: compare old linear sum → sRGB to the new gamma sum.
+    // This guards against a large fallback darkening; GPU screenshots still own the visual acceptance.
+    const display = (c) => c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055;
+    const linear = (c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    const wet = 0.35 + 0.45 * 0.84 / Math.hypot(0.45, 0.3, 0.84);
+    for (const ca of [0, 0.25, 0.5, 0.75, 1]) for (const dim of [1, 0.72]) {
+      for (let i = 0; i < 3; i++) {
+        const old = display((([0.03, 0.2, 0.27][i] * (1 - wet) + [0.09, 0.46, 0.55][i] * wet) + ca * [0.18, 0.32, 0.34][i]) * dim);
+        const lit = WATER_DEFAULTS.deep[i] * (1 - wet) + WATER_DEFAULTS.shallow[i] * wet + ca * WATER_DEFAULTS.causticsTint[i];
+        const current = display(linear(lit) * dim);
+        assert.ok(Math.abs(old - current) * 255 < 10, `ca=${ca}, focus=${dim}, channel=${i}`);
+      }
+    }
+  });
+
+  test('reflection and gradient are exclusive; colour sums precede toLinear, waves and caustics fail independently', () => {
+    const env = new THREE.CubeTexture(), waterN = new THREE.Texture(), caustics = new THREE.Texture();
+    const w = waterMaterial(THREE, { waterN, caustics }, focus, record(), { env, envRange: 1.54, envMips: 8 });
+    assert.ok(w.defines.WATER_ENV && w.defines.WATER_NORMAL && w.defines.WATER_CAUSTICS);
+    assert.equal(w.uniforms.uEnv.value, env);
+    assert.equal(w.uniforms.uEnvScale.value, 1.54);
+    const rough = 1 - SCENE_WATER_DEFAULTS.glossiness;
+    assert.equal(w.uniforms.uEnvLod.value, rough * (1.7 - 0.7 * rough) * 7);
+    assert.equal(w.uniforms.uSkyStrength.value, 0.767 * 0.15);
+    assert.equal(w.uniforms.uCausticsGain.value, 0.377 * 0.2);
+    assert.deepEqual(vec(w, 'uSpecTint'), [0.5, 0.6, 0.65].map((v) => v * 0.6));
+    assert.equal(w.uniforms.uAlphaLift.value, 0.2);
+    assert.match(w.fragmentShader, /#ifdef WATER_ENV\n\s+vec3 sky = textureLod\(uEnv, vec3\(rd.x, rd.y, -rd.z\), uEnvLod\).rgb \* uEnvScale;\n\s+#else/);
+    assert.match(w.fragmentShader, /lit \+= ca \* uCausticsGain \* uCausticsTint \+ spec \* uSpecTint;\n\s+vec3 c = toLinear\(clamp\(lit, 0.0, 1.0\)\)/);
+    assert.ok(!w.fragmentShader.includes('vec3(2.2)'), 'no early approximate gamma decode');
+    assert.match(w.fragmentShader, /c \* focusMask/);
+    assert.ok(w.fragmentShader.includes('#include <colorspace_fragment>'));
+    const version = w.version;
+    applyWaterMaterial(w, record());
+    assert.ok(!w.defines.WATER_ENV);
+    assert.equal(w.uniforms.uEnv.value, null);
+    assert.equal(w.uniforms.uEnvScale.value, 0);
+    assert.equal(w.version, version + 1, 'changing cube branch recompiles');
+    assert.equal(w.uniforms.uSkyStrength.value, 0.767 * 0.22);
+    assert.equal(w.uniforms.uCausticsGain.value, 0.377 * 0.35);
+    assert.deepEqual(vec(w, 'uSpecTint'), [0.5, 0.6, 0.65].map((v) => v * 1.6));
+    applyWaterMaterial(w, record());
+    assert.equal(w.version, version + 1, 'same branch does not recompile');
+    for (const tex of [{}, { waterN }, { caustics }]) {
+      const partial = waterMaterial(THREE, tex, focus, record(), { env });
+      assert.equal(!!partial.defines.WATER_NORMAL, !!tex.waterN);
+      assert.equal(!!partial.defines.WATER_CAUSTICS, !!tex.caustics);
+      assert.equal(partial.defines.WATER_ENV, 1, 'cube works even without normal / caustics maps');
+      assert.equal(partial.uniforms.uEnvScale.value, 1);
+    }
+  });
+
+  test('applyWaterMaterial ignores non-water uniforms and resets our material without replacing shared objects', () => {
+    const w = waterMaterial(THREE, {}, focus, record());
+    const deep = w.uniforms.uDeep.value;
+    w.uniforms.uTime.value = 12;
+    applyWaterMaterial(w, null);
+    assert.equal(w.uniforms.uDeep.value, deep);
+    assert.deepEqual(deep.toArray(), WATER_DEFAULTS.deep);
+    assert.equal(w.uniforms.uFocus, focus.uFocus);
+    assert.equal(w.uniforms.uTime.value, 12);
+    const other = { uniforms: { uDeep: { value: new THREE.Vector4(9, 8, 7, 6) }, uEnv: { value: 'other env' } } };
+    assert.equal(applyWaterMaterial(other, record()), other);
+    assert.deepEqual(other.uniforms.uDeep.value.toArray(), [9, 8, 7, 6], 'coincident uniform names are not authorization');
+    assert.equal(other.uniforms.uEnv.value, 'other env');
+    for (const m of [null, undefined, {}, { uniforms: {} }, { uniforms: { uTime: { value: 2 } } }]) {
+      assert.equal(applyWaterMaterial(m, record()), m);
+    }
+    delete w.uniforms.uTiling;
+    assert.doesNotThrow(() => applyWaterMaterial(w, record()), 'older partial water uniforms are safe');
+  });
+
+  test('active stage owns the board parameters, cube and animation across preload, switch, replacement and removal', () => {
+    const board = new BoardScene(THREE, fakePack(), { renderer: stubRenderer() });
+    const stage = stages.act1autochess_m05, otherStage = stages.act2autochess_m04;
+    const pack = fakeScenePack();
+    pack.doc.env = { size: 2, mips: 2, range: 1.54 };
+    pack.images.env = { width: 12, height: 3 };
+    // A tiny canvas stub exercises the production atlas creation without a WebGL context or a localhost server.
+    const original = globalThis.document;
+    globalThis.document = { createElement: () => ({ getContext: () => ({ drawImage() {} }) }) };
+    let res;
+    try { res = board._sceneResources(pack); } finally {
+      if (original === undefined) delete globalThis.document; else globalThis.document = original;
+    }
+    const env = res.env;
+    assert.ok(env.isCubeTexture);
+    assert.equal(env.colorSpace, THREE.NoColorSpace);
+    let disposed = 0;
+    env.addEventListener('dispose', () => disposed++);
+    board.setScenePack(stage.id, pack);
+    board.setStage(stage);
+    const boardWater = board.mat.water;
+    assert.ok(board.meshes.water && board.official);
+    const surface = board.sceneWater[0];
+    assert.equal(surface.fragmentShader, boardWater.fragmentShader);
+    for (const name of Object.keys(surface.uniforms)) {
+      assert.deepEqual(boardWater.uniforms[name].value, surface.uniforms[name].value, name);
+    }
+    assert.equal(boardWater.uniforms.uEnv.value, env);
+    const other = fakeScenePack();
+    other.key = 'another';
+    other.doc.materials.W.colors._DeepWaterColor = [0.1, 0.2, 0.3, 0.4];
+    board.setScenePack(otherStage.id, other);
+    assert.equal(boardWater.uniforms.uEnv.value, env, 'background preload does not change active water');
+    board.setArea(AREAS.unite);
+    assert.equal(board.sceneWater[0], surface, 'rebuild reuses water and cube');
+    board.render(presetCamera('normal', { width: 1280, height: 720 }), 8);
+    assert.equal(boardWater.uniforms.uTime.value, 8);
+    assert.equal(surface.uniforms.uTime.value, 8);
+    board.setStage(otherStage);
+    assert.deepEqual(vec(boardWater, 'uDeep'), [0.1, 0.2, 0.3, 0.4]);
+    assert.equal(boardWater.uniforms.uEnv.value, null);
+    assert.ok(!boardWater.defines.WATER_ENV, 'no cube in the second pack');
+    board.setStage(stage);
+    assert.equal(boardWater.uniforms.uEnv.value, env, 'cached stage restores its cube');
+    const replacement = fakeScenePack(); replacement.key = 'replacement';
+    board.setScenePack(stage.id, replacement);
+    assert.equal(disposed, 1);
+    assert.equal(boardWater.uniforms.uEnv.value, null, 'no reference to the disposed cube');
+    board.setScenePack(stage.id, null);
+    assert.deepEqual(vec(boardWater, 'uDeep'), WATER_DEFAULTS.deep);
+    assert.ok(!board.official && board.meshes.water);
+    board.setStage(otherStage);
+    board.setStage(null);
+    assert.equal(board.official, null);
+    assert.deepEqual(board.sceneWater, []);
+    assert.deepEqual(vec(boardWater, 'uDeep'), WATER_DEFAULTS.deep);
+    board.destroy();
+    assert.equal(disposed, 1, 'the cube has one owner');
+  });
+
+  test('no surface record, hidden-only scene and a platform decal cannot choose surface water parameters', () => {
+    const board = new BoardScene(THREE, fakePack(), { renderer: stubRenderer() });
+    const stage = stages.act1autochess_m05;
+    const pack = fakeScenePack();
+    pack.doc.materials.W = { kind: 'water', shader: 'Torappu/Scene/DynamicWaterTile', colors: { _Color: [1, 0, 0, 1] } };
+    board.setScenePack(stage.id, pack);
+    board.setStage(stage);
+    assert.equal(sceneWaterInfo(pack.doc), null);
+    assert.deepEqual(vec(board.mat.water, 'uDeep'), WATER_DEFAULTS.deep);
+    assert.ok(!board.sceneWater[0].userData.water, 'decal keeps its previous approximation');
+    const hidden = fakeScene([{ material: 'W', x0: 10, y0: 3, group: 'HIDDEN@3' }]);
+    const chunks = parseSceneChunks(hidden.doc, hidden.bin);
+    board.setScenePack(stage.id, { key: 'hidden', doc: hidden.doc, chunks, groups: sceneGroupRects(chunks), images: {} });
+    assert.equal(board.official, null);
+    assert.deepEqual(vec(board.mat.water, 'uDeep'), WATER_DEFAULTS.deep, 'failed scene build restores defaults');
+    board.destroy();
   });
 });
 
@@ -402,6 +662,44 @@ describe('BoardScene with an official scene (stub renderer)', () => {
     board.destroy();
   });
 
+  test('round 40: the 射击台 are the official model (trap_1106_achplat) on the scene and on the procedural board, lit by its material; without the model the slab stays', () => {
+    // a 1 × 0.465 quad standing in for the model (OBJ in the exported centimetres, prefab scale 0.01)
+    const quad = parseObj(['v -50 0 -50', 'v 50 0 -50', 'v 50 46.5 -50', 'v -50 46.5 -50', 'vt 0 0', 'vt 1 0', 'vt 1 1', 'vt 0 1',
+      'vn 0 0 -1', 'f 1/1/1 2/2/1 3/3/1 4/4/1'].join('\n'));
+    const pack = fakePack();
+    pack.images.platform = { width: 4, height: 4 };
+    pack.meshes.platform = quad;
+    pack.materials = { trap: { MT_trap_1106_achplat: { floats: { _Ambient: 0.895, _Diffuse: 0.197 } } } };
+    const board = new BoardScene(THREE, pack, { renderer: stubRenderer() });
+    const m03 = stages.act1autochess_m03;
+    board.setStage(m03);
+    const count = board.board.devices.filter((d) => d.kind === 'platform').length;
+    assert.ok(count >= 4, 'm03 has its 射击台 in the normal field');
+    assert.ok(board.meshes.board && board.meshes.platforms, 'procedural board: the model');
+    assert.equal(board.meshes.platforms.material, board.mat.platform);
+    assert.equal(board.meshes.platforms.geometry.getAttribute('position').count, count * 4, 'one model per 射击台');
+    const P = board.meshes.platforms.geometry.getAttribute('position').array;
+    let top = -Infinity;
+    for (let i = 2; i < P.length; i += 3) top = Math.max(top, P[i]);
+    assert.ok(Math.abs(top - TILE_H.platform) < 1e-6, `the model's top is where units stand (${top})`);
+    assert.equal(board.mat.platform.uniforms.uAmbient.value, 0.895);
+    assert.equal(board.mat.platform.uniforms.uDiffuse.value, 0.197);
+    const key = new THREE.Vector3(...LIGHTING.key.dir).normalize();
+    assert.ok(board.mat.platform.uniforms.uLightDir.value.distanceTo(key) < 1e-6, 'lit like the procedural board');
+    board.setScenePack(m03.id, fakeScenePack());
+    assert.ok(board.official && board.meshes.platforms && !board.meshes.raised, 'scene: the model and no slab');
+    const sun = new THREE.Vector3(0.36, 0.45, 0.82).normalize();
+    assert.ok(board.mat.platform.uniforms.uLightDir.value.distanceTo(sun) < 1e-6, "lit by the scene's own light");
+    board.destroy();
+    const plain = new BoardScene(THREE, fakePack(), { renderer: stubRenderer() });
+    plain.setStage(m03);
+    assert.ok(plain.mat.platform === null && !plain.meshes.platforms, 'no local model: no platform mesh');
+    assert.ok(plain.board.buckets.board.vertexCount > 0);
+    plain.setScenePack(m03.id, fakeScenePack());
+    assert.ok(plain.meshes.raised, 'no local model: the slab on the scene');
+    plain.destroy();
+  });
+
   test('another stage, or dropping the scene, shows the procedural board again', () => {
     const board = new BoardScene(THREE, fakePack(), { renderer: stubRenderer() });
     board.setScenePack(stage.id, fakeScenePack());
@@ -472,7 +770,16 @@ describe('extracted scenes (when scene bundles were extracted here)', { skip: !O
         assert.ok(doc.materials[c.material], `material ${c.material}`);
         if (c.lightmap >= 0) assert.ok(c.lightmap < doc.lightmaps && groups[g][`lm${c.lightmap}`], `lightmap page ${c.lightmap}`);
       }
-      for (const m of Object.values(doc.materials)) if (m.map) assert.ok(groups[SCENE_TEX_GROUP]?.[m.map], `texture ${m.map}`);
+      for (const m of Object.values(doc.materials)) {
+        for (const k of ['map', 'normalMap', 'glossMap']) if (m[k]) assert.ok(groups[SCENE_TEX_GROUP]?.[m[k]], `texture ${m[k]}`);
+      }
+      if (doc.env) {   // a scene extracted with its reflection: the atlas holds 6 faces × the mip chain
+        const e = groups[g].env;
+        assert.ok(e && existsSync(file(e.path)), 'the reflection atlas');
+        assert.ok(doc.env.size > 0 && doc.env.mips > 0 && doc.env.range > 0);
+        assert.equal(e.w, 6 * doc.env.size);
+        assert.equal(e.h, Array.from({ length: doc.env.mips }, (_, i) => Math.max(1, doc.env.size >> i)).reduce((a, b) => a + b, 0));
+      }
       const L = doc.light;
       assert.ok(L && Math.abs(Math.hypot(...L.dir) - 1) < 1e-3 && L.dir[2] > 0, 'the key light shines down on the board');
     });

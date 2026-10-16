@@ -44,6 +44,8 @@ import { kjeragColdWind } from '../devices.js';
 import * as items from '../items.js';
 import { FORCED_EXIT } from '../../constants.js';
 import { msg } from '../../../../shared/i18n.js';
+import { bbCap } from '../../../../shared/plugins/officialBounds.js';
+import { textFinite } from '../../../../shared/plugins/textNumber.js';
 
 const num = S.num;
 
@@ -81,11 +83,11 @@ export function reached(battle, pid, bondId, cnt) {
   return idx >= 0 && S.bondTier(battle, pid, bondId) >= idx + 1;
 }
 
-/** "总和的30%" → 0.3 (炎佑 stat share, text only). */
+/** "总和的30%" → 0.3 (炎佑 stat share, text only). A percent, not a count: finite, not forced to 64. */
 export function yanyouShare() {
   const text = String(S.bondRecord('yanShip')?.effectDesc ?? S.bondRecord('yanShip')?.desc ?? '');
-  const m = /总和的\s*(\d+(?:\.\d+)?)\s*%/.exec(text);
-  const v = m ? +m[1] / 100 : NaN;
+  const raw = textFinite(text, /总和的\s*(\d+(?:\.\d+)?)\s*%/, NaN);
+  const v = Number(raw) / 100;
   return v > 0 && v <= 10 ? v : 0.3;
 }
 
@@ -686,8 +688,10 @@ export function install(battle) {
 /**
  * 维多利亚 hammer milestones: every `layer` layers pay `count` item(s) of `pool` once (counter = milestones paid).
  * A bond effect, so it pays only while 维多利亚 is active (official tip "叠加的盟约…只有在盟约被激活时才会发挥作用");
- * milestones crossed while it was inactive ("无需激活" sources such as 烛煌) are paid the next time a hook sees it active
- * (research 02 §3.3 / §8 Q7: the payout counts layers added while inactive) — same rule as 远见 / 奇迹 (addon/meta.js).
+ * milestones crossed while it was inactive ("无需激活" sources such as 烛煌) are paid as soon as it lights up — the
+ * onActiveBonds hook of the recompute that activated it, e.g. placing the third member in prep (the maintainer's report
+ * of the official game, 2026-10-15; research 02 §3.3 / §8 Q7: the payout counts layers added while inactive) — and
+ * the hooks below catch up anything a capped nested dispatch skipped; same rule as 远见 / 奇迹 (addon/meta.js).
  */
 export function payHammers(ctx) {
   if (!ctx.bondActive('victoriaShip')) return 0;
@@ -695,7 +699,8 @@ export function payHammers(ctx) {
   const step = Math.floor(num(p?.layer, 0));
   if (!p || !(step > 0)) return 0;
   const due = Math.floor(ctx.layers('victoriaShip') / step);
-  const count = Math.max(0, Math.floor(num(p.count, 1)));
+  // [ASSUMED] DESIGN §32.5: each milestone pays at most the official `count` cap. Official count is 1.
+  const count = Math.min(bbCap('count'), Math.max(0, Math.floor(num(p.count, 1))));
   let granted = 0;
   // re-read the counter every milestone: grantItem dispatches onGain, which re-enters this function (nested payments
   // must not be paid twice by the outer loop)
@@ -714,8 +719,12 @@ export function payHammers(ctx) {
   return granted;
 }
 
-/** Hooks on which owed hammers are (caught up and) paid; onLayers only for 维多利亚's own gains. */
-const HAMMER_HOOKS = Object.freeze(['onLayers', 'onRoundStart', 'onPrepStart', 'onPrepEnd', 'onBuy', 'onGain', 'onSold', 'onMerge']);
+/**
+ * Hooks on which owed hammers are (caught up and) paid; onLayers only for 维多利亚's own gains; onActiveBonds when the
+ * active set changes (the bond lighting up — payHammers reads the counter, so the hammer of a milestone comes once
+ * however often the bond goes off and on again).
+ */
+const HAMMER_HOOKS = Object.freeze(['onLayers', 'onActiveBonds', 'onRoundStart', 'onPrepStart', 'onPrepEnd', 'onBuy', 'onGain', 'onSold', 'onMerge']);
 
 export function registerMeta(registry) {
   const prev = typeof registry.get === 'function' ? registry.get('bond:victoriaShip') : null;

@@ -111,7 +111,9 @@ describe('0.2.3 follow-up client features', { skip: !ENABLED }, () => {
       await guest.waitForFunction(() => document.body.textContent.includes('此对局仍在其他窗口中'));
       assert.equal(await owner.evaluate(() => sessionStorage.getItem('sp.token')), before.token);
       await owner.evaluate(() => globalThis.finishIdentityInit());
-      await owner.waitForFunction(() => globalThis.__SP__?.store.get().match.public?.phase === 'INFO_CHECK');
+      // the owner is the background tab now (the guest was brought to front): poll on a timer, not on animation
+      // frames, which a background tab does not run once the match screen takes a moment to load
+      await owner.waitForFunction(() => globalThis.__SP__?.store.get().match.public?.phase === 'INFO_CHECK', { polling: 100 });
       const after = await owner.evaluate(() => {
         const s = globalThis.__SP__.store.get();
         return { id: s.me.playerId, code: s.room.code, token: sessionStorage.getItem('sp.token') };

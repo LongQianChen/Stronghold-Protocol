@@ -18,7 +18,7 @@ const S1 = 'skchr_clemnt_1', S2 = 'skchr_clemnt_2', S3 = 'skchr_clemnt_3';
 const GROUND = Object.freeze({ canHitFly: false, groundOnly: true });
 const AIR = Object.freeze({ canHitFly: true });
 const SPEED = 2, DISTANCE = 3, CATCH_HALF = 0.55, VORTEX_RADIUS = 1.5;
-const SPLASH_RADIUS = 1.1; // PRTS 2026-10-10: collision test; four secondary targets take 100% ATK.
+const SPLASH_RADIUS = 1.1; // PRTS 2026-10-10: collision test (foesInColliderRadius); four secondary targets take 100% ATK.
 const FIRST_BOMB = 0.5; // [ASSUMED] Neither PRTS nor the edited official demo settles the first landing offset.
 const CAST = 'clemnt:cast', CARRY = 'clemnt:carry:';
 const skillBb = (raw, id) => skillRec(raw, id)?.bb ?? {};
@@ -159,7 +159,7 @@ export default {
               if (kind !== 'main' || !target) return;
               // Main victim plus at most four neighbours, never every unit in the radius.
               // [ASSUMED] Ties among splash victims follow the engine's stable spawn order.
-              const near = battle.foesInRadius(target.x, target.y, SPLASH_RADIUS)
+              const near = battle.foesInColliderRadius(target.x, target.y, SPLASH_RADIUS)
                 .filter((e) => e !== target && canTargetEnemy(unit, e, GROUND))
                 .slice(0, Math.max(0, num(b2['attack@max_target'], 5) - 1));
               for (const e of near) battle.dealDamage(unit, e, {

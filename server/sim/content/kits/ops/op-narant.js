@@ -39,6 +39,9 @@
 //   跃跃's S2 [ASSUMED: the text names no other targets]); when they are caught she deals atk_scale_aoe × ATK physical to at
 //   most attack@aoe.max_target enemies within one tile (her order) and 停顿 `sluggish` s — a skill hit, not an attack.
 
+import { boundedCount } from '../../../../../shared/plugins/limits.js';
+import { bbCap } from '../../../../../shared/plugins/officialBounds.js';
+import { textCount } from '../../../../../shared/plugins/textNumber.js';
 import { num, talentBb, moduleBb, traitBb, skillRec, statBuff, toggleBuff, onHitBy, enemiesInGrid, cheb, up, giveSp } from '../shared/tier1.js';
 import { canTargetEnemy } from '../../../targeting.js';
 import { isHpLoss } from '../../../damage.js';
@@ -128,7 +131,7 @@ export default {
     const tb = traitBb(chess);
     const hidden = moduleBb(chess);
     const b1 = bbOf(chess, S1), b2 = bbOf(chess, S2), b3 = bbOf(chess, S3);
-    const cnt = count(b3.cnt, 3);
+    const cnt = Math.max(1, Math.floor(boundedCount(num(b3.cnt, 3), bbCap('cnt'), 3)));
 
     /** S1: the boomerang bounces from (ctx.x, ctx.y) — at most attack@times jumps — then flies back. */
     const bounce = (ctx) => {
@@ -208,8 +211,7 @@ export default {
           const sa = num(t0['attack@steal_atk']), sd = num(t0['attack@steal_def']);
           if (!(sa > 0) && !(sd > 0)) return;
           const capA = num(t0['attack@steal_atk_max'], Infinity), capD = num(t0['attack@steal_def_max'], Infinity);
-          const m = /周围8格的敌人时偷取触发(\d+)次/.exec(String(talentRec(chess, 0)?.desc ?? ''));
-          const nearTimes = m ? Math.max(1, +m[1]) : 1;
+          const nearTimes = Math.max(1, Math.floor(textCount(String(talentRec(chess, 0)?.desc ?? ''), /偷取触发(\d+)次/, 1, 'steal')));
           const losses = stolenOf(battle);
           const victims = new Set();
           const reset = () => { unit.mem.narantLoot = { a: 0, d: 0 }; };
@@ -223,7 +225,7 @@ export default {
             let per = losses.get(e);
             if (!per) losses.set(e, (per = new Map()));
             const loss = per.get(unit.id) ?? { a: 0, d: 0 };
-            for (let i = 0; i < times; i++) {
+            for (let i = 0; i < times; i++) { // loop-cap: textCount steal
               me.a = Math.min(capA, me.a + sa); me.d = Math.min(capD, me.d + sd);
               loss.a = Math.min(capA, loss.a + sa); loss.d = Math.min(capD, loss.d + sd);
             }
@@ -269,7 +271,7 @@ export default {
           const flightS3 = s3 && c.isSkill;
           if (every > 0 && sp > 0) {
             unit.mem.narantCaught += flightS3 ? cnt : 1;
-            while (unit.mem.narantCaught >= every) { unit.mem.narantCaught -= every; giveSp(unit, sp, 'module'); }
+            while (unit.mem.narantCaught >= every) { unit.mem.narantCaught -= every; giveSp(unit, sp, 'module'); } // loop-cap: integer come_back_cnt; cnt capped by bbCap
           }
           if (flightS3) blast(battle, unit);
         }, { owner: unit });

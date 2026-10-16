@@ -99,8 +99,11 @@ test('no Client suite has a plain page.waitForFunction as long as the protocol t
     const src = readFileSync(path.join(ROOT, f), 'utf8');
     if (!/from '\.\.\/e2e\/client\.mjs'|from '\.\/client\.mjs'/.test(src)) continue;
     for (let i = src.indexOf('.waitForFunction('); i >= 0; i = src.indexOf('.waitForFunction(', i + 1)) {
-      const next = src.indexOf('.waitForFunction(', i + 1);
-      const m = src.slice(i, next < 0 ? undefined : next).match(/\{ timeout: ([0-9_]+)/);
+      // the call's own arguments (balanced parentheses), not the text up to the next call: a test's own
+      // `{ timeout }` option between two waits is not a wait's timeout
+      let end = i + '.waitForFunction('.length;
+      for (let depth = 1; end < src.length && depth > 0; end++) depth += src[end] === '(' ? 1 : src[end] === ')' ? -1 : 0;
+      const m = src.slice(i, end).match(/\{ timeout: ([0-9_]+)/);
       if (m && Number(m[1].replace(/_/g, '')) >= PROTOCOL_TIMEOUT_MS) long.push(`${f}:${src.slice(0, i).split('\n').length} (${m[1]} ms)`);
     }
   }

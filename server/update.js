@@ -4,7 +4,7 @@
 //
 // Every release zip (full, lite, update) carries MANIFEST.json at its root: {format, app, files: {<path>: {size,
 // sha256}}} — every shipped file except the art setup manages (public/assets/, public/fonts/, data/assets.json,
-// data/local-assets.json; the lite zip has none of it): the code, the data, node_modules, public/vendor, the docs. The
+// data/local-assets.json, data/local-fx.json; the lite zip has none of it): the code, the data, node_modules, public/vendor, the docs. The
 // update zip (Stronghold-Protocol-v<version>-update.zip, `node tools/package.mjs --update --from <earlier full zips>`)
 // holds only the files that differ from at least one of those zips, MANIFEST.json and UPDATE.json:
 //   {format, app, from: [<base versions>], count, bytes, files: {<path>: {size, sha256}} (what it ships),
@@ -40,7 +40,7 @@ const META = new Set([MANIFEST_FILE, UPDATE_FILE, APPLIED_FILE]);
 
 /** The art setup downloads or extracts (and the lite zip leaves out): never in MANIFEST.json, never fatal. */
 export const isSetupArt = (rel) => rel.startsWith('public/assets/') || rel.startsWith('public/fonts/')
-  || rel === 'data/assets.json' || rel === 'data/local-assets.json';
+  || rel === 'data/assets.json' || rel === 'data/local-assets.json' || rel === 'data/local-fx.json';
 /** Whether MANIFEST.json lists a shipped file. */
 export const inManifest = (rel) => !META.has(rel) && !isSetupArt(rel);
 

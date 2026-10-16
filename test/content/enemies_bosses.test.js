@@ -936,16 +936,37 @@ for (const key of ['enemy_1174_duholy', 'enemy_1174_duholy_2']) {
   });
 }
 
-test(`${nm('enemy_9011_acrefr')}: refraction also doubles max HP while active`, () => {
+test(`${nm('enemy_9011_acrefr')}: first silence permanently removes the HP bonus and stops its fan; RES returns`, () => {
   const h = arena();
   h.step();
   const e = put(h, 'enemy_9011_acrefr', [10, 7]);
+  const other = put(h, 'enemy_9011_acrefr', [12, 7]);
   h.step();
-  assert.equal(e.s.maxHp, E.enemy_9011_acrefr.stats.maxHp * (1 + tb('enemy_9011_acrefr', 'Refracting.max_hp')));
+  const baseHp = E.enemy_9011_acrefr.stats.maxHp;
+  assert.equal(e.s.maxHp, baseHp * (1 + tb(e.defId, 'Refracting.max_hp')));
   assert.equal(e.s.res, 70);
+  e.hp = e.s.maxHp * 0.6;
   h.b.applyStatus(e, 'silence', { duration: 1 });
   h.step();
-  assert.equal(e.s.maxHp, E.enemy_9011_acrefr.stats.maxHp);
+  assert.equal(e.s.maxHp, baseHp);
+  approx(e.hp, baseHp * 0.6, 1e-6, 'HP ratio survives losing the bonus');
+  assert.equal(e.s.res, 0);
+  assert.equal(e.form, 'stopped');
+  assert.equal(h.b.fieldMeta().units.find((u) => u.id === e.id).form, 'stopped', 'late observers get the stopped form');
+  h.run(1.2);
+  assert.equal(e.s.flags.silence, undefined);
+  assert.equal(e.s.res, 70, 'only RES returns after silence');
+  assert.equal(e.s.maxHp, baseHp, 'HP bonus never returns');
+  approx(e.hp, baseHp * 0.6);
+  assert.equal(e.form, 'stopped');
+  assert.equal(other.s.maxHp, baseHp * 2, 'another mirror keeps its own bonus');
+  assert.equal(other.form, null);
+  h.b.applyStatus(e, 'silence', { duration: 1 });
+  h.run(1.2);
+  assert.equal(e.s.maxHp, baseHp);
+  assert.equal(e.s.res, 70);
+  assert.equal(h.eventsOf('fx').filter((event) => event[4]?.form === 'stopped').length, 1, 'one permanent form change');
+  checkInvariants(h.b);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1144,6 +1165,26 @@ test(`${nm('enemy_1321_wdarft')} + ${nm('enemy_1269_nhfly')}: the apostle spawns
   h.runUntil(() => seeds.some((s) => !s.alive), 60);
   assert.ok(seeds.some((s) => !s.alive), 'a seed self-destructed');
   approx(h.unit('t_wall').stats.taken % E.enemy_1269_nhfly.stats.atk, 0, 1e-6);
+  assert.ok(h.unit('t_wall').stats.taken > 0);
+});
+
+test(`${nm('enemy_1269_nhfly')}: entering its 2-tile self-destruct range turns it into a 10-tile/s untargetable projectile`, () => {
+  const h = arena({ units: [{ chessId: 't_wall', row: 9, col: 4 }, { chessId: 't_gun', row: 10, col: 4 }] });
+  h.step();
+  const seed = put(h, 'enemy_1269_nhfly', [9, 6], { route: 2, move: true });
+  assert.equal(seed.base.rangeRadius, 2);
+  h.step();
+  const shot = h.b.projectiles.list.find((p) => p.source === seed);
+  assert.ok(shot, 'self-destruct is an enemy projectile');
+  assert.equal(shot.speed, 10);
+  assert.equal(shot.target, h.unit('t_wall'));
+  assert.ok(seed.s.flags.untargetable, 'operators cannot target the seed after launch');
+  const x = seed.x;
+  h.run(0.1);
+  assert.ok(x - seed.x > 0.8, 'the diving seed travels at projectile speed');
+  assert.equal(seed.x, shot.x, 'the seed model follows the projectile');
+  assert.equal(seed.stats.taken, 0, 'the seed cannot be hit in flight');
+  assert.ok(h.runUntil(() => !seed.alive, 1), 'the seed reaches its target and self-destructs');
   assert.ok(h.unit('t_wall').stats.taken > 0);
 });
 
@@ -1602,7 +1643,7 @@ test(`${nm('enemy_10162_mnctpt')}: three hits per attack with a small splash`, (
   h.step();
   const e = put(h, 'enemy_10162_mnctpt', [10, 7]);
   h.runUntil(() => e.stats.attacks >= 1, 10);
-  h.run(0.5);
+  h.run(0.7); // stones at 0, 0.3 and 0.6 s (Attack.attack@hit_interval)
   approx(h.unit('t_wall').stats.taken, tb('enemy_10162_mnctpt', 'Attack.attack@times') * e.s.atk);
 });
 

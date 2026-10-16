@@ -29,3 +29,12 @@ test('GitHub #258: the local npm cache (.npm-cache/) is ignored, like node_modul
   }
   assert.notEqual(ignored('package.json'), true, 'a tracked file is not');
 });
+
+test('a symlinked node_modules, vendor, art or cache folder (a worktree sharing them) is ignored too', () => {
+  for (const entry of ['/node_modules', '/public/vendor', '/public/assets', '/public/fonts', '/.cache']) assert.ok(lines.includes(entry), `.gitignore lists ${entry}`);
+  // without a trailing slash and absent from the index, git checks the path as a file: what a symlink is to it
+  for (const rel of ['node_modules', 'public/vendor', 'public/assets', 'public/fonts', '.cache']) {
+    const v = ignored(rel);
+    if (v !== null) assert.equal(v, true, `${rel} as a symlink is ignored`);
+  }
+});

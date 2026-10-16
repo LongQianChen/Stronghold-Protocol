@@ -5,10 +5,16 @@ import { N_ } from './i18n.js';
 export const PROTOCOL_VERSION = 1;
 /** Release version shown to players (title screen, server banner, /healthz). Kept equal to package.json "version"
  * (test/version.test.js); PROTOCOL_VERSION above is the separate wire-format number. */
-export const APP_VERSION = '0.2.6';
+export const APP_VERSION = '0.3.0';
 /** A development build (the public `dev` branch): the title screen, the boot banner and the README say so, and
  * tools/package.mjs refuses to build a release zip from it without --allow-dev. */
 export const DEV_BUILD = /-dev$/.test(APP_VERSION);
+/**
+ * The plugin API levels this build supports (DESIGN §32, shared/plugins/manifest.js): a manifest 2 states the level it
+ * is written for (`api`); a level outside min…current keeps the plugin out. The level rises when the data shapes, the
+ * DSL vocabulary or the SDK a plugin relies on change incompatibly (CHANGELOG says how to migrate). [ASSUMED]
+ */
+export const PLUGIN_API = Object.freeze({ current: 1, min: 1 });
 
 /** Four players remain the baseline for card-pool groups and hidden-core layers. Capacity includes humans and AI. */
 export const BASE_SEATS = 4;
@@ -157,6 +163,29 @@ export const ERR = Object.freeze({
   TEMP_NOT_EMPTY: 'TEMP_NOT_EMPTY',
   ELIMINATED: 'ELIMINATED',
   SPECTATOR: 'SPECTATOR',         // a spectator seat only watches (MAX_SPECTATORS)
+  // room.setPlugins (DESIGN §32): a plugin this server has not installed; one a room cannot switch on in this version
+  // (not a cosmetic or content plugin it loads, not of the room's scope, or not allowed by the server owner's
+  // plugins/config.json); a requirement missing or out of range, or a load-order cycle; two plugins in conflict; a set
+  // over the art size limit
+  PLUGIN_SCRIPT_CONFLICT: 'PLUGIN_SCRIPT_CONFLICT',
+  PLUGIN_SCRIPT_OVERRIDE: 'PLUGIN_SCRIPT_OVERRIDE',
+  PLUGIN_SCRIPT_CHECK: 'PLUGIN_SCRIPT_CHECK',
+  PLUGIN_SCRIPTS_DISABLED: 'PLUGIN_SCRIPTS_DISABLED',
+  PLUGIN_TRUST_PIN: 'PLUGIN_TRUST_PIN',
+  PLUGIN_TRUST_PUBLIC: 'PLUGIN_TRUST_PUBLIC',
+  PLUGIN_CONSENT: 'PLUGIN_CONSENT',
+  PLUGIN_UNKNOWN: 'PLUGIN_UNKNOWN',
+  PLUGIN_BLOCKED: 'PLUGIN_BLOCKED',
+  PLUGIN_DEPENDENCY: 'PLUGIN_DEPENDENCY',
+  PLUGIN_CONFLICT: 'PLUGIN_CONFLICT',
+  PLUGIN_LIMIT: 'PLUGIN_LIMIT',
+  // P1c (DESIGN §32.6): a gameplay plugin made for other game versions or another plugin API (refused unless the server
+  // owner allows it: plugins/config.json allowIncompatible); the server already runs as many plugin content sets as its
+  // limit allows (plugins/config.json limits.maxSets); room.ready / room.start before every player's page has loaded and
+  // checked the room's content (room.contentReady)
+  PLUGIN_INCOMPATIBLE: 'PLUGIN_INCOMPATIBLE',
+  PLUGIN_BUSY: 'PLUGIN_BUSY',
+  CONTENT_NOT_READY: 'CONTENT_NOT_READY',
   INTERNAL: 'INTERNAL',
 });
 
@@ -171,6 +200,17 @@ export const ERR_TEXT = {
   BAD_TILE: N_('无法部署在该位置'), BAD_TARGET: N_('无效的目标'), SOLD_OUT: N_('已售出'), MAX_LEVEL: N_('调度中心已达最高等级'),
   NOT_YOUR_TURN: N_('尚未轮到你'), ALREADY: N_('已完成该操作'), TEMP_NOT_EMPTY: N_('临时整备区不为空'), ELIMINATED: N_('你已被淘汰'),
   SPECTATOR: N_('观战中无法进行该操作'), INTERNAL: N_('服务器内部错误'),
+  PLUGIN_UNKNOWN: N_('本服务器没有安装该插件'), PLUGIN_BLOCKED: N_('该插件不能在房间中启用'), PLUGIN_DEPENDENCY: N_('缺少该插件需要的其他插件'),
+  PLUGIN_CONFLICT: N_('所选插件互相冲突'), PLUGIN_LIMIT: N_('所选插件的素材总量超出本服务器的上限'),
+  PLUGIN_INCOMPATIBLE: N_('该插件不适配本服务器的游戏版本'), PLUGIN_BUSY: N_('本服务器同时运行的插件组合已达上限，请稍后再试'),
+  PLUGIN_CONSENT: N_('还有玩家未同意运行受信任插件'),
+  PLUGIN_SCRIPTS_DISABLED: N_('服主没有启用脚本插件'),
+  PLUGIN_TRUST_PIN: N_('插件的锁文件或文件内容与服主钉住的哈希不符'),
+  PLUGIN_TRUST_PUBLIC: N_('公网监听默认禁止受信任插件'),
+  PLUGIN_SCRIPT_CONFLICT: N_('两个插件注册了同一个效果'),
+  PLUGIN_SCRIPT_OVERRIDE: N_('插件未声明要替换的官方技能'),
+  PLUGIN_SCRIPT_CHECK: N_('脚本未通过兼容性检查'),
+  CONTENT_NOT_READY: N_('仍有博士未载入房间的插件内容'),
 };
 
 // ---- Emotes (交流, research 09 §4) -----------------------------------------------------------------------------

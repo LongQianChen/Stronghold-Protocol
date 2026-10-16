@@ -1,0 +1,6 @@
+{
+  "deputShip": {
+    "bb": { "base_def": 0.31 },
+    "buffs": [{ "bb": { "base_def": 0.31 } }]
+  }
+}

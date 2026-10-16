@@ -13,6 +13,7 @@
 //        &fa=L|R (prep on that half of the Final Assault boss field, view.setCamera('bossPrep', { side }))
 //        &board=2d|3d (the official 3D board scene, DESIGN §15; default 3D when the local art + WebGL2 are available)
 //        &cam=prep|normal|unite|boss|pen|bossPrep [&side=L|R &half=1 &shop=0] (official configBlackBoard framings)
+//        &fx=auto|off|lite|full (设置「官方特效」, default auto as in the game; off shows only the procedural effects)
 // Puppeteer hook: window.__demo = { ready, view, seek(t), play(), pause(), setScene(name), stats(), log,
 //   refuseDrops (true ⇒ prep drops are silently ignored, like a server that rejects the move) }
 
@@ -46,7 +47,7 @@ async function main() {
   await assets.ready();
   const index = await fetch('/dev/recordings/index.json').then((r) => (r.ok ? r.json() : []), () => []);
   const view = await createFieldView($('field'), {
-    data, assets, settings: { quality: q.get('quality') || 'high', damageNumbers: true },
+    data, assets, settings: { quality: q.get('quality') || 'high', damageNumbers: true, ...(q.has('fx') ? { officialFx: q.get('fx') } : {}) },
     ...(q.has('aa') ? { antialias: q.get('aa') !== '0' } : {}),
   });
   demo.view = view;

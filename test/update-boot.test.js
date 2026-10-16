@@ -317,7 +317,8 @@ test('manifest verification: missing files, other sizes, same size other bytes, 
 });
 
 test('what MANIFEST.json lists and what stops an update', () => {
-  for (const f of ['public/assets/char/a.png', 'public/fonts/fonts.css', 'data/assets.json', 'data/local-assets.json']) {
+  for (const f of ['public/assets/char/a.png', 'public/fonts/fonts.css', 'data/assets.json', 'data/local-assets.json', 'data/local-fx.json',
+    'public/assets/local/fx/prefabs/common_hit_01.json']) {
     assert.ok(isSetupArt(f) && !inManifest(f), f);
   }
   for (const f of [MANIFEST_FILE, UPDATE_FILE, APPLIED_FILE]) assert.ok(!inManifest(f), f);

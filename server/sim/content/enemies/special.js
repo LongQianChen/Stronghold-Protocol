@@ -6,13 +6,17 @@ import { canTargetAlly, areaSelectable } from '../../targeting.js';
 import { periodicDamage } from '../../damage.js';
 import {
   BOOM_RADIUS, nthOf, stOf, T, elem, hurt, targetsNear, allTargets, areaAllies, areaAlliesInTiles, byPriority,
-  stayRoute, spawnChildren, expose, auraBuff, watchDeaths, onTerrain,
+  stayRoute, spawnChildren, expose, auraBuff, watchDeaths, onTerrain, castSlot,
 } from './helpers.js';
 import {
   unblockable, runWhenHit, blockWeight, taunt, maxTargets, ep, nthAttackPower, lowHpBuff, deathBoom, setFloat, float,
   reborn, frontGuard, faceMove, unbalanced, skill, kitEp, kitPrisoner, kitStun3,
 } from './archetypes.js';
 import { hypot } from '../../detmath.js';
+import { passengerBus } from './passengers.js';
+import { boundedCount, PLUGIN_TIMES_MAX } from '../../../../shared/plugins/limits.js';
+import { bbCap } from '../../../../shared/plugins/officialBounds.js';
+import { stepOf, STEP_PER_TICK } from '../../../../shared/plugins/steps.js';
 
 // ---------------------------------------------------------------------------------------------------------------
 // constants (numbers that exist nowhere in the data)
@@ -48,6 +52,7 @@ function kitChimera(ab) {
     if (a.on || !onTerrain(b, e, 'infection')) return;
     a.on = true;
     e.mem.ab.atkType = 'arts';
+    castSlot(b, e, ab.sk.triggerAnim);   // its activation (triggerAnim): the skill slot for the client, display only
     b.fx('telegraph', { x: e.x, y: e.y, r: CHIMERA_AURA_RADIUS, kind: 'chimera', id: e.id });
   };
   return [{
@@ -142,8 +147,10 @@ function kitParrot(ab) {
 const RUSH_LISTEN = 0.1;
 
 function kitRush(ab) {
-  const ms = T(ab, 'rush.dlancer_t[trigger].move_speed') ?? 0, iv = T(ab, 'rush.dlancer_t[trigger].interval') ?? 0.5;
-  const max = T(ab, 'rush.dlancer_t[trigger].trig_cnt') ?? 0, scale = T(ab, 'firstattack.atk_scale') ?? 0;
+  const ms = T(ab, 'rush.dlancer_t[trigger].move_speed') ?? 0;
+  const iv = stepOf('rush.dlancer_t[trigger].interval', T(ab, 'rush.dlancer_t[trigger].interval') ?? 0.5, 0.5);
+  const max = boundedCount(T(ab, 'rush.dlancer_t[trigger].trig_cnt') ?? 0, bbCap('rush.dlancer_t[trigger].trig_cnt'), 0);
+  const scale = T(ab, 'firstattack.atk_scale') ?? 0;
   // 晕眩 / 束缚 only (the client's STUNNED / UNMOVABLE flags: not 冻结, 沉睡 or 浮空, which hold flags.stun here too)
   const held = (e) => e.buffs.some((x) => x.status === 'stun' || x.status === 'bind');
   const stop = (b, e, a) => { a.on = false; a.n = 0; b.removeBuff(e, 'ab:rush'); };
@@ -160,7 +167,8 @@ function kitRush(ab) {
       if (a.tries >= max || !(iv > 0)) return;
       a.acc += dt;
       let grew = false;
-      while (a.acc >= iv - 1e-9 && a.tries < max) { a.acc -= iv; a.tries++; a.n++; grew = true; }
+      let guard = 0;
+      while (a.acc >= iv - 1e-9 && a.tries < max && guard++ < STEP_PER_TICK) { a.acc -= iv; a.tries++; a.n++; grew = true; } // loop-cap: stepOf interval
       if (grew) b.addBuff(e, { key: 'ab:rush', mods: { moveMul: 1 + ms * a.n }, persist: true });
     },
     dealt(c, b, e, a) {
@@ -181,6 +189,8 @@ function kitRush(ab) {
 function kitFirstAoe(ab) {
   const scale = T(ab, 'AOEAttack.atk_scale') ?? 0;
   return [blockWeight(3), {
+    // the splashing first attack is its AOEAttack: the skill slot for the client (castSlot, display only)
+    before(c, b, e, a) { if (!a.done && !a.cast) { a.cast = true; castSlot(b, e, ab.sk.AOEAttack); } },
     dealt(c, b, e, a) {
       if (a.done) return;
       a.done = true;
@@ -207,6 +217,67 @@ function kitExposeOnHit(ab) {
   return [{ sil: true, taken(c, b) { const s = c.source; if (s && s.side === 'ally' && s.alive && s.kind !== 'device') expose(b, s, dur, scale); } }];
 }
 
+/**
+ * 自制投石机 (PRTS 天赋). A normal stone is a physical attack that splashes every ally within 1.5 of the impact
+ * (the page's 半径1.5; the blackboard `projectile_range` 0.5 is the 入戏 stone, not this volley). `times` stones
+ * land `hit_interval` (0.3 s) apart, each its own damage instance — DEF, shields and 「每次受到攻击」 effects
+ * (坚守 thorns, cd 0.2 s) see them separately. The attack does not end when the target is lost: a later stone
+ * still splashes at the last aim, and a stone already scheduled still lands if the catapult dies (no `owner`
+ * on the timer, so offOwner does not cancel it). 入戏(敌方) — a buff key or flag `inPlay`, which this mode's
+ * tables never grant — aims each stone at a random point of the side-`offset_bound`*2 square (默认 ±3, side 6)
+ * and splashes `projectile_range` (0.5) there, without forcing a hit on the main target. The roll is `battle.rng`.
+ */
+const CATAPULT_SPLASH = 1.5;
+const CATAPULT_STONE = 'catapult:stone';
+
+function catapultInPlay(e) {
+  if (e?.s?.flags?.inPlay) return true;
+  for (const bf of e?.buffs ?? []) if (bf && (bf.key === 'inPlay' || bf.flags?.inPlay)) return true;
+  return false;
+}
+
+function catapultSplash(b, e, x, y, r, skip) {
+  if (!(r > 0)) return;
+  for (const u of areaAllies(b, e, x, y, r)) {
+    if (u === skip) continue;
+    b.dealDamage(e, u, { amount: e.s.atk, type: 'phys', isAttack: true, isSplash: true, tags: [CATAPULT_STONE] });
+  }
+}
+
+/** One stone. `forcePrimary` hits the locked ally when they are still selectable, then splashes around the impact. */
+function catapultStone(b, e, aim, radius, forcePrimary, inPlay, bound) {
+  let x = aim.x, y = aim.y;
+  const t = aim.target;
+  if (inPlay) {
+    if (t && t.alive) { x = t.x; y = t.y; aim.x = x; aim.y = y; }
+    const span = bound > 0 ? bound : 0;
+    x += (b.rng() * 2 - 1) * span;
+    y += (b.rng() * 2 - 1) * span;
+    catapultSplash(b, e, x, y, radius, null);
+    return;
+  }
+  if (t && t.alive) { x = t.x; y = t.y; aim.x = x; aim.y = y; }
+  let skip = null;
+  if (forcePrimary && t && t.alive && canTargetAlly(e, t, true)) {
+    b.dealDamage(e, t, { amount: e.s.atk, type: 'phys', isAttack: true, tags: [CATAPULT_STONE] });
+    skip = t;
+  }
+  catapultSplash(b, e, x, y, radius, skip);
+}
+
+function catapultVolley(ab, b, e, aim) {
+  const n = Math.max(1, Math.floor(boundedCount(T(ab, 'Attack.attack@times') ?? 1, PLUGIN_TIMES_MAX, 1)));
+  const interval = T(ab, 'Attack.attack@hit_interval') ?? 0.3;
+  const inPlay = catapultInPlay(e);
+  const radius = inPlay ? (T(ab, 'Attack.attack@projectile_range') ?? 0.5) : CATAPULT_SPLASH;
+  const bound = T(ab, 'Attack.attack@offset_bound') ?? 3;
+  for (let i = 0; i < n; i++) {
+    const fire = () => catapultStone(b, e, aim, radius, true, inPlay, bound);
+    if (i === 0 || !(interval > 0)) fire();
+    else b.after(interval * i, fire);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // this family's part of KITS (content/enemies.js spreads the parts in this order)
 
@@ -222,7 +293,7 @@ export const SPECIAL_KITS = Object.freeze({
   enemy_1121_lifbos_2: kitPrisoner(true),                            // 传奇重犯 · same
   enemy_1072_dlancer: kitRush,                                       // 萨卡兹穿刺手 · accelerates while walking; first hit after block ×speed
   enemy_1320_wdrrl_2: kitFirstAoe,                                   // 萨卡兹悖谬暴虐兵长 · block ≥3 only; first attack splashes
-  enemy_1302_ymtro_2: () => [blockWeight(4)],                        // “越长尘” · block ≥4 only (passengers n/a)
+  enemy_1302_ymtro_2: (ab) => [blockWeight(4), passengerBus(ab)],    // “越长尘” · block ≥4, carries up to Bus.max_cnt
   enemy_1329_cbshld: kitDefDecay,                                    // 弧光镜卫 · DEF/RES drop with every damage instance
   enemy_1329_cbshld_2: kitDefDecay,                                  // 弧光镜卫长 · same
   enemy_1249_lysdb_2: (ab) => [{ spawn(b, e, a, ab2) { ab2.hitShield = T(ab, 'Shield.max_block_damage_cnt') ?? 0; } }], // 莱茵生命防卫科高级成员 · blocks one phys/arts hit
@@ -243,7 +314,7 @@ export const SPECIAL_KITS = Object.freeze({
   enemy_1069_icebrk_2: (ab) => [{ hitOut(c, b, e) { if (c.dmg.isAttack && c.target.s.flags.freeze) c.dmg.amount *= T(ab, 'atkup.atk_scale') ?? 1; } }], // 雪怪小队破冰者 · ×3 vs frozen
   enemy_1026_aghost: () => [unblockable()],                          // 幽灵组长 · unblockable
   enemy_1062_rager_2: (ab) => [{ iv: 1, tick(b, e) { const v = T(ab, 'periodic_damage.damage') ?? 0; if (v > 0) b.dealDamage(null, e, periodicDamage(v)); } }], // 狂暴宿主组长 · "自身每秒受到500无来源真实伤害" (damage, not 流失)
-  enemy_1183_mlasrt: (ab) => [ep('erosion', T(ab, 'EpDamage.attack@ep_damage_ratio') ?? 0), nthAttackPower(nthOf(ab.sk.PowerAttack), (ab.sk.PowerAttack && ab.sk.PowerAttack.bb.atk_scale) || 1)], // 无胄盟清扫小队 · erosion; every 4th attack ×1.5
+  enemy_1183_mlasrt: (ab) => [ep('erosion', T(ab, 'EpDamage.attack@ep_damage_ratio') ?? 0), nthAttackPower(nthOf(ab.sk.PowerAttack), (ab.sk.PowerAttack && ab.sk.PowerAttack.bb.atk_scale) || 1, null, 0, ab.sk.PowerAttack)], // 无胄盟清扫小队 · erosion; every 4th attack ×1.5
   enemy_1273_stmgun_2: (ab) => {                                     // 高准度伦蒂尼姆城防自行炮 · locks the highest max-HP unit in range, bombards the highest HP% on its 9 tiles
     // the allies in its range (the engine's ranged reach: radius + the ally collider)
     const inRange = (b, e) => allTargets(b, e).filter((a) => hypot(a.x - e.x, a.y - e.y) <= (e.base.rangeRadius || 0) + ALLY_COLLIDER_RADIUS + 1e-9);
@@ -290,7 +361,7 @@ export const SPECIAL_KITS = Object.freeze({
   enemy_10018_sgrobh: () => [maxTargets(2)],                         // “独轮车玩具” · attacks 2 targets
   enemy_2001_duckmi: (ab) => [unblockable(), runWhenHit(T(ab, 'run.attack@move_speed') ?? 0)],   // 鸭爵 · unblockable, no attack; runs +400 % once hurt
   enemy_2001_duckmi_2: (ab) => [unblockable(), runWhenHit(T(ab, 'run.attack@move_speed') ?? 0)], // 鸭爵 (鸭爵 strategy) · same, +300 %
-  enemy_10159_mntrjn: () => [unblockable()],                         // 伊利昂的木驮兽 · unblockable (passengers n/a)
+  enemy_10159_mntrjn: (ab) => [unblockable(), passengerBus(ab, true)], // 伊利昂的木驮兽 · unblockable; bus.max_cnt / bus.move_speed
   enemy_2009_csaudc: kitEp('neural', 'combat.attack@ep_damage_ratio'), // 骇笑看客 · neural on hit
   enemy_2010_csdcr: (ab) => [ep('neural', T(ab, 'attack.attack@ep_damage_ratio') ?? 0), { // 绯红歌伶 · neural on hit; every 20 hits taken: global enemy ASPD up
     taken(c, b, e, a) {
@@ -309,11 +380,12 @@ export const SPECIAL_KITS = Object.freeze({
     const ap = ab.sk.Appear, mc = ab.sk.MultiCombat;
     return [{
       spawn(b, e) {
-        const n = ap ? ap.bb.times ?? 0 : 0;
+        const n = boundedCount(ap ? ap.bb.times ?? 0 : 0, PLUGIN_TIMES_MAX, 0);
         b.after(0.5, () => {
           if (!e.alive || !n) return;
           const lock = allTargets(b, e).sort((p, q) => q.hp - p.hp)[0];
           if (!lock) return;
+          castSlot(b, e, ap);   // the entrance barrage is its Appear skill (display only)
           b.fx('telegraph', { x: lock.x, y: lock.y, r: 1, kind: 'barrage', id: e.id });
           for (let i = 0; i < n; i++) {
             // "对碰撞范围内的1名当前生命值最高的我方单位" — an area selection: never an airborne 起飞 ally nor an unblocking
@@ -325,7 +397,7 @@ export const SPECIAL_KITS = Object.freeze({
       },
       hitOut(c, b, e) { if (c.dmg.isAttack && c.target !== e.blockedBy) c.dmg.amount *= T(ab, 'range.attack@atk_scale_range') ?? 1; },
     }, mc ? {
-      cd: mc.cd, icd: mc.icd, fire(b, e) { e.mem.ab.multi = mc.bb.times ?? 1; },
+      cd: mc.cd, icd: mc.icd, sk: mc, fire(b, e) { e.mem.ab.multi = boundedCount(mc.bb.times ?? 1, PLUGIN_TIMES_MAX, 1); },
       dealt(c, b, e) {
         const m = e.mem.ab.multi;
         if (!(m > 1)) return;
@@ -339,6 +411,8 @@ export const SPECIAL_KITS = Object.freeze({
     return [{
       sil: true,                                                     // silenced: the barrel is kept (and its speed) until an unsilenced attack
       spawn(b, e) { b.addBuff(e, { key: 'ab:barrel', persist: true, mods: { moveMul: T(ab, '1.move_speed') ?? 1 } }); },
+      // the barrel blow is its BlockedBoom: the skill slot for the client (castSlot, display only)
+      before(c, b, e, a) { if (!a.done) castSlot(b, e, ab.sk.BlockedBoom); },
       hitOut(c, b, e, a) { if (!a.done && c.dmg.isAttack) c.dmg.amount *= s.blockee_atk_scale ?? 1; },
       attack(c, b, e, a) {
         if (a.done) return;
@@ -361,6 +435,7 @@ export const SPECIAL_KITS = Object.freeze({
     tick(b, e, a) {
       a.n = (a.n ?? 0) + 1;
       if (a.n > 5) return;
+      castSlot(b, e, ab.sk.ForeverEnhance);   // each enhancement is its ForeverEnhance (display only)
       const s = ab.sk.ForeverEnhance ? ab.sk.ForeverEnhance.bb : {};
       b.addBuff(e, { key: 'ab:enhance', refresh: 'stack', stacks: 1, maxStacks: 5, persist: true, mods: { moveFlat: (s.move_speed_add ?? 0) * e.base.moveSpeed, atkPct: s.atk_add ?? 0 } });
     },
@@ -392,7 +467,7 @@ export const SPECIAL_KITS = Object.freeze({
   },
   enemy_10118_ymgprc: (ab) => {                                      // 澪 · double hits; 寒晖: every 4th attack (spCost 3) is a ×1.5 double hit
     const scale = (ab.sk.PowerAttack && ab.sk.PowerAttack.bb.atk_scale) || 1;
-    const pw = nthAttackPower(nthOf(ab.sk.PowerAttack), scale);
+    const pw = nthAttackPower(nthOf(ab.sk.PowerAttack), scale, null, 0, ab.sk.PowerAttack);
     return [pw, { dealt(c, b, e) { hurt(b, e, c.target, e.s.atk * (pw.power ? scale : 1), 'phys', { isSkill: false }); } }];
   },
   enemy_10127_rkmbst_2: (ab) => [taunt(1), { spawn(b, e) {           // 异质裂兽·α · M0 shield (damage ×0.5, ASPD +100, barrier)
@@ -406,19 +481,21 @@ export const SPECIAL_KITS = Object.freeze({
     b.fx('explode', { x: e.x, y: e.y, r, kind: 'heal' });
     for (const o of b.enemiesInRadius(e.x, e.y, r)) if (o !== e) b.heal(e, o, amt);
   } }],
-  enemy_10162_mnctpt: (ab) => [{                                     // 自制投石机 · 3-hit attacks with small splash; 索敌不受阻挡影响
+  enemy_10162_mnctpt: (ab) => [{                                     // 自制投石机 · 3 physical attacks, 1.5 splash; 索敌不受阻挡影响
     // PRTS 天赋 「索敌不受阻挡影响，且不会因丢失目标而结束攻击」: its target selection ignores its block — a 隐匿 blocker (an
     // operator on the 排气格栅) is no target, so with nobody else in range it does not attack (the official game, community
-    // report of 2026-10-06, item 24); it picks by 仇恨值, not its blocker first
-    spawn(b, e) { e.profile.blockFree = true; },
-    dealt(c, b, e) {
-      // PRTS 自制投石机: normal stones splash in radius 1.5. The talent's projectile_range (0.5) belongs to
-      // the separate 入戏 random-offset attack, not its ordinary volley in this mode.
-      const n = T(ab, 'Attack.attack@times') ?? 1, r = 1.5;
-      const t = c.target;
-      for (let i = 1; i < n; i++) hurt(b, e, t, e.s.atk, 'phys');
-      // the stone's splash ("碰撞无视迷彩"): an area selection — no unblocking 隐匿 ally
-      if (r > 0) for (const u of areaAllies(b, e, t.x, t.y, r)) if (u !== t) for (let i = 0; i < n; i++) hurt(b, e, u, e.s.atk, 'phys');
+    // report of 2026-10-06, item 24); it picks by 仇恨值, not its blocker first. The volley itself is the kit's
+    // (profile.deferHit): three physical attacks `hit_interval` apart, each splashing, including after the target is lost.
+    spawn(b, e) { e.profile.blockFree = true; e.profile.deferHit = true; },
+    before(c, b, e) {
+      e.profile.deferHit = true;
+      const t = c.targets && c.targets[0];
+      e.mem.catapultAim = t ? { target: t, x: t.x, y: t.y } : (e.mem.catapultAim || { target: null, x: e.x, y: e.y });
     },
+    attack(c, b, e) {
+      catapultVolley(ab, b, e, e.mem.catapultAim || { target: null, x: e.x, y: e.y });
+    },
+    // a follow-up stone is itself an attack, so `dealt` runs again; the tag keeps it from starting another volley
+    dealt(c) { if (c.dmg?.tags?.includes(CATAPULT_STONE)) return; },
   }],
 });

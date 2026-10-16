@@ -43,7 +43,7 @@ export default withDefaults({
               battle.applyStatus(e, 'stun', { duration: Math.max(TICK_EPS, skill.timeLeft), source: unit });
             }
             L.acc += dt;
-            while (L.acc + 1e-9 >= 1) {
+            while (L.acc + 1e-9 >= 1) { // loop-cap: one-second step
               L.acc -= 1;
               for (const e of enemiesOnRange(battle, unit)) {
                 battle.dealDamage(unit, e, { amount: unit.s.atk * num(bb.atk_scale, 1), type: 'arts', isSkill: true, tags: ['skill', 'timeLock'] });

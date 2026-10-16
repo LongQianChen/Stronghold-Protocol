@@ -27,6 +27,9 @@ export default {
       }
     };
     return {
+      // PRTS 特性备注 「<替身>状态下可对空，由技能产生的召唤物不可对空」: the trait's <替身> state targets flyers (targeting.js
+      // canTargetEnemy reads `dollHitsFly` with Unit.trait.doll); S2's summoned <替身> (a token with its own profile) does not
+      trait: { dollHitsFly: true },
       skill: {
         kind: 'duration', mods: { atkPct: num(bb.atk) },
         onStart({ battle, unit }) {

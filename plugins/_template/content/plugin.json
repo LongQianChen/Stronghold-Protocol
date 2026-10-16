@@ -1,0 +1,16 @@
+{
+  "manifest": 2,
+  "id": "data-demo",
+  "name": { "zh": "数据插件示例", "en": "Data example" },
+  "version": "0.1.0",
+  "app": ">=0.3.0 <0.4.0",
+  "api": 1,
+  "class": "content",
+  "scope": ["room"],
+  "sourceLang": "zh",
+  "license": "CC0-1.0",
+  "permissions": ["data.patch", "data.add", "dsl"],
+  "data": ["data/bond.json"],
+  "operators": ["operators/guard.json", "operators/caster.json"],
+  "dsl": ["dsl/income.json"]
+}

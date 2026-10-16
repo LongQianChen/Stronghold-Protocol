@@ -117,9 +117,13 @@ export class CompressCache {
     /** @type {Map<string, Promise<Buffer>>} */ this.inflight = new Map();
   }
 
-  /** @returns {Promise<Buffer>} encoded file identified by (encoding, path, size, mtime) */
+  /**
+   * @returns {Promise<Buffer>} the file identified by (path, size, mtime, inode, ctime) compressed with `encoding` ('gzip'
+   *   by default) — the inode and ctime too: a file rewritten with its old size and mtime put back (rsync -t, touch -r)
+   *   is another file (a cosmetic plugin's served at its new hash must not come out of the cache with the old bytes)
+   */
   get(absPath, stat, encoding = 'gzip') {
-    return this.compressed(`${absPath}\0${stat.size}\0${stat.mtimeMs}`, () => fsp.readFile(absPath), encoding, path.extname(absPath).toLowerCase());
+    return this.compressed(`${absPath}\0${stat.size}\0${stat.mtimeMs}\0${stat.ino}\0${stat.ctimeMs}`, () => fsp.readFile(absPath), encoding, path.extname(absPath).toLowerCase());
   }
 
   /** id must identify the exact uncompressed bytes (content SHA-256 for runtime files and rendered HTML). */
@@ -265,12 +269,19 @@ function cacheControlFor(ext, mountName, segments, query) {
   return 'no-cache';
 }
 
-/** opts carries an asset content ETag and a policy verified against its URL hash. */
+/**
+ * One file → the response.
+ * @param {{ contentHash?: string | null, cacheControl?: string | null, headers?: Record<string, string> | null }} [opts]
+ *   contentHash: the file's content hash (assetIndex.js) — the ETag then; cacheControl: overrides the policy of its
+ *   path (a content-hashed URL); headers: extra response headers (a ui plugin's Content-Security-Policy), on 200,
+ *   206 and 304 (they share this header object). 416 is an empty body and does not carry them.
+ */
 export async function serveFile(req, res, absPath, stat, mountName, segments, query, gzipCache, log, opts = {}) {
   const ext = path.extname(absPath).toLowerCase();
   const type = MIME[ext] || 'application/octet-stream';
   const compressible = COMPRESSIBLE.has(ext);
-  const rangeHeader = req.headers.range;
+  // RFC 9110 §14.2: Range is defined only for GET; other methods ignore it, including for encoding selection.
+  const rangeHeader = req.method === 'GET' ? req.headers.range : undefined;
   const encoding = compressible && stat.size >= GZIP_MIN_BYTES && !rangeHeader ? preferredEncoding(req.headers['accept-encoding']) : null;
   const baseTag = opts.contentHash || `${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}`;
   const etag = `"${baseTag}${encoding === 'br' ? '-br' : encoding ? '-gz' : ''}"`;
@@ -285,6 +296,7 @@ export async function serveFile(req, res, absPath, stat, mountName, segments, qu
   };
   if (compressible) headers.Vary = 'Accept-Encoding';
   if (encoding) headers['Content-Encoding'] = encoding;
+  if (opts.headers) for (const [k, v] of Object.entries(opts.headers)) if (v != null && v !== '') headers[k] = v;
 
   if (isNotModified(req, etag, stat.mtime)) {
     res.writeHead(304, headers);
@@ -330,7 +342,22 @@ export async function serveFile(req, res, absPath, stat, mountName, segments, qu
 }
 
 /** Serve exact, verified runtime bytes / generated HTML with variant validators and the same range semantics. */
-export async function serveBuffer(req, res, body, { type, tag, cacheControl = 'no-cache', mtime = null, cache, minBytes = GZIP_MIN_BYTES }) {
+/**
+ * Serve exact bytes from memory.
+ * Accepts both call shapes used across the fork and upstream 0.3.0:
+ *   fork:     serveBuffer(req, res, body, { type, tag, cacheControl, mtime, cache, minBytes })
+ *   upstream: serveBuffer(req, res, { body, hash, type, cacheControl, key, cache })
+ * `hash` is the upstream alias of `tag`; `key` only namespaces the compression cache entry.
+ */
+export async function serveBuffer(req, res, bodyOrOpts, maybeOpts = {}) {
+  let body, type, tag, cacheControl = 'no-cache', mtime = null, cache, minBytes = GZIP_MIN_BYTES;
+  if (bodyOrOpts && typeof bodyOrOpts === 'object' && !Buffer.isBuffer(bodyOrOpts)
+      && !(bodyOrOpts instanceof Uint8Array) && 'body' in bodyOrOpts) {
+    ({ body, hash: tag, type, cacheControl = 'no-cache', cache } = bodyOrOpts);
+  } else {
+    body = bodyOrOpts;
+    ({ type, tag, cacheControl = 'no-cache', mtime = null, cache, minBytes = GZIP_MIN_BYTES } = maybeOpts);
+  }
   const encoding = body.length >= minBytes && !req.headers.range ? preferredEncoding(req.headers['accept-encoding']) : null;
   const etag = `"${tag}${encoding === 'br' ? '-br' : encoding ? '-gz' : ''}"`;
   const headers = { 'Content-Type': type, 'Cache-Control': cacheControl, ETag: etag, Vary: 'Accept-Encoding' };

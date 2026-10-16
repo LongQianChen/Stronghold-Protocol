@@ -1,8 +1,8 @@
 // Content-hashed asset URLs (host bandwidth, layer 1; docs/ASSETS.md "The served manifests"):
 //   * server/http/assetIndex.js — SHA-256 (16 hex) of every file under public/assets and public/fonts, cached by path +
 //     size + mtime in a JSON file, never trusted for a file whose size or mtime changed; Spine models share one hash;
-//   * server/http/assetViews.js — the served data/assets.json / data/local-assets.json with every art URL carrying its
-//     hash segment, the committed files untouched;
+//   * server/http/assetViews.js — the served data/assets.json / data/local-assets.json / data/local-fx.json (the official
+//     effects' file list, DESIGN §33.1) with every art URL carrying its hash segment, the committed files untouched;
 //   * the ~hash routes of static.js / media.js — the segment stripped, `immutable` only when it names the file's bytes,
 //     the current file with `no-cache` otherwise; content ETags; the plain URLs as before.
 import { test, describe, before, after } from 'node:test';
@@ -194,6 +194,25 @@ describe('the served manifests (rewriteManifest)', () => {
     assert.equal(r.models.length, 1);
   });
 
+  test('data/local-fx.json: every file of every group (descriptors, textures and their half-size copies, meshes) owns its hash', () => {
+    const FX = { '/assets/local/fx/index.json': '8888888888888888', '/assets/local/fx/prefabs/p.json': '9999999999999999',
+      '/assets/local/fx/tex/t.webp': 'aaaaaaaaaaaaaaab', '/assets/local/fx/tex/half/t.webp': 'aaaaaaaaaaaaaaac' };
+    const fxIndex = { hashOf: (rel) => FX[`/${rel}`] || null, modelHash: () => null };
+    const doc = { version: 1, format: 'fx-manifest', source: 'local-client', set: 'used', count: 5, groups: {
+      fx: { index: { path: '/assets/local/fx/index.json', kind: 'FxIndex', version: 1 }, textures: { path: '/assets/local/fx/textures.json', kind: 'FxTextures' } },
+      'fx/prefabs': { p: { path: '/assets/local/fx/prefabs/p.json', kind: 'FxPrefab' } },
+      'fx/tex': { t: { path: '/assets/local/fx/tex/t.webp', half: '/assets/local/fx/tex/half/t.webp', w: 8, h: 4, kind: 'Texture2D' } },
+      'fx/mesh': {},
+    } };
+    const r = rewriteManifest(doc, 'local-fx.json', fxIndex);
+    assert.equal(r.doc.groups.fx.index.path, '/assets/~8888888888888888/local/fx/index.json');
+    assert.equal(r.doc.groups.fx.textures.path, '/assets/local/fx/textures.json', 'not hashed yet: the plain URL');
+    assert.deepEqual(r.doc.groups['fx/prefabs'].p, { path: '/assets/~9999999999999999/local/fx/prefabs/p.json', kind: 'FxPrefab' });
+    assert.deepEqual(r.doc.groups['fx/tex'].t, { path: '/assets/~aaaaaaaaaaaaaaab/local/fx/tex/t.webp', half: '/assets/~aaaaaaaaaaaaaaac/local/fx/tex/half/t.webp', w: 8, h: 4, kind: 'Texture2D' });
+    assert.deepEqual([r.doc.format, r.doc.set, r.doc.count], ['fx-manifest', 'used', 5]);
+    assert.deepEqual([r.hashed, r.plain, r.models.length], [4, 1, 0]);
+  });
+
   test('relOf: URL path → index path, refusing what the static server refuses', () => {
     assert.equal(relOf('/assets/a%20b.png'), 'assets/a b.png');
     assert.equal(relOf('/fonts/f.woff2'), 'fonts/f.woff2');
@@ -337,6 +356,41 @@ describe('content-hashed URLs through a real server', () => {
     assert.ok(await until(async () => (await view()).chars.c.avatar === `/assets/~${sha16(next)}/char/a.png`), 'the view follows');
     assert.equal((await get(srv.port, `/assets/~${sha16(next)}/char/a.png`)).headers['cache-control'], IMMUTABLE);
   });
+});
+
+test('/data/local-fx.json (the official effects\' file list): served with hashed URLs like the other manifests, an empty stand-in when absent', async () => {
+  const desc = Buffer.from(JSON.stringify({ format: 'fx-prefab', key: 'p', nodes: [] }));
+  const tex = randomBytes(700);
+  const half = randomBytes(200);
+  const list = { version: 1, format: 'fx-manifest', source: 'local-client', set: 'used', count: 2, groups: {
+    'fx/prefabs': { p: { path: '/assets/local/fx/prefabs/p.json', kind: 'FxPrefab' } },
+    'fx/tex': { t: { path: '/assets/local/fx/tex/t.webp', half: '/assets/local/fx/tex/half/t.webp', w: 8, h: 4, kind: 'Texture2D' } },
+  } };
+  const dir = tree({ 'public/index.html': '<p>hi</p>', 'public/assets/local/fx/prefabs/p.json': desc, 'public/assets/local/fx/tex/t.webp': tex,
+    'public/assets/local/fx/tex/half/t.webp': half, 'data/local-fx.json': JSON.stringify(list), 'data/config.json': '{}' });
+  const srv = await startServer({ port: 0, host: '127.0.0.1', quiet: true, publicDir: path.join(dir, 'public'), dataDir: path.join(dir, 'data'), assetIndex: { delayMs: 0 } });
+  try {
+    await srv.assetIndex.whenReady();
+    const r = await get(srv.port, '/data/local-fx.json');
+    assert.equal(r.status, 200);
+    assert.equal(r.headers['cache-control'], 'no-cache');
+    assert.match(r.headers.etag, /^"[0-9a-f]{16}"$/);
+    const v = JSON.parse(r.body);
+    assert.equal(v.groups['fx/prefabs'].p.path, `/assets/~${sha16(desc)}/local/fx/prefabs/p.json`);
+    assert.equal(v.groups['fx/tex'].t.path, `/assets/~${sha16(tex)}/local/fx/tex/t.webp`);
+    assert.equal(v.groups['fx/tex'].t.half, `/assets/~${sha16(half)}/local/fx/tex/half/t.webp`);
+    const d = await get(srv.port, v.groups['fx/prefabs'].p.path);
+    assert.deepEqual(d.body, desc);
+    assert.equal(d.headers['cache-control'], IMMUTABLE);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'data/local-fx.json'), 'utf8')).groups['fx/tex'].t.path, '/assets/local/fx/tex/t.webp', 'never written');
+    fs.rmSync(path.join(dir, 'data/local-fx.json'));
+    const gone = await get(srv.port, '/data/local-fx.json');
+    assert.equal(gone.status, 200, 'an install without the effects gets the empty stand-in, not a 404');
+    assert.deepEqual(JSON.parse(gone.body).groups, {});
+  } finally {
+    await srv.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('without the index (assetIndex: false) the manifest goes out as committed and a hashed URL is served no-cache', async () => {

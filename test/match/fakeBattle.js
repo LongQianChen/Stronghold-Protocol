@@ -124,6 +124,7 @@ export class FakeBattle {
       }
       const units = (this.opts.players.find((p) => p.playerId === pid)?.units ?? []).filter((u) => u.kind === 'chess');
       perPlayer[pid] = {
+        ...(Number.isFinite(this.plan.creditedKills?.[pid]) ? { creditedKills: this.plan.creditedKills[pid] } : {}),
         killed: Math.max(0, total - leaked.length),
         total,
         leaked,

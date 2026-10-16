@@ -1,0 +1,34 @@
+{
+  "$schema": "../schemas/catalog.schema.json",
+  "catalog": 1,
+  "name": "Example catalogue (documentation only; these addresses do not exist)",
+  "plugins": [
+    {
+      "id": "demo-skin",
+      "name": "Demo skin",
+      "version": "1.0.0",
+      "class": "cosmetic",
+      "description": "Documentation only. example.invalid is not a real download.",
+      "url": "https://example.invalid/plugins/demo-skin-1.0.0.zip",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "bytes": 1024,
+      "homepage": "https://example.invalid/demo-skin",
+      "license": "CC-BY-4.0",
+      "authors": ["Example"],
+      "app": ">=0.3.0 <0.4.0"
+    },
+    {
+      "id": "demo-pack",
+      "name": "Demo language",
+      "version": "0.1.0",
+      "class": "lang",
+      "description": "A second documentation entry, so a list of more than one plugin is shown.",
+      "url": "https://example.invalid/plugins/demo-pack-0.1.0.zip",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "homepage": "https://example.invalid/demo-pack",
+      "license": "CC0-1.0",
+      "authors": "Example",
+      "app": "*"
+    }
+  ]
+}

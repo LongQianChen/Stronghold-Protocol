@@ -18,6 +18,8 @@ import {
 import { installLoadoutSync, SYNC_DEBOUNCE_MS, applyLoadoutEntries, loadoutStore, setEntries, setOpsMap } from '../../public/js/ui/loadoutSync.js';
 import { createStore } from '../../public/js/store.js';
 import { chessLoadout, unitCultivation, standInLoadout, standInOf, ownDiyPick, ownDiyRecord, cardDiy } from '../../public/js/ui/gameLogic.js';
+import { CultivationSelects, CultivationSection, cultivationView, potentialEditable } from '../../public/js/screens/cultivation.js';
+import { data } from '../../public/js/data.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const load = (n) => JSON.parse(readFileSync(path.join(ROOT, `data/${n}.json`), 'utf8'));
@@ -53,6 +55,8 @@ test('helpers: opsOf / setOps / resetOps keep only non-default values; sanitizeO
   assert.deepEqual(resetOps({ [V]: { potential: 2 }, [KALTS]: { cultivate: 1 } }, V), { [KALTS]: { cultivate: 1 } });
   assert.deepEqual(sanitizeOps({ [V]: { potential: 2 }, [KALTS]: { cultivate: 1 }, char_609_acguad: { potential: 1 }, char_999_x: { potential: 1 }, [CHESS.chess_char_1_01_a.charId]: { potential: 6 } }, isOp),
     { [V]: { potential: 2 }, [KALTS]: { cultivate: 1 } }, 'a prototype / unknown operator / defaults dropped');
+  assert.deepEqual(sanitizeOps({ [V]: { potential: 2 }, char_x_flat: { potential: 1, cultivate: 0 } }, () => true, (id) => id !== 'char_x_flat'),
+    { [V]: { potential: 2 }, char_x_flat: { cultivate: 0 } }, 'a plugin operator with no curve drops the non-default potential and keeps the rest');
 });
 
 test('导出 / 导入: the envelope carries ops; an older export keeps the current settings; settings alone import', () => {
@@ -86,6 +90,55 @@ test('the 已调整 count and 仅看已调整 include an operator whose 潜能 /
   assert.equal(changedCount({}, get, {}, roster), 0);
   const only = filterRoster(roster, { changedOnly: true }, {}, get, () => null, { [V]: { cultivate: 0 } });
   assert.deepEqual(only.map((c) => c.chessId), [VENDLA]);
+});
+
+function* walk(v) {
+  if (Array.isArray(v)) { for (const x of v) yield* walk(x); return; }
+  if (!v || typeof v !== 'object') return;
+  yield v;
+  yield* walk(v.props?.children);
+}
+function expand(v, depth = 6) {
+  if (Array.isArray(v)) return v.map((x) => expand(x, depth));
+  if (!v || typeof v !== 'object') return v;
+  if (typeof v.type === 'function' && depth > 0) {
+    try { return expand(v.type(v.props || {}), depth - 1); } catch { return v; }
+    }
+  const children = v.props?.children;
+  return children === undefined ? v : { ...v, props: { ...v.props, children: expand(children, depth) } };
+}
+const propIs = (tree, name, value) => [...walk(tree)].some((n) => n.props && n.props[name] === value);
+
+test('a plugin operator with no potential curve hides the potential control and keeps 练度', () => {
+  const tables = { chess: { a: { charId: 'char_x_curved', potDown: { atk: [1] } } }, backups: { units: {} } };
+  assert.equal(potentialEditable('char_102_texas', tables), true);
+  assert.equal(potentialEditable('char_x_flat', tables), false);
+  assert.equal(potentialEditable('char_x_curved', tables), true);
+  assert.equal(cultivationView('char_x_flat', { char_x_flat: { potential: 1 } }, tables).changed, false);
+  assert.equal(cultivationView('char_x_flat', { char_x_flat: { potential: 1, cultivate: 0 } }, tables).changed, true);
+  assert.equal(cultivationView('char_x_curved', { char_x_curved: { potential: 1 } }, tables).potentialOn, true);
+  const fake = { chessId: 'chess_x_flat_a', charId: 'char_x_flat', visible: true, isGolden: false, isDiy: false, baseId: 'chess_x_flat_a' };
+  assert.equal(changedCount({}, () => fake, { char_x_flat: { potential: 1 } }, [fake], () => false), 0);
+  assert.equal(changedCount({}, () => fake, { char_x_flat: { potential: 1 } }, [fake], () => true), 1);
+  assert.equal(changedCount({}, () => fake, { char_x_flat: { cultivate: 0 } }, [fake], () => false), 1);
+  const orig = data.get;
+  data.get = (name) => (name === 'chess' ? tables.chess : name === 'backups' ? tables.backups : null);
+  try {
+    const flatOps = { char_x_flat: { potential: 1, cultivate: 0 } };
+    const selects = expand(CultivationSelects({ charId: 'char_x_flat', ops: flatOps, onSet() {} }));
+    assert.equal(propIs(selects, 'data-cult', 'potential'), false);
+    assert.equal(propIs(selects, 'data-cult', 'cultivate'), true);
+    const section = expand(CultivationSection({ charId: 'char_x_flat', ops: { char_x_flat: { potential: 1 } }, onSet() {} }));
+    assert.equal(propIs(section, 'data-potential', 1), false);
+    assert.equal([...walk(section)].some((n) => n.props && Object.hasOwn(n.props, 'data-cultivate')), true);
+    assert.equal([...walk(section)].some((n) => typeof n.props?.class === 'string' && n.props.class.includes('lo-badge--changed')), false);
+    const curved = expand(CultivationSelects({ charId: 'char_x_curved', ops: {}, onSet() {} }));
+    assert.equal(propIs(curved, 'data-cult', 'potential'), true);
+    const official = expand(CultivationSelects({ charId: 'char_102_texas', ops: {}, onSet() {} }));
+    assert.equal(propIs(official, 'data-cult', 'potential'), true);
+  } finally {
+    data.get = orig;
+  }
 });
 
 function fakeNet() {

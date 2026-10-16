@@ -1,8 +1,8 @@
 // test/match/diy-shop.test.js — 0.2.0 自选编队 on the server (research 0.2.0 §2; the owner's decisions of 2026-10-05):
 // the picks (room.diy → seats[].diy) are checked leniently, fixed for the match and applied to that player only — the
 // player's data view makes a slotted slot the operator (name, class, bonds from its factions, no 特质, the pick's skill
-// and module; the slot's tier, price and merge), each slotted piece has its own stock (8 at tier 5, 5 at tier 6), never
-// enters the shared pool, joins only its player's shop once the 调度中心 reaches the slot's level, joins that player's
+// and module; the slot's tier, price and merge), each slotted piece has its own stock (8 at tier 5, 5 at tier 6 — twice
+// that in co-op like the shared pool, the maintainer's decision of 2026-10-15, GitHub #650), never enters the shared pool, joins only its player's shop once the 调度中心 reaches the slot's level, joins that player's
 // promotion reward at the reward tier (one shop level earlier: shop 4 → tier 5, shop 5 → tier 6), leaves the shop when
 // every bond of it is banned, merges 3 → elite, and fields its operator in battle (PlayerBattleInput `diy`), client-run
 // and server-run identical; prep scouting and the result name the operator.
@@ -116,14 +116,14 @@ test('seats[].diy → PlayerState.diy (re-checked, frozen; bots none); the playe
   h.m.dispose();
 });
 
-test('per-player stock: 8 at tier 5, 5 at tier 6, never in the shared pool; only its player\'s shop, from the slot\'s 调度中心 level', REAL, () => {
+test('per-player stock: 8 at tier 5, 5 at tier 6 doubled in co-op (16 / 10, #650), never in the shared pool; only its player\'s shop, from the slot\'s 调度中心 level', REAL, () => {
   const h = diyMatch().start();
   const m = h.m;
   h.toPrep(1);
   const p0 = h.ps('p_0');
   const p1 = h.ps('p_1');
-  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 8, [T5B]: 8, [T6A]: 5 });
-  assert.deepEqual(p1.diyStock.snapshot(), { [T5A]: 8 }, 'a stock of its own for the same slot');
+  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 16, [T5B]: 16, [T6A]: 10 }, 'co-op: twice the single-player 8 / 5, like the shared pool');
+  assert.deepEqual(p1.diyStock.snapshot(), { [T5A]: 16 }, 'a stock of its own for the same slot');
   for (const id of [T5A, T5B, T6A, T6B]) assert.ok(!m.pool.has(id), 'never in the shared pool');
   const seen = (ps, level, n = 300) => {
     ps.shop.level = level;
@@ -159,7 +159,7 @@ test('buy → 3 copies merge into the elite (the stock pays the copies); sell / 
   assert.ok(elite, 'the elite');
   assert.equal(p0.allChess().filter((p) => p.id === T5A).length, 0);
   assert.equal(elite.poolCopies, 3);
-  assert.equal(p0.diyStock.left(T5A), 5);
+  assert.equal(p0.diyStock.left(T5A), 13, 'co-op stock 16, three copies taken');
   assert.ok(p0.offers.length >= 1, 'the merge queued a reward offer');
   assert.equal(p0.gd.chess(elite.id).module.id, 'uniequip_002_siege');
   // a slot the player has not filled is no piece: another player's slot cannot be bought or granted
@@ -169,20 +169,20 @@ test('buy → 3 copies merge into the elite (the stock pays the copies); sell / 
   p0.shop.slots[1] = null;
   // sell returns the copies to the player's stock
   assert.deepEqual(m.handle('p_0', { t: 'g.sell', uid: elite.uid }), { ok: true });
-  assert.equal(p0.diyStock.left(T5A), 8);
+  assert.equal(p0.diyStock.left(T5A), 16);
   // the stock runs out like a pool entry
-  for (let i = 0; i < 8; i++) gain(p0, T5A);
+  for (let i = 0; i < 16; i++) gain(p0, T5A);
   assert.equal(p0.diyStock.left(T5A), 0);
   p0.shop.slots[0] = { kind: 'chess', id: T5A, basePrice: 4, frozen: false, sold: false };
   assert.ok(m.handle('p_0', { t: 'g.buy', slot: 0 }).ok, 'a displayed operator remains purchasable after exhaustion');
-  assert.equal(p0.allChess().filter(p => p0.gd.baseIdOf(p.id) === T5A).reduce((n, p) => n + p.poolCopies, 0), 9);
+  assert.equal(p0.allChess().filter(p => p0.gd.baseIdOf(p.id) === T5A).reduce((n, p) => n + p.poolCopies, 0), 17);
   assert.equal(p0.diyStock.left(T5A), 0, 'the extra copy does not reopen available stock');
   h.invariants();
   // The promotion reward draws 自选 of the reward tier (shop 4 → tier 5, shop 5 → tier 6), one shop level before the
   // ordinary shop (owner 2026-10-12, #515). clear() returned the drained T5A copies; the loops roll this stock.
   clear(p0);
   p0.offers = [];
-  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 8, [T5B]: 8, [T6A]: 5 });
+  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 16, [T5B]: 16, [T6A]: 10 });
   const tally = (level, n) => {
     p0.shop.level = level;
     const c = { t5: 0, t6: 0, any: 0 };
@@ -210,8 +210,29 @@ test('buy → 3 copies merge into the elite (the stock pays the copies); sell / 
   // elimination returns everything
   gain(p0, T6A);
   p0.eliminate(m.round);
-  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 8, [T5B]: 8, [T6A]: 5 });
+  assert.deepEqual(p0.diyStock.snapshot(), { [T5A]: 16, [T5B]: 16, [T6A]: 10 });
   m.dispose();
+});
+
+test('#650: a solo run keeps the single-player stock (8 at tier 5, 5 at tier 6); co-op doubles it with the shared pool', REAL, () => {
+  const solo = makeMatch({ mode: 'solo', seats: [{ seat: 0, playerId: 'p_0', name: 'P0', isBot: false, connected: true, diy: PICKS }], seed: 11 }).start();
+  solo.toPrep(1);
+  const sp = solo.ps('p_0');
+  assert.deepEqual(sp.diyStock.snapshot(), { [T5A]: 8, [T5B]: 8, [T6A]: 5 });
+  assert.equal(sp.diyStock.cap(T6A), solo.m.gd.poolCopies(T6A));
+  solo.invariants();
+  solo.m.dispose();
+  const coop = diyMatch().start();
+  coop.toPrep(1);
+  const cp = coop.ps('p_0');
+  for (const [id, n] of [[T5A, 8], [T5B, 8], [T6A, 5]]) {
+    assert.equal(cp.diyStock.cap(id), 2 * n, id);
+    // the same factor as the shared operators of the tier (the multiplier of config.economy, coopPoolMultiplier 2)
+    const shared = [...coop.m.pool.entries.keys()].find((x) => coop.m.gd.tierOf(x) === coop.m.gd.tierOf(id) && !coop.m.gd.economy.poolCopiesOverrides?.[x]);
+    assert.equal(cp.diyStock.cap(id) / n, coop.m.pool.cap(shared) / (coop.m.gd.tierOf(id) === 5 ? 8 : 5), `${id}: the shared pool's factor`);
+  }
+  coop.invariants();
+  coop.m.dispose();
 });
 
 test('bans: a 自选 piece whose every bond is off this match has no stock (out of the shop); 协防 is never banned', REAL, () => {

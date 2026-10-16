@@ -2,7 +2,7 @@
 // Conventions of the tier-3 kits: ../shared/tier3.js; kit contract and rules: ../README.md.
 
 import {
-  num, defOf, talentBb, traitBb, selectedId, altSkills, instantKindOf, alive, fx, textNum, enemiesOn,
+  num, defOf, talentBb, traitBb, selectedId, altSkills, instantKindOf, alive, fx, textCount, enemiesOn,
 } from '../shared/tier3.js';
 
 export default {
@@ -17,7 +17,7 @@ export default {
     const S2 = 'skchr_snhunt_2';
     const s1 = num(bb.atk_scale_1, 1), s2 = num(bb.atk_scale_2, s1);
     const charges = Math.max(1, Math.floor(num(d.skill?.maxCharges, num(bb.ct, 1))));
-    const shots = textNum(d.skill?.description, /(\d+|[一二两三四五])连击/, 2);
+    const shots = textCount(d.skill?.description, /(\d+|[一二两三四五])连击/, 2, 'combo');
     const still = (e) => !!(e.blockedBy || e.s.flags.stun || e.s.flags.noMove || !e.moving);
     const extra = num(tb.extra_add, 0);
     return {
@@ -32,7 +32,7 @@ export default {
             onHit: ({ target }) => {
               if (!target || !target.alive) return;
               const sc = still(target) ? s2 : s1;
-              for (let i = 0; i < shots && target.alive; i++) battle.dealDamage(unit, target, { amount: unit.s.atk * sc, type: 'phys', isSkill: true, tags: ['skill', 'snhunt'] });
+              for (let i = 0; i < shots && target.alive; i++) battle.dealDamage(unit, target, { amount: unit.s.atk * sc, type: 'phys', isSkill: true, tags: ['skill', 'snhunt'] }); // loop-cap: textCount combo
             },
           });
           fx(battle, 'volley', unit, { target: t.id, skill: 'snhunt_2' });

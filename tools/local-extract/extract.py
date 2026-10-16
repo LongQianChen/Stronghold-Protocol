@@ -23,7 +23,8 @@ aklz4.py registers a decoder for it. This script pulls the art the web sources l
   - for the official 3D board (DESIGN §15): the map theme's Material parameters (map/<theme>/materials.json; shader
     names resolved through the shaders/*.ab bundles), the background / device meshes as Wavefront OBJ
     (mesh/<bundle>/<mesh>.obj; UnityPy's exporter, X mirrored into a right-handed frame) and their GameObject
-    placement (mesh/<bundle>/prefab.json)
+    placement (mesh/<bundle>/prefab.json); of the 卫戍协议 device bundle (arts/maps/common/trap/trap_110.ab) only the
+    射击台 (trap_1106_achplat: mesh, texture, material → mesh/trap_110), which the board draws in place of its slab
   - the standard gate / objective effects of every battle map (arts/effects/[pack]map.ab → map/fx: the [opt]start_box /
     [opt]end_box / [opt]start_fly meshes, their merged additive textures, materials and prefab), the blower's texture
     (arts/maps/common/res.ab → map/common: TX_wind_device of the s_wind_device mesh) and the shared water / noise
@@ -38,6 +39,11 @@ aklz4.py registers a decoder for it. This script pulls the art the web sources l
     scene.json + scene.bin + lightmap pages and scene/tex/ (the materials' albedo textures). The scene bundles ship
     only while the season runs: they are read from the client when it has them, else from --scenes <dir> (default
     .cache/official-scenes/*, filled by tools/local-extract/fetch_scenes.py)
+  - the official battle effects (特效) of the mode's operators, enemies and tokens (fx.py, DESIGN §33)
+    → fx/index.json, fx/textures.json, fx/prefabs/*.json, fx/tex/**.webp, fx/mesh/*.json, listed in their own
+    data/local-fx.json (next to --manifest; data/local-assets.json has no fx group);
+    only with an explicit --only fx (a plain run leaves them out): the Phase 1a sample by default, --fx-set used for
+    every effect the units reference, --fx-keys <k1,k2> for named prefabs
 
 Usage:
   python3 -m venv .venv && .venv/bin/pip install -r tools/local-extract/requirements.txt
@@ -47,6 +53,7 @@ Usage:
                                                           pages, from the PNGs already extracted — e.g. the local art
                                                           copied from a release bundle; needs Pillow)
   .venv/bin/python tools/local-extract/extract.py --only scene [--scenes <dir of in-season bundles>]
+  .venv/bin/python tools/local-extract/extract.py --only fx [--fx-set sample|used] [--fx-keys k1,k2] [--fx-jobs N]
 
 Writes <out>/**.png|.webp|.skel|.atlas and data/local-assets.json (manifest of what was extracted). With --only, just
 the jobs whose output subdir starts with one of the prefixes run, and their groups replace those of the existing
@@ -62,6 +69,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scenes  # noqa: E402  (the battlefield scene table and exporter; imports UnityPy only when it runs)
+import fx  # noqa: E402  (the official battle effects, DESIGN §33; imports UnityPy only when it runs)
 
 ROOT = Path(__file__).resolve().parents[2]
 HOME = Path.home()
@@ -108,6 +116,10 @@ JOBS = [
     # official module (uniequip) type icons, keyed by lower-case type name (e.g. 'mar-x')
     ('spritepack/ui_equip_type_hub_h2_0.ab', 'module', {'Sprite'}),
     *[(rel, f'mesh/{sub}', {'Mesh', 'GameObject', 'Material', 'Texture2D'}) for rel, sub in MESH_BUNDLES],
+    # the official 射击台 model (GitHub round 40: 战场#03's raised tiles by the blue gate were our flat grey slab): the
+    # bundle holds every 卫戍协议 device model (red door, plane, laser, crate, 射击台); only the 射击台 is kept
+    ('arts/maps/common/trap/trap_110.ab', 'mesh/trap_110', {'Mesh', 'GameObject', 'Material', 'Texture2D'},
+     r'^((MT|TX)_)?trap_1106_achplat$'),
     ('arts/effects/[pack]map.ab', 'map/fx', {'Mesh', 'GameObject', 'Material', 'Texture2D'}),
     ('arts/maps/common/res.ab', 'map/common', {'Material', 'Texture2D'}, r'^(TX|MT)_wind_device$'),
     ('arts/maps/effect.ab', 'map/water', {'Texture2D'}, r'water_normal|Caustics|WaterNoise|noise_clouds|Water_Foam|SmoothWaves'),
@@ -183,6 +195,7 @@ WEBP = [
     ('map/water', '[ucp]TX_water_normal', 'lossless'),
     ('map/water', 'TX_Caustics256', 'lossy'),
     ('map/water', 'T_noise_clouds_01', 'lossless'),
+    ('mesh/trap_110', 'TX_trap_1106_achplat', 'lossy'),
 ]
 WEBP_OPTIONS = {
     'lossy': {'quality': 95, 'method': 6, 'alpha_quality': 100, 'exact': True},
@@ -517,6 +530,15 @@ def webp_only(out_root, manifest_path, log):
     return 0 if n else 1
 
 
+def ran_groups(old_groups, new_groups, fx_ran=False):
+    """The groups a run replaces: the ones it wrote, and after an fx run the fx / fx/* groups an earlier fx run left in
+    the manifest (the fx files have their own list, data/local-fx.json, since 0.3.0's Phase 1b — DESIGN §33.1)."""
+    ran = set(new_groups)
+    if fx_ran:
+        ran |= {g for g in (old_groups or {}) if g == fx.FX_SUB or g.startswith(fx.FX_SUB + '/')}
+    return ran
+
+
 def merge_manifest(old_groups, new_groups, ran_subs):
     """Groups of the previous manifest minus the subdirs that were re-extracted, plus the new ones (sorted keys)."""
     out = {g: v for g, v in (old_groups or {}).items() if g not in ran_subs}
@@ -753,6 +775,12 @@ def write_spine(objects, sda, sub, name, out_root, manifest, log):
     return len(files) + len(pages)
 
 
+def fx_selected(only):
+    """Whether the fx run (fx.py) runs: only when an --only prefix names fx (or a path under it) — a plain run, with no
+    prefix, leaves the effects out (minutes of work and ~100 MB for the full set)."""
+    return any(p.rstrip('/') == fx.FX_SUB or p.startswith(fx.FX_SUB + '/') for p in only)
+
+
 def scene_ids(only):
     """The stage ids of scenes.SCENES that run under --only (all with no prefix, `scene` or a parent of it)."""
     return spine_ids(only, scenes.SCENE_SUB, [sid for sid, _deps in scenes.SCENES])
@@ -870,6 +898,11 @@ def main():
                     help='an AB root holding the battlefield scene bundles of an in-season version (repeatable; '
                          'searched after --game and before .cache/official-scenes/*)')
     ap.add_argument('--print-jobs', action='store_true', help='print the job table as JSON and exit')
+    ap.add_argument('--fx-set', choices=('sample', 'used'), default='sample',
+                    help='with --only fx: the Phase 1a sample (default) or every effect the mode\'s units reference')
+    ap.add_argument('--fx-keys', default='', metavar='K1,K2',
+                    help='with --only fx: export only these effect prefabs (comma-separated keys)')
+    ap.add_argument('--fx-jobs', type=int, default=0, metavar='N', help='with --only fx: worker processes (default up to 8)')
     ap.add_argument('--webp', action='store_true',
                     help='only write the WebP copies of the board textures and the guide pages from the PNGs already '
                          'under --out and list them in the manifest (needs Pillow, not the client)')
@@ -886,6 +919,10 @@ def main():
                                         'options': GUIDE_WEBP_OPTIONS[GUIDE_WEBP_MODE]},
                           'enemySpines': {'bundles': ENEMY_ART, 'sub': ENEMY_SPINE_SUB, 'ids': ENEMY_SPINES},
                           'tokenSpines': {'bundles': TOKEN_PACKS, 'sub': TOKEN_SPINE_SUB, 'ids': TOKEN_SPINES},
+                          'fx': {'sub': fx.FX_SUB, 'version': fx.FORMAT_VERSION, 'indexVersion': fx.INDEX_VERSION,
+                                 'meshVersion': fx.MESH_VERSION, 'optIn': True,
+                                 'sample': {'keys': fx.FX_SAMPLE_KEYS, 'units': fx.FX_SAMPLE_UNITS,
+                                            'coverage': fx.FX_COVERAGE_KEYS}},
                           'scenes': {'sub': scenes.SCENE_SUB, 'tex': scenes.TEX_SUB,
                                      'stages': [{'id': sid, 'bundle': scenes.scene_bundle(sid), 'deps': deps}
                                                 for sid, deps in scenes.SCENES]}},
@@ -902,7 +939,8 @@ def main():
     enemy_ids = spine_ids(args.only, ENEMY_SPINE_SUB, ENEMY_SPINES)
     token_ids = spine_ids(args.only, TOKEN_SPINE_SUB, TOKEN_SPINES)
     stage_ids = scene_ids(args.only)
-    if not jobs and not enemy_ids and not token_ids and not stage_ids:
+    fx_on = fx_selected(args.only)
+    if not jobs and not enemy_ids and not token_ids and not stage_ids and not fx_on:
         print(f'--only {args.only}: no job matches', file=sys.stderr)
         return 2
     out_root = Path(args.out)
@@ -915,6 +953,11 @@ def main():
         total += export_enemy_spines(ab_root, out_root, manifest, print, enemy_ids)
     if token_ids:
         total += export_token_spines(ab_root, out_root, manifest, print, token_ids)
+    if fx_on:
+        keys = [k.strip().lower() for k in args.fx_keys.split(',') if k.strip()]
+        total += fx.export_fx(ab_root, out_root, manifest, print, selection=args.fx_set, keys=keys or None,
+                              jobs=args.fx_jobs or None, root=ROOT,
+                              fx_manifest=Path(args.manifest).with_name(fx.FX_MANIFEST))
     if stage_ids:
         total += export_scenes(ab_root, out_root, manifest, print, stage_ids, scene_roots(ab_root, args.scenes))
     old = {}
@@ -923,7 +966,7 @@ def main():
             old = json.loads(Path(args.manifest).read_text(encoding='utf-8')).get('groups') or {}
         except (OSError, ValueError) as e:
             print(f'warn: previous manifest unreadable ({e}); writing only the re-extracted groups', file=sys.stderr)
-    groups = merge_manifest(old, manifest, set(manifest))  # a missing bundle keeps its previous group
+    groups = merge_manifest(old, manifest, ran_groups(old, manifest, fx_on))  # a missing bundle keeps its previous group
     count = sum(len(v) for v in groups.values())
     doc = {'version': 1, 'source': 'local-client', 'count': count, 'groups': groups}
     Path(args.manifest).write_text(json.dumps(doc, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')

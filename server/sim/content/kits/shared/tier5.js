@@ -36,7 +36,7 @@
 //   'overload', 'ember', 'bloodBattle', 'reborn', 'candle', 'wake' {scale}, 'mote', 'hpShare', 'crit',
 //   'meltdown', 'soul', 'sleepGuard', 'weightless'; engine kinds used: 'dodge'.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 import { hypot } from '../../../detmath.js';
 
@@ -61,7 +61,7 @@ const RING1 = 1.5;
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const on = (u) => !!u && u.alive && u.deployed && !u.removed;
 /** In the unit's current range: an ally by its tile, an enemy by its body (a huge one's every tile — sim/body.js). */
-const inRange = (unit, x) => !!unit.rangeKeySet && bodyInKeys(x, unit.rangeKeySet);
+const inRange = (unit, x) => !!unit.rangeKeySet && bodyInRange(x, unit.rangeKeySet);
 const talent = (chess, i) => (chess?.talents || []).find((t) => t && t.index === i)?.bb ?? {};
 const talentRec = (chess, i) => (chess?.talents || []).find((t) => t && t.index === i) ?? null;
 const traitBb = (chess) => chess?.trait?.bb ?? {};
@@ -193,7 +193,7 @@ function enemiesInGrid(battle, unit, grid, n = 0, { ignoreStealth = false } = {}
   let list;
   if (ignoreStealth) {
     const set = new Set(keys);
-    list = battle.enemies.filter((e) => e.alive && !e.hidden && e.deployed && !e.s.flags.untargetable && bodyInKeys(e, set));
+    list = battle.enemies.filter((e) => e.alive && !e.hidden && e.deployed && !e.s.flags.untargetable && bodyInRange(e, set));
   } else list = battle.enemiesInKeys(keys, unit, { canHitFly: true });
   sortEnemyTargets(battle, unit, list, null);
   return n > 0 && list.length > n ? list.slice(0, n) : list;

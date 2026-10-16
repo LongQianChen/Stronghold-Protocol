@@ -1,5 +1,6 @@
 // server/http/assetViews.js — the served manifests (host bandwidth, layer 1; docs/ASSETS.md "The served manifests"):
-// data/assets.json and data/local-assets.json as this server hands them out, every art URL carrying the content hash
+// data/assets.json, data/local-assets.json and data/local-fx.json (the official battle effects' file list, DESIGN §33 —
+// kept out of local-assets.json: ~8,800 entries) as this server hands them out, every art URL carrying the content hash
 // of its file as its first segment (shared/assetPaths.js) — `/assets/char/avatar/x.png` →
 // `/assets/~<hash>/char/avatar/x.png`, `/fonts/~<hash>/…` — so the browser keeps the file for a year and asks again
 // only when the bytes change. Audio keeps the `/assets/~<hash>/audio/….mp3` form: public/js/media.js turns it into
@@ -22,7 +23,7 @@ import { hash16 } from './assetIndex.js';
 import { noopLog } from './config.js';
 
 /** The manifests that have a view, by their name under data/. */
-export const VIEW_MANIFESTS = Object.freeze(['assets.json', 'local-assets.json']);
+export const VIEW_MANIFESTS = Object.freeze(['assets.json', 'local-assets.json', 'local-fx.json']);
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const ART_URL = /^\/(?:assets|fonts)\/./;
@@ -53,7 +54,7 @@ function spineUrls(o) {
 /**
  * The served copy of a manifest and its model lists. `index`: hashOf(rel) / modelHash(rels) of assetIndex.js.
  * @param {any} doc the parsed manifest (not changed)
- * @param {'assets.json'|'local-assets.json'} name
+ * @param {'assets.json'|'local-assets.json'|'local-fx.json'} name
  * @param {{ hashOf: (rel: string) => string | null, modelHash: (rels: string[]) => string | null }} index
  * @returns {{ doc: any, models: string[][], hashed: number, plain: number }}
  */

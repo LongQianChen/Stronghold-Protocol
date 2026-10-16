@@ -104,7 +104,7 @@ export default {
           onTick({ battle, unit, dt }) {
             const iv = Math.max(0.1, num(bb['svash2_s_3[cost].interval'], 2));
             unit.mem.svashDpAcc += dt;
-            while (unit.mem.svashDpAcc >= iv - 1e-9) { unit.mem.svashDpAcc -= iv; battle.addDp(unit.ownerId, num(bb['svash2_s_3[cost].cost'], 1)); }
+            while (unit.mem.svashDpAcc >= iv - 1e-9) { unit.mem.svashDpAcc -= iv; battle.addDp(unit.ownerId, num(bb['svash2_s_3[cost].cost'], 1)); } // loop-cap: interval floored before the loop
             unit.mem.svashReveal += dt;
             if (unit.mem.svashReveal < AURA_IV - 1e-9) return;
             unit.mem.svashReveal = 0;

@@ -80,9 +80,11 @@ test('simcheck compare: a one-ulp change at tick 45 is found in its block and na
 });
 
 test('simcheck page: the data files are the browser runner\'s', () => {
-  const src = readFileSync(new URL('../../public/js/battle/runner.js', import.meta.url), 'utf8');
+  // runner.js re-exports the list from the loader the Worker shares (simLoader.js, 0.3.0)
+  const src = readFileSync(new URL('../../public/js/battle/simLoader.js', import.meta.url), 'utf8');
   const m = /export const SIM_DATA_FILES = Object\.freeze\((\[[^\]]*\])\)/.exec(src);
-  assert.ok(m, 'runner.js SIM_DATA_FILES');
+  assert.ok(m, 'simLoader.js SIM_DATA_FILES');
+  assert.match(readFileSync(new URL('../../public/js/battle/runner.js', import.meta.url), 'utf8'), /export \{[^}]*SIM_DATA_FILES[^}]*\} from '\.\/simLoader\.js'/);
   assert.deepEqual([...SIM_DATA_FILES], JSON.parse(m[1].replace(/'/g, '"')));
 });
 

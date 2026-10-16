@@ -4,14 +4,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const workflow = readFileSync(new URL('../.github/workflows/pr-labeler.yml', import.meta.url), 'utf8');
-const block = workflow.match(/^ {10}script: \|\n((?: {12}.*\n|\n)+)$/m);
-assert.ok(block, 'the workflow contains one inline script');
-const script = block[1].replace(/^ {12}/gm, '');
+const blocks = [...workflow.matchAll(/^ {10}script: \|\n((?: {12}.*\n|\n)+)$/gm)];
+assert.equal(blocks.length, 2, 'the workflow contains separate PR and issue scripts');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
-const run = new AsyncFunction('github', 'context', 'core', script);
+const runners = blocks.map((block) => new AsyncFunction('github', 'context', 'core', block[1].replace(/^ {12}/gm, '')));
 const repo = { owner: 'sganggs', repo: 'Stronghold-Protocol' };
 
-function harness(title, { labels = [], action = 'opened', changes, eventTitle = title, labelError, addError } = {}) {
+function harness(title, { labels = [], action = 'opened', changes, eventTitle = title, labelError, addError, isIssue = false } = {}) {
   const calls = [];
   const messages = [];
   const pr = { title, labels: labels.map((name) => ({ name })) };
@@ -20,7 +19,7 @@ function harness(title, { labels = [], action = 'opened', changes, eventTitle = 
     issue: { ...repo, number: 123 },
     payload: {
       action, changes,
-      pull_request: {
+      [isIssue ? 'issue' : 'pull_request']: {
         number: 123, title: eventTitle,
         head: { ref: 'fix/example', repo: { full_name: 'contributor/Stronghold-Protocol', fork: true } },
       },
@@ -28,11 +27,18 @@ function harness(title, { labels = [], action = 'opened', changes, eventTitle = 
   };
   const github = { rest: {
     pulls: { get: async (params) => {
+      assert.equal(isIssue, false, 'issues must not use the PR endpoint');
       assert.deepEqual(params, { ...repo, pull_number: 123 });
       calls.push(['get', params]);
       return { data: pr };
     } },
     issues: {
+      get: async (params) => {
+        assert.equal(isIssue, true, 'PRs must not use the issue endpoint');
+        assert.deepEqual(params, { ...repo, issue_number: 123 });
+        calls.push(['get', params]);
+        return { data: pr };
+      },
       getLabel: async (params) => {
         assert.deepEqual(params, { ...repo, name: params.name });
         calls.push(['getLabel', params]);
@@ -47,14 +53,21 @@ function harness(title, { labels = [], action = 'opened', changes, eventTitle = 
       },
     },
   } };
-  return { calls, messages, pr, context, run: () => run(github, context, { info: (message) => messages.push(message) }) };
+  return { calls, messages, pr, context, run: () => runners[isIssue ? 1 : 0](github, context, { info: (message) => messages.push(message) }) };
 }
 
-test('only PR metadata events, minimal permission, pinned action and no executable PR input', () => {
-  assert.match(workflow, /^on:\n {2}pull_request_target:\n {4}types: \[opened, edited, reopened\]\n\npermissions:/m);
-  assert.match(workflow, /^permissions:\n {2}pull-requests: write\n\njobs:/m);
-  assert.equal((workflow.match(/^ {6}- uses:/gm) || []).length, 1);
-  assert.match(workflow, /uses: actions\/github-script@[a-f0-9]{40} # v8/);
+test('metadata events have separate minimal job permissions, pinned actions and no executable contributor input', () => {
+  assert.match(workflow, /^on:\n {2}pull_request_target:\n {4}types: \[opened, edited, reopened\]\n {2}issues:\n {4}types: \[opened, edited, reopened\]\n\npermissions: \{\}\n\njobs:/m);
+  for (const [job, event, permission] of [
+    ['label', 'pull_request_target', 'pull-requests'], ['issue-label', 'issues', 'issues'],
+  ]) {
+    const block = workflow.match(new RegExp(`^ {2}${job}:\\n((?: {4}.*\\n|\\n)+)`, 'm'))?.[1];
+    assert.ok(block, `${job} exists`);
+    assert.match(block, new RegExp(`^ {4}if: github.event_name == '${event}'$`, 'm'));
+    assert.match(block, new RegExp(`^ {4}permissions:\\n {6}${permission}: write\\n {4}steps:`, 'm'));
+    assert.equal((block.match(/^ {6}- uses:/gm) || []).length, 1);
+    assert.match(block, /uses: actions\/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8/);
+  }
   assert.doesNotMatch(workflow, /actions\/checkout|^\s*run:|\$\{\{|secrets\./m);
 });
 
@@ -135,5 +148,91 @@ test('permission and API failures remain visible', async () => {
     const error = Object.assign(new Error('API failure'), { status });
     await assert.rejects(harness('fix: repair', { labelError: error }).run(), error);
     await assert.rejects(harness('fix: repair', { addError: error }).run(), error);
+  }
+});
+
+test('issues recognize template prefixes and the existing explicit title conventions', async () => {
+  for (const [title, expected] of [
+    ['[Bug]: repair', 'bug'], ['[Feature]: add', 'enhancement'], ['  [bUg]：修复  ', 'bug'],
+    ['[FEATURE]：新增', 'enhancement'], ['fix: repair', 'bug'], ['bug(server)：修复', 'bug'],
+    ['docs: update', 'documentation'], ['Docs(readme)：说明', 'documentation'],
+    ['feat(ui): add', 'enhancement'], ['feature: add', 'enhancement'],
+    ['[Bug]: " ; process.exit(1); // ${{ secrets.TOKEN }} $(echo unsafe)', 'bug'],
+  ]) {
+    const h = harness(title, { isIssue: true, labels: ['help wanted'] });
+    await h.run();
+    assert.deepEqual(h.calls.map(([name]) => name), ['get', 'getLabel', 'addLabels']);
+    assert.deepEqual(h.pr.labels.map(({ name }) => name), ['help wanted', expected]);
+  }
+});
+
+test('issues leave ambiguous titles and malformed prefixes unlabelled', async () => {
+  for (const title of [
+    '', 'bug', 'Error', 'a bug: repair', 'prefix [Bug]: repair', '[Bug] repair', '[Bugfix]: repair',
+    '[Feature request]: add', '[Docs]: update', '[Bug](ui): repair', '[Bug: repair', 'bug]: repair',
+    'fix repair', 'fix(): repair', 'fix(ui)(server): repair', 'fix(ui\nserver): repair', 'chore: maintain',
+  ]) {
+    const h = harness(title, { isIssue: true, labels: ['help wanted'] });
+    h.context.payload.issue.body = '[Bug]: critical P0';
+    h.pr.body = '[Bug]: critical P0';
+    await h.run();
+    assert.deepEqual(h.calls.map(([name]) => name), ['get'], title);
+    assert.deepEqual(h.pr.labels, [{ name: 'help wanted' }]);
+  }
+});
+
+test('issues preserve template and manual categories even when the title suggests another type', async () => {
+  for (const label of ['bug', 'BUG', 'enhancement', 'ENHANCEMENT', 'documentation', 'Documentation']) {
+    const h = harness('[Bug]: repair', { isIssue: true, labels: ['help wanted', label] });
+    await h.run();
+    assert.deepEqual(h.calls.map(([name]) => name), ['get']);
+    assert.deepEqual(h.pr.labels.map(({ name }) => name), ['help wanted', label]);
+  }
+  const h = harness('[Feature]: add', { isIssue: true });
+  await h.run();
+  await h.run();
+  assert.equal(h.calls.filter(([name]) => name === 'addLabels').length, 1);
+  assert.deepEqual(h.pr.labels, [{ name: 'enhancement' }]);
+});
+
+test('issue title edits fetch current metadata and keep the fallback category on later edits', async () => {
+  const h = harness('[Feature]: add', {
+    isIssue: true, action: 'edited', changes: { title: { from: '[Bug]: repair' } }, eventTitle: '[Bug]: repair',
+  });
+  h.context.payload.issue.labels = [{ name: 'bug' }];
+  await h.run();
+  assert.deepEqual(h.pr.labels, [{ name: 'enhancement' }]);
+  h.pr.title = 'docs: update';
+  h.context.payload.issue.labels = [];
+  await h.run();
+  assert.equal(h.calls.filter(([name]) => name === 'addLabels').length, 1);
+  assert.deepEqual(h.pr.labels, [{ name: 'enhancement' }]);
+});
+
+test('issue body edits make no API calls; opened and reopened events use the issue endpoint', async () => {
+  for (const changes of [undefined, {}, { body: { from: 'old body' } }]) {
+    const h = harness('[Bug]: repair', { isIssue: true, action: 'edited', changes });
+    await h.run();
+    assert.deepEqual(h.calls, []);
+  }
+  for (const action of ['opened', 'reopened']) {
+    const h = harness('[Bug]: repair', { isIssue: true, action });
+    await h.run();
+    assert.deepEqual(h.calls.at(-1), ['addLabels', { ...repo, issue_number: 123, labels: ['bug'] }]);
+  }
+});
+
+test('issues skip missing repository labels and surface permission or API failures', async () => {
+  const h = harness('[Bug]: repair', {
+    isIssue: true, labelError: Object.assign(new Error('Not Found'), { status: 404 }),
+  });
+  await h.run();
+  assert.deepEqual(h.calls.map(([name]) => name), ['get', 'getLabel']);
+  assert.deepEqual(h.pr.labels, []);
+  assert.equal(h.messages.length, 1);
+  for (const status of [403, 500]) {
+    const error = Object.assign(new Error('API failure'), { status });
+    await assert.rejects(harness('[Bug]: repair', { isIssue: true, labelError: error }).run(), error);
+    await assert.rejects(harness('[Bug]: repair', { isIssue: true, addError: error }).run(), error);
   }
 });

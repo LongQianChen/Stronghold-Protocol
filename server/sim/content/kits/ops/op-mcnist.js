@@ -207,7 +207,7 @@ function chargeGraf(battle, mcn, t, b3) {
   const atk = mcn.s.atk, scale = num(b3.atk_scale, 3), radius = num(b3.projectile_range, 1.5);
   battle.after(CHARGE_DELAY + dist / CHARGE_SPEED, () => {
     battle.fx('aoe', { x: stop[1], y: stop[0], radius, id: mcn.id, skill: 'mcnist:charge' });
-    for (const e of battle.foesInRadius(stop[1], stop[0], radius)) {
+    for (const e of battle.foesInColliderRadius(stop[1], stop[0], radius)) {
       if (e.alive) battle.dealDamage(mcn, e, { amount: atk * scale, type: 'phys', isSkill: true, tags: ['skill', 'mcnist:charge'] });
     }
     if (t.alive || t.removed || battle.finished) return;
@@ -250,7 +250,7 @@ export default {
               const atk = unit.s.atk;
               for (let i = 1; i < s1Times; i++) {
                 battle.after(s1Iv * i, () => {
-                  for (const e of battle.foesInRadius(x, y, s1Radius)) {
+                  for (const e of battle.foesInColliderRadius(x, y, s1Radius)) {
                     if (e.alive) battle.dealDamage(unit, e, { amount: atk * s1Scale, type: 'phys', isAttack: true, isSplash: true, isSkill: true, tags: ['skill', 'mcnist:cluster'] });
                   }
                 }, { owner: unit });

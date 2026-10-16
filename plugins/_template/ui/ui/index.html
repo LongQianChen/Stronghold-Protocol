@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>伤害统计</title>
+<style>
+  html, body { margin: 0; background: transparent; color: #e8e0d0; font: 12px/1.3 sans-serif; }
+  body { padding: 4px 6px; }
+  #label { opacity: .7; font-size: 10px; letter-spacing: .04em; }
+  #n { font-variant-numeric: tabular-nums; font-size: 16px; }
+</style>
+</head>
+<body>
+<div id="label">伤害</div>
+<div id="n">0</div>
+<script>
+(function () {
+  var total = 0;
+  var shown = false;
+  function paint() {
+    var el = document.getElementById('n');
+    if (el) el.textContent = String(total);
+  }
+  // The host maps engine tuples by position: ['dmg', unitId, amount, kind] arrives as
+  // { t:'dmg', unitId, amount }. The HP number is `amount`, never the first number in the tuple.
+  // `damage` is the object form a debug feed may still send. hit / hpDamage are not engine tags.
+  function amountOf(ev) {
+    if (!ev) return 0;
+    var tag = ev.t || ev.type || ev.kind;
+    if (tag !== 'dmg' && tag !== 'damage') return 0;
+    var n = ev.amount;
+    return typeof n === 'number' && isFinite(n) ? n : 0;
+  }
+  window.addEventListener('message', function (ev) {
+    var m = ev.data;
+    if (!m || m.v !== 1 || typeof m.t !== 'string') return;
+    if (m.t === 'welcome') {
+      parent.postMessage({ v: 1, t: 'ready' }, '*');
+      return;
+    }
+    if (m.t === 'rejected' && m.reason === 'intent') {
+      document.documentElement.setAttribute('data-rejected', 'intent');
+      return;
+    }
+    if (m.t === 'storage' && m.op === 'get' && m.ok && typeof m.value === 'number' && !shown) {
+      total = m.value;
+      shown = true;
+      paint();
+      return;
+    }
+    if (m.t !== 'battle' || !Array.isArray(m.events)) return;
+    var added = 0;
+    for (var i = 0; i < m.events.length; i++) added += amountOf(m.events[i]);
+    if (!added) return;
+    total += added;
+    shown = true;
+    paint();
+    parent.postMessage({ v: 1, t: 'storage', op: 'set', key: 'total', value: total }, '*');
+  });
+  parent.postMessage({ v: 1, t: 'ready' }, '*');
+  parent.postMessage({ v: 1, t: 'slot', slot: 'hud.right' }, '*');
+  parent.postMessage({ v: 1, t: 'resize', height: 72 }, '*');
+  parent.postMessage({ v: 1, t: 'storage', op: 'get', key: 'total' }, '*');
+})();
+</script>
+</body>
+</html>

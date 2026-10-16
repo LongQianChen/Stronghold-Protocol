@@ -335,7 +335,7 @@ H.SERVER_SELL_CHESS_GAIN_SPECIAL_GOODS = {
     const tier = pool && Number.isInteger(pool.tier) ? pool.tier : null;
     const count = Math.max(1, num(ctx.gd.rewardOffer ? ctx.gd.rewardOffer().count : 3, 3));
     const list = [];
-    for (let i = 0; i < count * 4 && list.length < count; i++) {
+    for (let i = 0; i < count * 4 && list.length < count; i++) { // loop-cap: 4 × rewardOffer().count (≤ MAX_OFFER_SLOTS)
       const r = ctx.rollPool(poolId);
       if (r && r.kind === 'chess' && !list.includes(r.id)) list.push(r.id);
     }

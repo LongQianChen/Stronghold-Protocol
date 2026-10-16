@@ -27,6 +27,9 @@
 // registerAllMeta(registry) — calls each domain module's registerMeta(registry) (prep side, server boot).
 
 import { genericKit, genericTalents } from './generic.js';
+import { EXTENSIONS, installExtensions } from './extensions.js';
+import { compileDsl } from './dsl/compile.js';
+import { validateSkillSpec, matchesSchema, MODS_SCHEMA } from '../../../shared/plugins/skillSpec.js';
 import { withUnitLoadouts } from '../simdata.js';
 import { isPotential } from '../../../shared/potential.js';
 
@@ -80,11 +83,62 @@ const isOtherBody = (def) => isStandInDef(def) || isDiyDef(def);
  * names the replaced operator's kit (a DIY slot has none). Any other def: baseId (`…_a`, data/SIM.md), the exact id, or
  * the suffix-less id of DESIGN §5.6's example.
  */
-export function kitOf(def, reg) {
+function registeredKit(def, reg) {
   if (!def || !reg) return undefined;
   if (isOtherBody(def)) return Object.prototype.hasOwnProperty.call(reg, def.charId) ? reg[def.charId] : undefined;
   const bare = String(def.baseId ?? def.id ?? '').replace(/_[ab]$/, '');
-  return reg[def.baseId] ?? reg[def.id] ?? reg[bare];
+  return [def.baseId, def.id, bare].map(k => Object.hasOwn(reg, k) ? reg[k] : undefined).find(Boolean);
+}
+
+/** Official kit key or file stem; no path supplied by a plugin is ever imported. */
+export function officialKit(ref) {
+  if (Object.hasOwn(KITS, ref)) return KITS[ref];
+  const file = Object.values(KIT_REGISTRY.KIT_FILES || {}).flat().concat(KIT_REGISTRY.STANDIN_KIT_FILES || [], KIT_REGISTRY.OPERATOR_KIT_FILES || [])
+    .find(f => f.replace(/\.js$/, '') === ref);
+  if (!file) return undefined;
+  const stem = file.replace(/\.js$/, '');
+  if (stem.startsWith('chess_')) return KITS[stem.split('-')[0] + '_a'];
+  const code = stem.replace(/^(op|standin)-/, '');
+  return Object.entries(KITS).find(([k]) => k.startsWith('char_') && k.endsWith('_' + code))?.[1];
+}
+
+/**
+ * [ASSUMED] A one-skill DIY or stand-in uses that kit's default skill (DESIGN §32.5). Multi-skill clones keep
+ * explicit `skills[id]` so selectSkillSpec does not treat the default spec as every selected skill.
+ */
+function bindDefaultSkill(k, chess, d) {
+  if (k?.skill && isOtherBody(d) && chess?.skills?.length === 1 && d?.skill?.id && !k.skills?.[d.skill.id]) {
+    return { ...k, skills: { ...(k.skills || {}), [d.skill.id]: k.skill } };
+  }
+  return k;
+}
+
+/** C2 order: extension → DSL → JSON SkillSpec → kitRef → official → generic. */
+export function kitOf(def, reg = KITS) {
+  if (!def) return undefined;
+  // Explicit Battle opts.kits retain their existing precedence and lookup-only semantics.
+  if (reg !== KITS) return registeredKit(def, reg);
+  const ext = registeredKit(def, EXTENSIONS) ?? (def.charId?.startsWith('char_x_') ? EXTENSIONS[def.charId] : undefined);
+  if (ext) return ext;
+  const raw = def.raw || {};
+  if (raw.dsl != null) return (bb, chess, d) => bindDefaultSkill(compileDsl(raw.dsl, { bb, chess, def: d }), chess, d);
+  if (raw.skillSpec != null) return (bb, chess, d) => {
+    const spec = chess.skill?.skillSpec ?? raw.skillSpec;
+    const errors = validateSkillSpec(spec);
+    const mods = chess.talentMods ?? {};
+    if (errors.length || !matchesSchema(mods, MODS_SCHEMA)) throw Object.assign(new Error('Invalid JSON SkillSpec'), { code: 'PLUGIN_SKILL_SPEC' });
+    return { skills: { [d.skill?.id]: spec }, talents: Object.keys(mods).length ? [{ install(b, u) {
+      b.addBuff(u, { key: 'talent:plugin', mods, persist: true, allowDead: true });
+    } }] : [] };
+  };
+  if (raw.kitRef != null) {
+    const f = officialKit(raw.kitRef);
+    if (!f) return undefined;
+    return (bb, chess, d) => {
+      return bindDefaultSkill(f(bb, chess, d), chess, d);
+    };
+  }
+  return registeredKit(def, KITS);
 }
 
 /** The generic kit of an operator def; a stand-in's / 自选 piece's also carries the talents generic.js can apply exactly. */
@@ -118,6 +172,22 @@ export function setupUnitKit(battle, unit, mode = 'full') {
         const k = f(bb, raw, def);
         if (k) return selectSkillSpec(k, bb, raw, def);
       } catch (e) {
+        const dslCode = typeof e?.code === 'string' && /^PLUGIN_DSL_[A-Z0-9_]+$/.test(e.code);
+        // A record that carries DSL, or a throw whose code is a DSL problem, is a corrupt content set.
+        // Do not substitute the generic kit or an empty kit (DESIGN §32.7). Any other throw still falls back.
+        // Matched as a pattern, not a quoted PLUGIN_* name: the error catalogue scans those strings.
+        if (dslCode || raw.dsl != null) {
+          if (e && typeof e === 'object') {
+            e.contentFault = true;
+            if (typeof e.code === 'string' && !String(e.message || '').includes(e.code)) e.message = `${e.code} ${e.message || ''}`.trim();
+          }
+          battle.contentFault = {
+            layer: 'setupUnitKit',
+            code: typeof e?.code === 'string' ? e.code : 'PLUGIN_DSL_SHAPE',
+            message: String(e?.message || e),
+          };
+          throw e;
+        }
         battle._handlerError(`kit:${isOtherBody(def) ? def.charId : def.baseId}`, unit, e);
       }
     }
@@ -254,9 +324,16 @@ export function installContent(battle, { mode = 'full', extra = null } = {}) {
   } catch (e) { battle._handlerError?.('loadoutView', null, e); }
   for (const u of battle.allyUnits) {
     if (u.kit) continue;
-    try { battle._setupUnit(u); } catch (e) { battle._handlerError('setupUnit', u, e); }
+    try { battle._setupUnit(u); } catch (e) {
+      if (e?.contentFault || battle.contentFault) {
+        battle._handlerError('content:dsl', u, e);
+        throw e;
+      }
+      battle._handlerError('setupUnit', u, e);
+    }
   }
   if (mode === 'full') {
+    installExtensions(battle);
     for (const [name, mod] of MODULES) {
       if (typeof mod.install !== 'function') continue;
       try { mod.install(battle); } catch (e) { battle._handlerError(`content:${name}`, null, e); }

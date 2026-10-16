@@ -1,0 +1,562 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The asset overlay of a cosmetic plugin (\"assets\" of plugin.json)",
+  "description": "The shape of data/assets.json (docs/ASSETS.md \"Manifest schema\"): what a cosmetic plugin replaces — avatars, portraits, Spine models, icons, interface pictures, voices, sounds, music. A value is a path inside the plugin folder, a Spine model { skel, atlas, textures } or a reference { \"ref\": \"<key>\" } to the installation's own entry. docs/PLUGINS.md §9; the checks: shared/plugins/visual.js readAssetOverlay (node tools/plugin.mjs check). Accepted here = the checks find neither a problem nor a warning in the shape; what only the checks see: whether the files exist, whether a reference names an entry this installation has, the permissions the writes need, the atlas beside its skeleton, the limits.",
+  "type": "object",
+  "properties": {
+    "chars": {
+      "description": "Operators by charId (char_102_texas …).",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/charRecord"
+      }
+    },
+    "enemies": {
+      "description": "Enemies by key (enemy_1007_slime …).",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/enemyRecord"
+      }
+    },
+    "tokens": {
+      "description": "Summons by tokenId.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/tokenRecord"
+      }
+    },
+    "bonds": {
+      "description": "Bond icons by bondId.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "items": {
+      "description": "Item icons by iconId / trapId.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "bands": {
+      "description": "Strategy icons by bandId.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "skills": {
+      "description": "Skill icons by iconId.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "modules": {
+      "description": "Module type icons by type.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "ui": {
+      "description": "Interface pictures by \"group/key\".",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/assetKey"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "prof": {
+      "type": "object",
+      "description": "Profession icons.",
+      "properties": {
+        "icon": {
+          "description": "Profession icon pictures.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/image"
+          }
+        },
+        "large": {
+          "description": "Profession large pictures.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/image"
+          }
+        },
+        "battlecard": {
+          "description": "Profession battlecard pictures.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/image"
+          }
+        },
+        "sub": {
+          "description": "Profession sub pictures.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/image"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "audio": {
+      "type": "object",
+      "description": "Music, voices and sounds.",
+      "properties": {
+        "bgm": {
+          "type": "object",
+          "description": "The named music tracks (not combatAlts: the mode's own tracks, which a plugin does not change).",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "properties": {
+            "lobby": {
+              "$ref": "#/$defs/track"
+            },
+            "prep": {
+              "$ref": "#/$defs/track"
+            },
+            "combat": {
+              "$ref": "#/$defs/track"
+            },
+            "unite": {
+              "$ref": "#/$defs/track"
+            },
+            "boss": {
+              "$ref": "#/$defs/track"
+            }
+          },
+          "additionalProperties": false
+        },
+        "bossBgm": {
+          "description": "A leader's own music by boss id.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/track"
+          }
+        },
+        "voice": {
+          "description": "Battle lines (Chinese dub) by charId.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/voiceRecord"
+          }
+        },
+        "voiceJp": {
+          "description": "Battle lines (Japanese dub) by charId.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/assetKey"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/voiceRecord"
+          }
+        },
+        "sfx": {
+          "type": "object",
+          "description": "Sounds.",
+          "properties": {
+            "ui": {
+              "description": "Interface sounds by key.",
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/assetKey"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/audio"
+              }
+            },
+            "battle": {
+              "description": "Battle sounds by key.",
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/assetKey"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/audio"
+              }
+            },
+            "units": {
+              "description": "A unit's own sounds by its asset id.",
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/assetKey"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/unitSounds"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "path": {
+      "type": "string",
+      "description": "A path inside the plugin folder: letters, digits, . _ - and spaces, folders with /; no part starting with \".\" and no leading or trailing space.",
+      "pattern": "^(?=.{1,200}$)(?!\\.)(?!.*/\\.)(?! )(?!.* /)(?!.*/ )(?!.* $)[A-Za-z0-9._ -]+(?:/[A-Za-z0-9._ -]+)*$"
+    },
+    "imagePath": {
+      "description": "A picture of the plugin folder: .png .jpg .webp (no SVG).",
+      "allOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "pattern": "\\.(?:[pP][nN][gG]|[jJ][pP][gG]|[wW][eE][bB][pP])$"
+        }
+      ]
+    },
+    "audioPath": {
+      "description": "A sound of the plugin folder: .mp3 .ogg.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "pattern": "\\.(?:[mM][pP]3|[oO][gG][gG])$"
+        }
+      ]
+    },
+    "skelPath": {
+      "description": "A Spine 3.8 binary skeleton (.skel) of the plugin folder.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "pattern": "\\.[sS][kK][eE][lL]$"
+        }
+      ]
+    },
+    "atlasPath": {
+      "description": "A Spine atlas (.atlas) next to its skeleton, with its name.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/path"
+        },
+        {
+          "pattern": "\\.[aA][tT][lL][aA][sS]$"
+        }
+      ]
+    },
+    "assetKey": {
+      "type": "string",
+      "description": "An entry of the art manifest (an id, a \"group/key\").",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*$",
+      "not": {
+        "enum": [
+          "__proto__",
+          "constructor",
+          "prototype"
+        ]
+      }
+    },
+    "leafRef": {
+      "type": "object",
+      "description": "That field of another entry of the installation's manifest: { \"ref\": \"char_112_siege\" } (no other key).",
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey"
+        }
+      },
+      "additionalProperties": false
+    },
+    "image": {
+      "description": "A picture: a path, or a reference.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/imagePath"
+        },
+        {
+          "$ref": "#/$defs/leafRef"
+        }
+      ]
+    },
+    "audio": {
+      "description": "A sound: a path, or a reference.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/audioPath"
+        },
+        {
+          "$ref": "#/$defs/leafRef"
+        }
+      ]
+    },
+    "audioList": {
+      "description": "A sound or a list of 1–16 played in turn, or a reference.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/audioPath"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/audioPath"
+          }
+        },
+        {
+          "$ref": "#/$defs/leafRef"
+        }
+      ]
+    },
+    "track": {
+      "description": "A music track, replaced as a whole: the loop and an optional intro played once before it; or a reference.",
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "loop"
+          ],
+          "properties": {
+            "loop": {
+              "$ref": "#/$defs/audioPath"
+            },
+            "intro": {
+              "$ref": "#/$defs/audioPath"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/$defs/leafRef"
+        }
+      ]
+    },
+    "spine": {
+      "description": "A Spine 3.8 model: the skeleton, its atlas (default <name>.atlas beside it) and the atlas pages (default <name>.png); its clips come from plugin.lock.json (node tools/plugin.mjs pack), never by hand — \"anims\": \"auto\" or nothing. Or a reference.",
+      "anyOf": [
+        {
+          "type": "object",
+          "required": [
+            "skel"
+          ],
+          "properties": {
+            "skel": {
+              "$ref": "#/$defs/skelPath"
+            },
+            "atlas": {
+              "$ref": "#/$defs/atlasPath"
+            },
+            "textures": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/imagePath"
+              }
+            },
+            "pma": {
+              "type": "boolean"
+            },
+            "anims": {
+              "const": "auto"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "$ref": "#/$defs/leafRef"
+        }
+      ]
+    },
+    "charRecord": {
+      "description": "An operator: its pictures and models.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey",
+          "description": "A whole entry of the installation's manifest (data/assets.json) of the same container; the other keys then change fields of it."
+        },
+        "avatar": {
+          "$ref": "#/$defs/image"
+        },
+        "avatarE2": {
+          "$ref": "#/$defs/image"
+        },
+        "portrait": {
+          "$ref": "#/$defs/image"
+        },
+        "portraitE2": {
+          "$ref": "#/$defs/image"
+        },
+        "spine": {
+          "type": "object",
+          "description": "The battle models: front, and back for one facing up.",
+          "properties": {
+            "ref": {
+              "$ref": "#/$defs/assetKey"
+            },
+            "front": {
+              "$ref": "#/$defs/spine"
+            },
+            "back": {
+              "$ref": "#/$defs/spine"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "enemyRecord": {
+      "description": "An enemy: its icon and model.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey",
+          "description": "A whole entry of the installation's manifest (data/assets.json) of the same container; the other keys then change fields of it."
+        },
+        "icon": {
+          "$ref": "#/$defs/image"
+        },
+        "spine": {
+          "$ref": "#/$defs/spine"
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenRecord": {
+      "description": "A summon: its avatar and model.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey",
+          "description": "A whole entry of the installation's manifest (data/assets.json) of the same container; the other keys then change fields of it."
+        },
+        "avatar": {
+          "$ref": "#/$defs/image"
+        },
+        "spine": {
+          "$ref": "#/$defs/spine"
+        }
+      },
+      "additionalProperties": false
+    },
+    "voiceRecord": {
+      "type": "object",
+      "description": "An operator's lines by slot (start, faceEnemy, select, place, skill1 … the installation's keys).",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey"
+        }
+      },
+      "patternProperties": {
+        "^(?!ref$)[A-Za-z][A-Za-z0-9]{0,31}$": {
+          "$ref": "#/$defs/audioList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "indexedSounds": {
+      "type": "object",
+      "description": "Sounds by skill index (0–99).",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey"
+        }
+      },
+      "patternProperties": {
+        "^\\d{1,2}$": {
+          "$ref": "#/$defs/audio"
+        }
+      },
+      "additionalProperties": false
+    },
+    "unitSounds": {
+      "description": "A unit's own sounds.",
+      "type": "object",
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/assetKey",
+          "description": "A whole entry of the installation's manifest (data/assets.json) of the same container; the other keys then change fields of it."
+        },
+        "attack": {
+          "$ref": "#/$defs/audio"
+        },
+        "hit": {
+          "$ref": "#/$defs/audio"
+        },
+        "skill": {
+          "$ref": "#/$defs/audio"
+        },
+        "die": {
+          "$ref": "#/$defs/audio"
+        },
+        "born": {
+          "$ref": "#/$defs/audio"
+        },
+        "skills": {
+          "$ref": "#/$defs/indexedSounds"
+        },
+        "attacks": {
+          "$ref": "#/$defs/indexedSounds"
+        },
+        "hits": {
+          "$ref": "#/$defs/indexedSounds"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

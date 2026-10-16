@@ -3,7 +3,7 @@
 // DESIGN §14. Pure ESM (served at /sim/spec.js): no Node API.
 //
 //   const spec = buildBattleSpec({ battleId, fieldId, kind, seed, modeId, round, stageId, rect, timeLimit, players,
-//                                  spawns, routes, flags, enemyOverrides, waveId, bossId, content, boss })
+//                                  spawns, routes, flags, enemyOverrides, waveId, bossId, content, boss, cs, vs })
 //   const battle = createBattleFromSpec(spec, dataSource, { sharedBoss?, BattleClass?, logger?, recordEvents?, quiet? })
 //
 // A spec is JSON-safe by construction (it IS the JSON round trip of its inputs: `undefined` / functions vanish,
@@ -30,10 +30,17 @@
 // `cultivate` (练度 0–3: the effects.json CHAR_MAP aceffect_char_1…4 — a ×ATK / ×DEF / ×max HP of the unit, its own
 // multiplier); each kept only when well-formed and never on a stand-in. Absent: full potential and no 练度 (a raw
 // unit — the match always states both for an owned operator: PlayerState.battleInput).
+// Content identity (DESIGN §32): `cs`, the content hash of the room's content set (shared/plugins/identity.js; 64 hex
+// digits), is kept when well-formed and left out otherwise — a spec built without one is what it always was. The sim
+// never reads it: it names what the battle runs on — a browser that has not loaded that content is no authority of the
+// battle and a b.result naming another one is refused (P1c, DESIGN §32.6) —, the diagnostics and replays. `vs` (P1c), the
+// room's visual set of cosmetic plugins (shared/plugins/visual.js; 64 hex digits), likewise: kept when well-formed, never
+// read by the sim — a replay or a bug report names the art the battle was drawn with.
 
 import { Battle } from './Battle.js';
 import { toDataSource, withUnitLoadouts } from './simdata.js';
 import { isPotential, isCultivate } from '../../shared/potential.js';
+import { isContentHash } from '../../shared/plugins/identity.js';
 import { BOSS_POOL_MIN_HP } from './constants.js';
 
 export const SPEC_VERSION = 1;
@@ -79,6 +86,9 @@ export function buildBattleSpec(o = {}) {
     bossId: o.bossId ?? null,
     content: o.content ?? 'full',
     boss: bossLike && o.boss ? { poolHp: Number(o.boss.poolHp) || 0, poolMax: Number(o.boss.poolMax) || 1 } : null,
+    // the content set the battle runs on and the art it was drawn with (header): not read by the sim
+    ...(isContentHash(o.cs) ? { cs: o.cs } : {}),
+    ...(isContentHash(o.vs) ? { vs: o.vs } : {}),
   };
   const out = JSON.parse(JSON.stringify(spec, specReplacer));
   for (const p of out.players) for (const u of (p && Array.isArray(p.units) ? p.units : [])) if (u && typeof u === 'object') sanitizeUnitLoadout(u);
@@ -323,9 +333,18 @@ function numberOrNull(v, cap = Infinity) {
 const r4 = (v) => Math.round((Number(v) || 0) * 1e4) / 1e4;
 const modsKey = (m) => (m && typeof m === 'object' ? JSON.stringify(Object.keys(m).filter((k) => m[k] !== undefined).sort().map((k) => [k, m[k]])) : '');
 
+/** Actual enemy kills credited to a player, with a fallback for older reports. @param {any} player */
+export function creditedKillsOf(player) {
+  if (Number.isInteger(player?.creditedKills) && player.creditedKills >= 0) return player.creditedKills;
+  // Compatibility with battle reports made before the summary existed; never use wave-owned `killed` here.
+  return (Array.isArray(player?.unitStats) ? player.unitStats : []).reduce((n, u) => n + (Number.isFinite(u?.kills) ? Math.max(0, Math.trunc(u.kills)) : 0), 0);
+}
+
 /**
  * Canonical summary of a BattleResult (everything the match consumes): used to compare a client's result with the
- * server's re-simulation (SP_VERIFY) and by the determinism tests. Returns `{ json, hash }`.
+ * server's re-simulation (SP_VERIFY) and by the determinism tests. Returns `{ json, hash }`. The statistics-only
+ * `creditedKills` (PR #509) is left out: the match never reads it for an outcome, so it must not split a client's and the
+ * server's digests (a report without it falls back to the capped unitStats).
  */
 export function resultDigest(result) {
   const res = result && typeof result === 'object' ? result : {};
@@ -387,6 +406,7 @@ export function compactResult(res) {
       // `killed` keeps the sim's reading (every counted knock-out, runtime splits / summons included) and is deliberately
       // NOT clamped to `total`: the denominator counts only the round's own scheduled enemies (Battle.resolved)
       killed: Math.max(0, Math.trunc(fnum(p.killed))),
+      creditedKills: creditedKillsOf(p),
       total,
       leaked: leakEntries(p).map((l) => {
         const o = { enemyKey: l.enemyKey, mods: compactMods(l.mods), lpr: leakLpr(l), sourcePlayerId: keyOr(l.sourcePlayerId), tag: typeof l.tag === 'string' && l.tag.length <= 16 ? l.tag : null, counted: l.counted !== false };

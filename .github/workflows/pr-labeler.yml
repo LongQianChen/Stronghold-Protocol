@@ -1,16 +1,20 @@
-name: PR title labels
+name: PR and issue title labels
 
 on:
   pull_request_target:
     types: [opened, edited, reopened]
+  issues:
+    types: [opened, edited, reopened]
 
-permissions:
-  pull-requests: write
+permissions: {}
 
 jobs:
   label:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      pull-requests: write
     steps:
       # Run only this trusted script; never check out or execute PR head code.
       - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
@@ -30,6 +34,46 @@ jobs:
               fix: 'bug', bug: 'bug', docs: 'documentation', feat: 'enhancement', feature: 'enhancement',
             }[match[1].toLowerCase()];
             if (pr.labels.some(({ name }) => name.toLowerCase() === label)) return;
+
+            // Only use labels already defined in this repository.
+            try {
+              await github.rest.issues.getLabel({ ...context.repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              core.info(`Skipping missing repository label: ${label}`);
+              return;
+            }
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: context.issue.number,
+              labels: [label],
+            });
+
+  issue-label:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      # Read issue metadata only; never check out code or interpolate titles into executable input.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            if (context.payload.action === 'edited' && !context.payload.changes?.title) return;
+
+            // Fetch current metadata so delayed events do not use an outdated title or labels.
+            const { data: issue } = await github.rest.issues.get({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const labels = { fix: 'bug', bug: 'bug', docs: 'documentation', feat: 'enhancement', feature: 'enhancement' };
+            // This is a fallback: keep any category supplied by a template or a maintainer.
+            if (issue.labels.some(({ name }) => Object.values(labels).includes(name.toLowerCase()))) return;
+
+            const match = /^(?:\[(bug|feature)\]|(fix|bug|docs|feat|feature)(?:\([^()\r\n]+\))?)[:：]/i.exec(issue.title.trim());
+            if (!match) return;
+            const label = labels[(match[1] || match[2]).toLowerCase()];
 
             // Only use labels already defined in this repository.
             try {

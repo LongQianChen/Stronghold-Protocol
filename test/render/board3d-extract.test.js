@@ -41,8 +41,13 @@ describe('extract.py board jobs', { skip: !PY && 'no python3' }, () => {
     assert.equal(by['map/common'].bundle, 'arts/maps/common/res.ab');
     assert.ok(new RegExp(by['map/common'].keep).test('TX_wind_device') && !new RegExp(by['map/common'].keep).test('TX_R6_bomb'));
     assert.ok(new RegExp(by['map/water'].keep).test('[ucp]TX_water_normal'));
-    // no new mesh/ groups (the board meshes of DESIGN §15 stay the four of the mesh job table)
-    assert.equal(jobs.filter((j) => j.sub.startsWith('mesh/')).length, 4);
+    // the board meshes of DESIGN §15 (the four of the mesh job table) and the official 射击台 model (round 40): of the
+    // 卫戍协议 device bundle only trap_1106_achplat's mesh / texture / material / GameObject are kept
+    assert.equal(jobs.filter((j) => j.sub.startsWith('mesh/')).length, 5);
+    assert.equal(by['mesh/trap_110'].bundle, 'arts/maps/common/trap/trap_110.ab');
+    const keep = new RegExp(by['mesh/trap_110'].keep);
+    for (const n of ['trap_1106_achplat', 'TX_trap_1106_achplat', 'MT_trap_1106_achplat']) assert.ok(keep.test(n), n);
+    for (const n of ['trap_1105_accrate', 'TX_trap_1105_accrate', 'TX_trap_1101_acplane_D', 'trap_1106_achplat_old']) assert.ok(!keep.test(n), n);
     assert.deepEqual(derived.map((d) => [d.sub, d.from, d.derive, d.name]), [
       ['map/autochess', 'TX_autochessi_N', 'normal_rg', 'TX_autochessi_N_rgb'],
       ['map/autochess', 'TX_autochessi_M', 'rough_from_gloss', 'TX_autochessi_M_rough'],

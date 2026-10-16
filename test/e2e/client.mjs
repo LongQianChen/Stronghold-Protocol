@@ -47,6 +47,86 @@ export async function waitForFunctionLong(page, fn, { timeout = 30000, polling =
   }
 }
 
+// ---- drags that aim after the pickup (GitHub #602, PR #646) ---------------------------------------------------------
+// Picking a piece up on the own prep board folds the shop bar and zooms the board to the shop-collapsed camera: a client
+// point read before the press lies over another tile once that camera settles (FOLD_CAMERA_MS). A drag that read its
+// target before the press therefore picks the piece up first, waits for the camera, and ends on the same ground spot
+// under the new camera — as a player aims at the board they see. No-ops on the DOM fallback (its grid does not move).
+
+/** The ground spot under client point `p` (world x / y on the tile top there and its height), or null (DOM fallback, off the board). */
+export function groundAnchor(page, p) {
+  if (!p) return Promise.resolve(null);
+  return page.evaluate((p) => {
+    const d = globalThis.__SP_VIEW__?.raw?.debug;
+    if (!d?.pick?.groundTile || !d.app?.view) return null;
+    const r = d.app.view.getBoundingClientRect();
+    const g = d.pick.groundTile(p.x - r.left, p.y - r.top);
+    return g ? { x: g.x, y: g.y, z: d.tiles.heightAt(g.row, g.col) } : null;
+  }, p);
+}
+
+/** The client point of a ground spot (`groundAnchor`) under the camera of the moment, or null. */
+export function anchorPoint(page, a) {
+  if (!a) return Promise.resolve(null);
+  return page.evaluate((a) => {
+    const d = globalThis.__SP_VIEW__?.raw?.debug;
+    if (!d?.cam || !d.app?.view) return null;
+    const r = d.app.view.getBoundingClientRect();
+    const q = d.cam.project(a.x, a.y, a.z);
+    return Number.isFinite(q?.x) && Number.isFinite(q?.y) ? { x: r.left + q.x, y: r.top + q.y } : null;
+  }, a);
+}
+
+/** Wait until the render engine's camera holds still for a few frames (at most `ms`); resolves at once without it. */
+export function cameraSettled(page, ms = 1500) {
+  return page.evaluate((ms) => new Promise((resolve) => {
+    const cam = () => globalThis.__SP_VIEW__?.raw?.debug?.cam;
+    if (!cam()) { resolve(false); return; }
+    const t0 = performance.now();
+    let last = '', still = 0;
+    const tick = () => {
+      const now = JSON.stringify(cam()?.params?.() ?? null);
+      still = now === last ? still + 1 : 0;
+      last = now;
+      if (still >= 3 && performance.now() - t0 > 80) resolve(true);
+      else if (performance.now() - t0 > ms) resolve(false);
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }), ms);
+}
+
+/**
+ * A mouse drag from `from` towards `to` that aims after the pickup (see above): the first `lead` of `steps` moves pick
+ * the piece up, then the rest of the path ends on `to`'s ground spot under the settled camera — or on `retarget()`'s
+ * point when given (DOM UI that the fold moved, e.g. the folded shop's tab). `before()` runs right before the release
+ * (a mid-drag screenshot). Returns the point released on.
+ * @param {any} page
+ * @param {{x:number,y:number}} from
+ * @param {{x:number,y:number}} to
+ * @param {{ steps?: number, lead?: number, pause?: number, settle?: number, before?: Function|null, retarget?: Function|null }} [o]
+ */
+export async function aimedDrag(page, from, to, { steps = 14, lead = 3, pause = 14, settle = 160, before = null, retarget = null } = {}) {
+  const m = page.mouse;
+  const anchor = await groundAnchor(page, to);
+  await m.move(from.x, from.y);
+  await m.down();
+  const n0 = Math.max(1, Math.min(lead, steps));
+  const at = (k) => ({ x: from.x + ((to.x - from.x) * k) / steps, y: from.y + ((to.y - from.y) * k) / steps });
+  for (let i = 1; i <= n0; i++) { const p = at(i); await m.move(p.x, p.y); await sleep(pause); }
+  let dest = to;
+  if (anchor || retarget) {
+    await cameraSettled(page);
+    dest = (retarget ? await retarget() : null) || (await anchorPoint(page, anchor)) || to;
+  }
+  const start = at(n0), rest = steps - n0;
+  for (let i = 1; i <= rest; i++) { await m.move(start.x + ((dest.x - start.x) * i) / rest, start.y + ((dest.y - start.y) * i) / rest); await sleep(pause); }
+  await sleep(settle);
+  if (before) await before();
+  await m.up();
+  return dest;
+}
+
 /** A free TCP port on 127.0.0.1. */
 export function freePort() {
   return new Promise((resolve, reject) => {
@@ -59,13 +139,13 @@ export function freePort() {
 /**
  * Start the real server (`node server/index.js`, or test/e2e/fastServer.mjs with `fast` speed-ups) on a free port (or
  * `port`: e.g. the port of a server just stopped — a server restart the open clients reconnect to).
- * @param {{ port?: number, fast?: { timerScale?: number, combatSpeed?: number, startRound?: 'boss'|'hidden'|number, kit?: number, chess?: string[],
+ * @param {{ port?: number, pluginsDir?: string, fast?: { timerScale?: number, combatSpeed?: number, startRound?: 'boss'|'hidden'|number, kit?: number, chess?: string[],
  *   items?: string[], idleBots?: boolean, kits?: string[][], botChess?: string[], autoPlace?: boolean, eliminate?: number[], stage?: string,
  *   finishAfter?: number, slowSpawns?: string } }} [opts]
  *   kits: per-human starter kits (seat order); botChess: the AI seats' kit; autoPlace: the kits go onto the board at the
  *   first prep; eliminate: humans (seat order) eliminated at the jump; stage: the stage of every match; finishAfter: the
  *   match ends (RESULT) once that round has settled; slowSpawns: '<humanIdx>:<factor>' — that human's normal battles
- *   spawn at factor × the scheduled times — fastServer.mjs hooks
+ *   spawn at factor × the scheduled times — fastServer.mjs hooks; pluginsDir (with `fast`): the server's plugin folders
  * @returns {Promise<{ base: string, port: number, logs: string[], stop: (o?: { hard?: boolean }) => Promise<void> }>}
  */
 export async function startRealServer(opts = {}) {
@@ -92,6 +172,7 @@ export async function startRealServer(opts = {}) {
     if (opts.fast.level) env.SP_START_LEVEL = String(opts.fast.level);
     if (opts.fast.finishAfter) env.SP_FINISH_AFTER = String(opts.fast.finishAfter);
     if (opts.fast.slowSpawns) env.SP_SLOW_SPAWNS = String(opts.fast.slowSpawns);
+    if (opts.pluginsDir) env.SP_PLUGINS_DIR = opts.pluginsDir;
   }
   const child = spawn(process.execPath, [entry], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
   const logs = [];
@@ -150,7 +231,9 @@ export class Client {
     page.on('pageerror', (e) => this.problems.push(`pageerror: ${e.message}`));
     page.on('requestfailed', (r) => {
       const err = r.failure()?.errorText || '';
-      if (err === 'net::ERR_ABORTED' && /\.(mp3|ogg|wav|m4a)(\?|$)/.test(r.url())) return; // media element swaps
+      // media element swaps, and an <img> whose src changes while it loads (the shop's 冻结 icon flips between
+      // frozen_icon and frozen_icon2): the browser cancels the old request — not a failure of the page
+      if (err === 'net::ERR_ABORTED' && /\.(mp3|ogg|wav|m4a|png|webp|jpe?g|gif|svg)(\?|$)/.test(r.url())) return;
       this.problems.push(`requestfailed: ${r.url()} ${err}`);
     });
     page.on('response', (r) => { if (r.status() >= 400) this.problems.push(`http ${r.status()}: ${r.url()}`); });
@@ -339,18 +422,13 @@ export class Client {
     }, row, col);
   }
 
-  /** Press at `from`, move in steps to `to`, optionally screenshot mid-drag, release. */
-  async drag(from, to, { steps = 14, midShot = null } = {}) {
-    const m = this.page.mouse;
-    await m.move(from.x, from.y);
-    await m.down();
-    for (let i = 1; i <= steps; i++) {
-      await m.move(from.x + ((to.x - from.x) * i) / steps, from.y + ((to.y - from.y) * i) / steps);
-      await sleep(14);
-    }
-    await sleep(160);
-    if (midShot) await this.shot(midShot);
-    await m.up();
+  /**
+   * Press at `from`, move in steps to `to`, optionally screenshot mid-drag, release. `to` read before the press is
+   * re-aimed after the pickup: the own prep board's deploy fold zooms the board (`aimedDrag`, GitHub #602); `retarget`
+   * gives a DOM target the fold moved instead.
+   */
+  async drag(from, to, { steps = 14, midShot = null, retarget = null } = {}) {
+    return aimedDrag(this.page, from, to, { steps, settle: 160, retarget, before: midShot ? () => this.shot(midShot) : null });
   }
 
   /**

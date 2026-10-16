@@ -57,7 +57,7 @@
 
 import { num, talentBb, moduleBb, traitBb, skillRec, toggleBuff, up } from '../shared/tier1.js';
 import { absoluteRangeKeys, canTargetEnemy, sortEnemyTargets } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { noOperatorBeside } from './op-phatom.js';
 
 const S1 = 'skchr_crosly_1';
@@ -88,7 +88,7 @@ function smokeCut(st, e, type) {
     const u = s.unit;
     if (!up(u) || !skillOn(u)) continue;
     const v = (type === 'arts' ? s.arts : s.phys) * (skillOn(u, S2) ? s.scale : 1);
-    if (!(v > cut) || !canTargetEnemy(u, e, GROUND) || !bodyInKeys(e, smokeKeys(u, s.s3Grid))) continue;
+    if (!(v > cut) || !canTargetEnemy(u, e, GROUND) || !bodyInRange(e, smokeKeys(u, s.s3Grid))) continue;
     cut = v;
   }
   return Math.min(1, cut);

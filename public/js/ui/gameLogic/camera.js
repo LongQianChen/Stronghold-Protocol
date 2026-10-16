@@ -96,6 +96,22 @@ export function foldCamera(s) {
 }
 
 /**
+ * Whether a deploy interaction temporarily folds the shop and zooms the own prep board (public issue #602 "部署干员、
+ * 装备时棋盘缩放": the official client folds the shop and takes the shop-collapsed prep camera while a piece is picked
+ * up for 部署干员 / 装备 / repositioning, and while the dropped piece's direction wheel is open, then gives the
+ * player's own shop state back — the board was too small to aim on phones): the viewer edits the own prep board
+ * (`ownPrep`, `editable`), the camera is not over the enemy pen (`pen`), and a piece is dragged (`drag`) or the
+ * direction wheel of a legal drop is open (`facing`; equipment and summons skip the wheel and restore on drop).
+ * Unlike a hand-made fold this one never waits for the interaction to end — it zooms as the piece is picked up. It is
+ * derived from the interaction state and never writes the player's 收起/展开 state.
+ * @param {{ ownPrep?: boolean, editable?: boolean, pen?: boolean, drag?: boolean, facing?: boolean }|null|undefined} o
+ * @returns {boolean}
+ */
+export function deployFoldsShop(o) {
+  return !!o && !!o.ownPrep && !!o.editable && !o.pen && (!!o.drag || !!o.facing);
+}
+
+/**
  * The field the own pieces are deployed on (server/match/Match.js deployFieldOf): 'bossL' / 'bossR' in the prep of a
  * boss round (the same pairing as `prepCamera`), else 'normal'. Placement legality (`placementContext` → `deployMap`
  * with `field`) reads that field's tiles.

@@ -127,7 +127,7 @@ export default {
           onTick({ battle, unit, skill, dt }) {
             protect(battle, unit, skill);
             unit.mem.judgeS2Next -= dt;
-            while (unit.mem.judgeS2Next <= 1e-9 && up(unit)) {
+            while (unit.mem.judgeS2Next <= 1e-9 && up(unit)) { // loop-cap: constant S2_EVERY added each pass
               unit.mem.judgeS2Next += S2_EVERY;
               const foes = enemiesInGrid(battle, unit, s2?.rangeGrid?.length ? s2.rangeGrid : X4, { canHitFly: false });
               battle.fx('aoe', { x: unit.x, y: unit.y, radius: 1.5, id: unit.id, skill: 'judge:atonement' });

@@ -19,8 +19,9 @@ const enabled = process.env.SP_E2E === '1' && fs.existsSync(CHROME);
 const PAGE = `<!doctype html><title>Build runtime regression</title><link rel="icon" href="data:,">
 <h1>Build runtime regression</h1><p id="state">Loading simulator</p>
 <button id="battle">Start battle</button><button id="result">Show settlement</button><button id="lobby">Return to lobby</button>
-<script type="module">
-import { startBuildGuard } from '/js/ui/buildGuard.js';
+<script type="module" src="/dev/build-runtime.js"></script>`;
+// a file of its own: the site's CSP (0.3.0) runs no inline script, on dev pages either
+const SCRIPT = `import { startBuildGuard } from '/js/ui/buildGuard.js';
 import { Net } from '/js/net.js';
 import { store, selectRoute, emptyMatch } from '/js/store.js';
 import { PHASE } from '/shared/constants.js';
@@ -54,11 +55,12 @@ const guard = startBuildGuard({
 window.fixture = { guard, net, state: () => ({ boots, fingerprint, route: selectRoute(store.get()),
   stale: store.get().ui.buildStale, known: guard.known(), connection: net.status }) };
 render();
-</script>`;
+`;
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-build-browser-'));
-  for (const rel of ['server', 'shared', 'data', 'public/js', 'public/css', 'public/index.html',
+  // tools/assets: the studio's Spine / atlas parsers, which the server imports since 0.3.0
+  for (const rel of ['server', 'shared', 'data', 'tools/assets', 'public/js', 'public/css', 'public/index.html',
     'public/vendor/hooks.module.js', 'public/vendor/preact.module.js', 'package.json']) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.cpSync(path.join(ROOT, rel), path.join(root, rel), { recursive: true });
@@ -66,6 +68,7 @@ function fixture() {
   fs.symlinkSync(path.join(ROOT, 'node_modules'), path.join(root, 'node_modules'), 'junction');
   fs.mkdirSync(path.join(root, 'public/dev'), { recursive: true });
   fs.writeFileSync(path.join(root, 'public/dev/build-runtime.html'), PAGE);
+  fs.writeFileSync(path.join(root, 'public/dev/build-runtime.js'), SCRIPT);
   fs.writeFileSync(path.join(root, 'start.mjs'), `
 import { startServer } from './server/index.js';
 const srv = await startServer({ port: Number(process.env.PORT), host: '127.0.0.1', quiet: true });

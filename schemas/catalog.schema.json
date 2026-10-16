@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "catalog.schema.json",
+  "title": "A community plugin catalogue",
+  "description": "A list of plugins someone else publishes (docs/PLUGINS.md §17, docs/plugin-catalog.example.json). This project does not host the files. Accepted here means shared/plugins/catalog.js readCatalog finds neither a problem nor a warning. uniqueItemProperties is not a stock JSON Schema keyword: this repository's test/helpers/jsonSchema.js enforces it (the same id twice). A stock editor that ignores it will not see a duplicate id; the normative check is that validator plus readCatalog. app is a version range (the same language as isVersionRange). A missing app is compatible; an empty app is not. Addresses are https with a dotted host and no user or password. The download layer, not this schema, refuses a non-public address and a port other than 443. bytes, when present, is at most 200 MB (209715200).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["catalog", "name", "plugins"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 200 },
+    "catalog": { "const": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "plugins": {
+      "type": "array",
+      "maxItems": 500,
+      "uniqueItems": true,
+      "uniqueItemProperties": ["id"],
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "httpsUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^https:\\/\\/(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::[0-9]{1,5})?(?:\\/[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]*)?$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version", "class", "url", "sha256"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,31}$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "version": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "class": { "enum": ["lang", "cosmetic", "content", "script", "ui", "trusted"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "bytes": { "type": "integer", "minimum": 0, "maximum": 209715200 },
+        "homepage": { "$ref": "#/$defs/httpsUrl" },
+        "license": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "authors": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 80 },
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+            }
+          ]
+        },
+        "app": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?(?:\\s+(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)*)(?:\\s*\\|\\|\\s*(?:\\*|x|(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?(?:\\s+(?:\\^|~|>=|<=|>|<|=)?v?\\d+(?:\\.(?:\\d+|[xX*]))?(?:\\.(?:\\d+|[xX*]))?)*))*\\s*$"
+        }
+      }
+    }
+  }
+}

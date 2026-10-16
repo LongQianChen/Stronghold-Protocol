@@ -50,7 +50,10 @@ test('bounty catapult normal triple attack splashes adjacent and diagonal allies
   h.step();
   const e = h.spawn('enemy_10162_mnctpt', { pos: [10, 8], mods: { speedMul: 0 } });
   assert.ok(h.runUntil(() => h.unit(1).hp < h.unit(1).s.maxHp, 10), 'the primary attack reaches its target');
-  for (const uid of [1, 2, 3]) assert.equal(h.unit(uid).s.maxHp - h.unit(uid).hp, e.s.atk * 3, `unit ${uid}: all three stones`);
+  const one = e.s.atk;
+  for (const uid of [1, 2, 3]) assert.equal(h.unit(uid).s.maxHp - h.unit(uid).hp, one, `unit ${uid}: the first stone lands alone`);
+  h.run(0.7);
+  for (const uid of [1, 2, 3]) assert.equal(h.unit(uid).s.maxHp - h.unit(uid).hp, one * 3, `unit ${uid}: all three stones`);
   assert.equal(h.unit(4).hp, h.unit(4).s.maxHp, 'beyond the splash');
   checkInvariants(h.b); assert.deepEqual(h.b.errors, []);
 });

@@ -1,7 +1,8 @@
 // Community report of 2026-10-06 「凯瑟琳装备池没有超出商店等级的装备，原版凯瑟琳1升2都能有6本装备」 (item 43): the 凯瑟琳 strategy
 // (定向投放, up_shop_add_special_goods {count 3, choice 1, pool pool_equip_kathe}) offered only items up to the shop level —
 // data/choices.json pool_equip_kathe maxTier 'shopLevel', an [ASSUMED] cap (the pool is server-side). The players' first-hand
-// account: tier VI items show at the 1 → 2 upgrade. The pool is every shop-eligible item now (uniform [ASSUMED]).
+// account: tier VI items show at the 1 → 2 upgrade. The pool is every shop-eligible item, plus 突变细胞
+// (maintainer 2026-10-14, #631), uniform [ASSUMED]. The shop item slot still never rolls the cell.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +24,7 @@ test('凯瑟琳 定向投放: the level 1 → 2 offer draws from every tier, the
     assert.equal(ids.length, 3, `seed ${seed}: 3 items`);
     for (const id of ids) {
       const rec = h.m.gd.item(id);
-      assert.ok(rec && !rec.shopExcluded, `seed ${seed}: ${id} is a shop item`);
+      assert.ok(rec && !rec.isGolden && (id === 'chess_item_5_08_e_a' || !rec.shopExcluded), `seed ${seed}: ${id} is a shop item or 突变细胞`);
       tiers.set(rec.tier, (tiers.get(rec.tier) || 0) + 1);
     }
   }

@@ -137,9 +137,12 @@ export class Battle {
     this._evq = [];
     this.projectiles = new ProjectileSystem(this);
     this._occ = new Array(ROWS * COLS).fill(null);
-    this._eb = new Array(ROWS * COLS);
+    this._eb = new Array(ROWS * COLS);   // range buckets (colliders: queries.js _buildEnemyIndex)
     for (let i = 0; i < this._eb.length; i++) this._eb[i] = [];
     this._ebUsed = [];
+    this._et = new Array(ROWS * COLS);   // tile buckets (格子判定: the position's tile, a huge enemy's rectangle tiles)
+    for (let i = 0; i < this._et.length; i++) this._et[i] = [];
+    this._etUsed = [];
     this._idSeq = 0;
     this._attackSeq = 0;   // DamageInfo.attackId of normal attacks (one id per attack, all its damage instances)
     this._deploySeq = 0;
@@ -172,9 +175,24 @@ export class Battle {
 
     // ---- content
     this.contentMode = opts.content ?? 'full';
-    this._safe(() => installContent(this, { mode: this.contentMode, extra: opts.extraContent }), 'installContent');
-    for (const u of this.allyUnits) if (!u.kit) this._setupUnit(u);
-    if (typeof opts.setup === 'function') this._safe(() => opts.setup(this), 'opts.setup');
+    try {
+      installContent(this, { mode: this.contentMode, extra: opts.extraContent });
+    } catch (e) {
+      if (!this.contentFault) this._handlerError('installContent', null, e);
+    }
+    if (this.contentFault) {
+      // [ASSUMED] A DSL kit that still throws after the set was built means the content set is corrupt.
+      // Do not call forceEnd: that would start() and deploy. The player sees the ordinary forced result;
+      // battle.errors carries content:dsl and the code (DESIGN §32.7). Host and page share this constructor.
+      this.finished = true;
+      this.started = true;
+      this.reason = 'forced';
+      try { this._result = this._buildResult(); }
+      catch { this._result = { time: this.time, reason: 'forced', perPlayer: {}, killed: this.killed, total: this.total, resolved: this.resolved, errors: this.errorCount }; }
+    } else {
+      for (const u of this.allyUnits) if (!u.kit) this._setupUnit(u);
+      if (typeof opts.setup === 'function') this._safe(() => opts.setup(this), 'opts.setup');
+    }
   }
 
   /**

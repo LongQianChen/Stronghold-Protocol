@@ -91,7 +91,7 @@ export function powi(x, n) {
   if (n < 0) return 1 / powi(x, -n);
   ACC[0] = 1; ACC[1] = 0; BASE[0] = x; BASE[1] = 0;
   let k = n;
-  while (k > 0) {
+  while (k > 0) { // loop-cap: exponent halves each step
     if (k % 2 === 1) mul2(ACC[0], ACC[1], BASE[0], BASE[1], ACC);
     k = Math.floor(k / 2);
     if (k > 0) mul2(BASE[0], BASE[1], BASE[0], BASE[1], BASE);

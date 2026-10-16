@@ -101,14 +101,14 @@ test('Picture Scroll: a promotion at full hand and temp still copies the hammer'
   h.invariants();
 });
 
-test('Picture Scroll: a full hand and temp without promotion keeps the refused scroll and target equipment', (t) => {
+test('Picture Scroll: a full visible bench queues the copy and keeps the target equipment', (t) => {
   const { h, ps, target, art, cast } = prep(t, { copies: 1 });
   while (ps.hand.some((p) => p == null) || ps.temp.some((p) => p == null)) assert.ok(ps.acquireItem(FILLER));
-  const before = ps.privateView();
-  assert.equal(cast().error, 'HAND_FULL');
-  assert.ok(ps.find(art.uid));
-  assert.deepEqual(target.items.map((p) => p.id), [HAMMER]);
-  assert.deepEqual(ps.privateView(), before);
+  assert.deepEqual(cast(), OK);
+  assert.equal(ps.find(art.uid), null, 'the successful cast consumes the scroll');
+  assert.equal(ps.allChess().filter((p) => p.id === target.id).length, 2);
+  assert.equal(ps.temp.length, 6, 'the copied operator and merged equipment are both retained');
+  assert.equal(itemIds(ps).filter((id) => id !== FILLER).length, 1, 'the copied hammer merges with the original');
   h.invariants();
 });
 
@@ -130,7 +130,7 @@ for (const golden of [false, true]) {
   });
 }
 
-test('Picture Scroll: a full hand — the copy and its items overflow into temp; an item with no slot left is destroyed like any gained item', (t) => {
+test('Picture Scroll: a full hand queues the copy and all its items beyond the visible temp slots', (t) => {
   for (const free of [3, 2]) {
     const { h, ps, target, cast } = prep(t, { copies: 1, items: ADV });
     while (ps.hand.some((p) => p == null)) assert.ok(ps.acquireItem(FILLER));
@@ -144,11 +144,8 @@ test('Picture Scroll: a full hand — the copy and its items overflow into temp;
     assert.deepEqual(copy.items, [], `free ${free}: the copy wears nothing`);
     assert.deepEqual(target.items.map((p) => p.id).sort(), [...ADV].sort());
     const got = looseItems(ps).filter((id) => id !== FILLER);
-    if (free === 3) assert.deepEqual(got, [...ADV].sort(), 'room for the copy and both items');
-    else {
-      assert.equal(got.length, 1, 'room for the copy and one item: the other is destroyed');
-      assert.ok(toasts().slice(before).some((s) => s.includes('整备区已满，获得的装备已销毁')), 'with the usual toast');
-    }
+    assert.deepEqual(got, [...ADV].sort(), 'both copied items are retained');
+    assert.ok(!toasts().slice(before).some((s) => s.includes('整备区已满，获得的装备已销毁')));
     h.invariants();
   }
 });

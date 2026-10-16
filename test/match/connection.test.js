@@ -9,6 +9,35 @@ import { bossPoolHp } from '../../server/match/finalAssault.js';
 
 const STATUSES = ['acting', 'ready', 'deciding', 'combat', 'done', 'helping', 'left', 'dead'];
 
+test('public throttling starts at broadcast time even when building the previous snapshot was delayed', () => {
+  let now = 100;
+  let revision = 0;
+  const sent = [];
+  const timers = [];
+  const match = {
+    // fork keeps DELAYS.PUBLIC_THROTTLE = 125 (8 Hz, D021); start open so the first frame is not itself throttled
+    _lastPubAt: -Infinity,
+    sched: {
+      now: () => now,
+      setTimeout: (fn, delay) => { timers.push({ fn, at: now + delay }); return timers.length; },
+    },
+    publicView: () => {
+      if (revision === 0) now += 16;
+      return { t: 'm.public', serverNow: now, revision: ++revision };
+    },
+    broadcast: (view) => sent.push(view.serverNow),
+    _maybeSendPublic: Match.prototype._maybeSendPublic,
+  };
+  match._maybeSendPublic(false);
+  now = 200;
+  match._maybeSendPublic(false);
+  assert.deepEqual(sent, [116], 'the second frame waits for the full interval after the first broadcast');
+  now = timers[0].at;
+  timers[0].fn();
+  // first broadcast at 116; the next waits 125 − (200 − 116) = 41 ms from the second call → 241
+  assert.deepEqual(sent, [116, 241]);
+});
+
 test('constructor validation mirrors the stub; start() sends the first m.public and one m.private per human', () => {
   assert.throws(() => new Match({ seats: [] }), TypeError);
   assert.throws(() => new Match({ seats: [{ seat: 0, playerId: 'a', name: 'a', isBot: false, connected: true }] }), TypeError);

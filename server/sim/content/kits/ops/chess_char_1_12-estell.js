@@ -2,7 +2,7 @@
 // Conventions of the tier-1 kits: ../shared/tier1.js; kit contract and rules: ../README.md.
 
 import { absoluteRangeKeys } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { num, talentBb, talentGrid, traitBb, up, cheb, onHitOn, skillBbOf } from '../shared/tier1.js';
 
 export default {
@@ -22,7 +22,7 @@ export default {
         battle.on('death', (ctx) => {
           const e = ctx.unit;
           if (e.side !== 'enemy' || ctx.reason !== 'killed' || !up(unit)) return;
-          const near = grid ? bodyInKeys(e, absoluteRangeKeys(grid, unit.tileR, unit.tileC, unit.dir, 0)) : cheb(unit, e) <= 1;
+          const near = grid ? bodyInRange(e, absoluteRangeKeys(grid, unit.tileR, unit.tileC, unit.dir, 0)) : cheb(unit, e) <= 1;
           if (near) battle.heal(unit, unit, unit.s.maxHp * num(t.hp_ratio), { self: true, tags: ['talent'] });
         }, { owner: unit });
         if (tb.damage_resistance != null) {

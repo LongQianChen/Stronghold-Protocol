@@ -53,8 +53,11 @@ export class Downloader {
    * @param {'direct'|'mirror'} [o.source] preferred download source
    * @param {string} [o.proxyPrefix] HTTPS prefix for GitHub downloads
    * @param {MirrorPolicy} [o.mirrorPolicy] invocation-wide policy and mirror circuit breaker
+   * @param {import('./source-verifier.mjs').SourceVerifier} [o.verifier]
    */
-  constructor({ root, ledgerPath, concurrency = 16, retries = 3, timeoutMs = 120000, force = false, keepExisting = false, log = console.log, fetchImpl = globalThis.fetch, backoffMs = 400, source = 'direct', proxyPrefix, mirrorPolicy }) {
+  constructor({ root, ledgerPath, concurrency = 16, retries = 3, timeoutMs = 120000, force = false, keepExisting = false, log = console.log, fetchImpl = globalThis.fetch, backoffMs = 400, source = 'direct', proxyPrefix, mirrorPolicy, verifier }) {
+    if (verifier && keepExisting) throw new Error('source verification is incompatible with keepExisting');
+    this.verifier = verifier;
     this.root = root;
     this.ledgerPath = ledgerPath;
     this.concurrency = Math.max(1, Math.min(64, Number(concurrency) || 16));
@@ -64,6 +67,9 @@ export class Downloader {
     this.keepExisting = !!keepExisting;
     /** @type {Set<string>} the files (paths under root) this run wrote */
     this.written = new Set();
+    /** @type {Set<string>} failed replacements protected from pruning, even without blob provenance */
+    this.preserved = new Set();
+    this.accepted = new Set();
     this.log = log;
     this.fetch = guardDefaultFetch(fetchImpl);
     this.network = mirrorPolicy ?? new MirrorPolicy({ source, proxyPrefix, log });
@@ -119,7 +125,7 @@ export class Downloader {
    * Fetch one URL with retries.
    * @returns {Promise<{buf:Buffer}|{notFound:true}|{skipped:true}|{error:string}>}
    */
-  async fetchWithRetries(url, kind) {
+  async fetchWithRetries(url, kind, verifiedSource) {
     if (this.network.skip(url)) return { skipped: true };
     let lastErr = 'unknown error';
     const attempts = this.network.isProxy(url) ? 1 : this.retries;
@@ -145,6 +151,7 @@ export class Downloader {
           throw new Error(`truncated body ${buf.length}/${len} ${url}`);
         }
         if (!validate(kind, buf)) throw new Error(`invalid ${kind} payload (${buf.length} B) ${url}`);
+        if (verifiedSource) this.verifier.verify(buf, verifiedSource);
         this.network.succeeded(url);
         return { buf };
       } catch (e) {
@@ -162,13 +169,20 @@ export class Downloader {
    * @returns {Promise<JobResult>}
    */
   async runJob(job) {
-    const kept = await this.existingSize(job);
+    const kept = this.verifier ? -1 : await this.existingSize(job);
     if (kept >= 0) return { status: 'skip', bytes: kept };
     let lastError = null;
     for (const url of job.urls) {
-      const sources = this.network.urls(url);
+      let verifiedSource;
+      if (this.verifier) {
+        const candidate = await this.verifiedCandidate(job, url);
+        if (candidate.result) return candidate.result;
+        verifiedSource = candidate.source;
+        if (!verifiedSource) continue;
+      }
+      const sources = this.network.urls(verifiedSource?.pinnedUrl ?? url);
       for (const src of sources) {
-        const r = await this.fetchWithRetries(src, job.kind);
+        const r = await this.fetchWithRetries(src, job.kind, verifiedSource);
         if (r.notFound || r.skipped) continue;
         if (r.error) { lastError = r.error; continue; }
         const abs = join(this.root, job.rel);
@@ -181,7 +195,9 @@ export class Downloader {
           try { await unlink(tmp); } catch { /* ignore */ }
           return { status: 'error', bytes: 0, error: `write failed: ${e.message}` };
         }
-        this.ledger.files[job.rel] = { url: src, bytes: r.buf.length };
+        this.ledger.files[job.rel] = verifiedSource
+          ? { url, bytes: r.buf.length, blob: verifiedSource.blob, commit: verifiedSource.commit }
+          : { url: src, bytes: r.buf.length };
         this.written.add(job.rel);
         this.dirty++;
         const sizeChanged = !!(job.bytes && job.bytes !== r.buf.length && !job.mutable);
@@ -190,6 +206,40 @@ export class Downloader {
     }
     if (lastError) this.network.directFailureHint();
     return lastError ? { status: 'error', bytes: 0, error: lastError } : { status: 'miss', bytes: 0, error: 'not found (404) on all sources' };
+  }
+
+  /** Resolve today's candidate before considering old bytes or ledger provenance. */
+  async verifiedCandidate(job, url) {
+    let source;
+    try { source = await this.verifier.resolve(url); }
+    catch (e) {
+      return { result: { status: 'error', bytes: 0, error: e.message } };
+    }
+    if (!source) return {};
+    if (!this.force && !job.mutable) {
+      try {
+        const buf = await readFile(join(this.root, job.rel));
+        this.verifier.verify(buf, source);
+        if (validate(job.kind, buf)) {
+          this.ledger.files[job.rel] = { url, bytes: buf.length, blob: source.blob, commit: source.commit };
+          this.dirty++;
+          return { result: { status: 'skip', bytes: buf.length, url } };
+        }
+      } catch { /* Missing or rejected bytes: fetch this candidate, not an old ledger URL. */ }
+    }
+    return { source };
+  }
+
+  async retainExisting(job) {
+    this.preserved.add(job.rel);
+    const led = this.ledger.files[job.rel];
+    if (!led?.blob) return false;
+    try {
+      const buf = await readFile(join(this.root, job.rel));
+      this.verifier.verify(buf, { blob: led.blob, url: led.url || job.rel });
+      return validate(job.kind, buf);
+    } catch { /* No verified fallback is available. */ }
+    return false;
   }
 
   /**
@@ -221,6 +271,12 @@ export class Downloader {
         let r;
         try { r = await this.runJob(job); } catch (e) { r = { status: 'error', bytes: 0, error: e?.message || String(e) }; }
         results.set(job.rel, r);
+        // Source absence does not invalidate local bytes. Keep them on disk even
+        // without provenance, but publish only a revalidated fallback.
+        const succeeded = r.status === 'ok' || r.status === 'skip';
+        if (succeeded) this.preserved.delete(job.rel);
+        if (succeeded || (this.verifier && await this.retainExisting(job))) this.accepted.add(job.rel);
+        else this.accepted.delete(job.rel);
         counts[r.status]++;
         this.totals[r.status]++;
         if (r.status === 'ok') { bytes += r.bytes; this.totals.bytesDownloaded += r.bytes; }

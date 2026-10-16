@@ -55,6 +55,7 @@
 //   and a `stun` s 晕眩. T1's area follows the flag; back to her when the skill ends.
 
 import { num, talentBb, moduleBb, traitBb, moduleOn, skillRec, up } from '../shared/tier1.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { absoluteRangeKeys, sortEnemyTargets } from '../../../targeting.js';
 import { offsetTile } from '../../../dir.js';
 import { COLS } from '../../../constants.js';
@@ -99,16 +100,20 @@ const areaKeys = (unit, r, c) => new Set(absoluteRangeKeys(X4, r, c, unit.dir, 0
  * the rest at its end (the last tick may fall on the end itself — S2's 20th DP at 15 s). One 'dp' fx with the sum at the end.
  */
 function dpOverTime({ total, step = 1, iv, first = iv }) {
+  const stepIv = stepOf('interval', iv, iv);
+  const stepN = stepOf('cost', step, step);
+  const firstAt = first === iv ? stepIv : stepOf('interval', first, first);
   return {
-    start(unit) { unit.mem.sleachDp = { t: 0, next: first, given: 0 }; },
+    start(unit) { unit.mem.sleachDp = { t: 0, next: firstAt, given: 0 }; },
     tick(battle, unit, dt) {
       const d = unit.mem.sleachDp;
-      if (!d || !(iv > 0) || !(step > 0)) return;
+      if (!d || !(stepIv > 0) || !(stepN > 0)) return;
       d.t += dt;
-      while (d.t + 1e-9 >= d.next && d.given + step <= total + 1e-9) {
-        d.given += step;
-        d.next += iv;
-        battle.addDp(unit.ownerId, step);
+      let guard = 0;
+      while (d.t + 1e-9 >= d.next && d.given + stepN <= total + 1e-9 && guard++ < STEP_PER_TICK) { // loop-cap: stepOf interval/cost
+        d.given += stepN;
+        d.next += stepIv;
+        battle.addDp(unit.ownerId, stepN);
       }
     },
     end(battle, unit, reason) {
@@ -178,7 +183,7 @@ export default {
       if (!f || !up(unit)) return;
       if (m.sleachS2Regen == null || m.sleachS2T + 1e-9 >= m.sleachS2Next) {
         m.sleachS2Regen = unit.s.atk * num(b2.atk_to_hp_recovery_ratio);
-        while (m.sleachS2T + 1e-9 >= m.sleachS2Next) m.sleachS2Next += 1;
+        while (m.sleachS2T + 1e-9 >= m.sleachS2Next) m.sleachS2Next += 1; // loop-cap: constant one-second step
       }
       const a = battle.unitAt(f.r, f.c);
       const key = `${S2_KEY}:${unit.id}`;

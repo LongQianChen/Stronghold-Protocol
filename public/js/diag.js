@@ -16,9 +16,13 @@
 //   setBattleSource(fn)                the battle runner registers how to read the battle on screen
 //   installTrafficMeter() / recordResourceEntry(entry) / trafficSummary() / clearTraffic()   the page's download totals
 //   buildDiagnostics(input)            the report text (pure: the state, the environment and the battle are passed in)
-//   diagnosticsText({ state, settings, attachBattle })  the report of this page (this browser, the battle on screen)
+//   diagnosticsText({ state, settings, attachBattle, personal })  the report of this page (this browser, the battle on screen)
 //
 // Report keys are English on purpose: the text is read by developers and searched in issues, whatever the UI language.
+// The second line names the content the page plays (contentLine, DESIGN §32): `vanilla cs=<64 hex>` — the original
+// content of that exact code and data —, with ` cosmetic vs=<64 hex> plugins=…` in a room with cosmetic plugins (the
+// battles are still the original ones: P1a) and ` personal=…` for the player's own cosmetic plugins; or, in a room with
+// gameplay plugins (P1c), `MODDED cs=… plugins=…`.
 
 import { APP_VERSION } from '../../shared/constants.js';
 import { TRAFFIC_CATEGORIES, trafficCategory } from '../../shared/assetPaths.js';
@@ -248,12 +252,44 @@ const spanOf = (ms) => {
 };
 const join = (...parts) => parts.filter((p) => p != null && p !== '' && p !== false).join(' | ');
 
+const isCs = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+const PLUGINS_SHOWN = 32;
+
 /**
- * The report text: a ```text block (version, time, browser, screen, connection, where the player is, settings, the
- * error log newest first) and, with `battle`, a ```json block of its spec. Secrets of `state` are whole tokens in the
- * prose and exact string values in the JSON.
+ * What the report says the page plays (DESIGN §32): the room's content set (room.state.content), else the server's
+ * vanilla content (welcome.content, the store's `content`) — `vanilla cs=<64 hex>`; in a room whose plugins are all
+ * cosmetic (its `cs` still the vanilla one) `vanilla cs=<64 hex> cosmetic vs=<64 hex> plugins=<id>@<version>(<first 8
+ * digits of its hash>),…`; `MODDED cs=<64 hex> plugins=…` (a room with gameplay plugins — its own content set, DESIGN
+ * §32.6; ` vs=<64 hex>` too when it has art plugins as well, ` mode=<id>` for a plugin mode); `unknown` before the
+ * first welcome. ` personal=<id>,…` follows for the player's own cosmetic plugins.
+ * @param {any} state the store state
+ * @param {{ id: string }[]} [personal] the personal cosmetic plugins this page applies (content.js personalApplied)
+ */
+export function contentLine(state, personal = []) {
+  const room = state?.room?.content;
+  const mine = Array.isArray(personal) && personal.length
+    ? ` personal=${personal.slice(0, PLUGINS_SHOWN).map((p) => String(p?.id ?? '?').slice(0, 32)).join(',')}${personal.length > PLUGINS_SHOWN ? ` +${personal.length - PLUGINS_SHOWN}` : ''}` : '';
+  if (room && isCs(room.cs)) {
+    const plugins = Array.isArray(room.plugins) ? room.plugins : [];
+    if (room.vanilla === true && !plugins.length) return `vanilla cs=${room.cs}${mine}`;
+    const list = plugins.slice(0, PLUGINS_SHOWN).map((p) => `${String(p?.id ?? '?').slice(0, 32)}@${String(p?.version ?? '?').slice(0, 32)}`
+      + (typeof p?.hash === 'string' && /^[0-9a-f]{8,}$/.test(p.hash) ? `(${p.hash.slice(0, 8)})` : ''));
+    const more = plugins.length > PLUGINS_SHOWN ? ` +${plugins.length - PLUGINS_SHOWN}` : '';
+    const named = list.length ? ` plugins=${list.join(',')}${more}` : '';
+    if (room.vanilla === true) return `vanilla cs=${room.cs}${isCs(room.vs) ? ` cosmetic vs=${room.vs}` : ''}${named}${mine}`;
+    const mode = typeof room.modeId === 'string' && room.modeId.length <= 64 ? ` mode=${room.modeId}` : '';
+    return `MODDED cs=${room.cs}${isCs(room.vs) ? ` vs=${room.vs}` : ''}${mode}${named}${mine}`;
+  }
+  return isCs(state?.content?.vanilla) ? `vanilla cs=${state.content.vanilla}${mine}` : 'unknown';
+}
+
+/**
+ * The report text: a ```text block (version, content, time, browser, screen, connection, where the player is,
+ * settings, the error log newest first) and, with `battle`, a ```json block of its spec (its `cs` included). Secrets of
+ * `state` are whole tokens in the prose and exact string values in the JSON.
  * @param {{ state: any, env?: any, settings?: any, battle?: any, entries?: any[], dropped?: number, total?: number,
- *   now?: number, pageStart?: number, version?: string, traffic?: ReturnType<typeof trafficSummary> | null }} input
+ *   now?: number, pageStart?: number, version?: string, traffic?: ReturnType<typeof trafficSummary> | null,
+ *   personal?: { id: string }[] }} input personal: the player's own cosmetic plugins the page applies (contentLine)
  */
 export function buildDiagnostics(input) {
   const { state = {}, env = {}, settings = null, battle = null, traffic: trafficTotals = null } = input;
@@ -262,6 +298,7 @@ export function buildDiagnostics(input) {
   const lines = [];
   lines.push('Stronghold-Protocol diagnostics');
   lines.push(`version: ${input.version ?? APP_VERSION}`);
+  lines.push(`content: ${contentLine(state, input.personal)}`);
   lines.push(`time: ${new Date(now).toISOString()} | page open ${spanOf(now - (input.pageStart ?? pageStart))}`);
   if (env.ua) lines.push(`browser: ${env.ua}`);
   if (env.gpu) lines.push(`gpu: ${env.gpu}`);
@@ -282,7 +319,7 @@ export function buildDiagnostics(input) {
       b.done ? 'done' : b.loading ? 'loading' : 'running', b.paused ? 'paused' : null, Number.isFinite(b.speed) ? `${b.speed}x` : null)}`);
   }
   if (settings) {
-    lines.push(`settings: ${join(`quality ${settings.quality}`, settings.damageNumbers ? 'damage numbers' : null, settings.officialDamageNumbers ? 'official damage numbers' : null, settings.ammoCount ? 'ammo count' : null, settings.muted ? 'muted' : null)}`);
+    lines.push(`settings: ${join(`quality ${settings.quality}`, settings.damageNumbers ? 'damage numbers' : null, settings.officialDamageNumbers ? 'official damage numbers' : null, settings.ammoCount ? 'ammo count' : null, settings.mysticEnergy ? 'mystic energy' : null, settings.combatMetrics ? 'combat metrics' : null, settings.officialFx && settings.officialFx !== 'auto' ? `official fx ${settings.officialFx}` : null, settings.muted ? 'muted' : null)}`);
   }
   const tl = trafficLine(trafficTotals);
   if (tl) lines.push(`traffic: ${tl}`);
@@ -342,6 +379,6 @@ export function browserEnv() {
  * battle on screen.
  * @param {{ state: any, settings?: any, attachBattle?: boolean }} opts
  */
-export function diagnosticsText({ state, settings = null, attachBattle = false }) {
-  return buildDiagnostics({ state, settings, env: browserEnv(), battle: attachBattle ? currentBattle() : null, traffic: trafficSummary() });
+export function diagnosticsText({ state, settings = null, attachBattle = false, personal = [] }) {
+  return buildDiagnostics({ state, settings, env: browserEnv(), battle: attachBattle ? currentBattle() : null, traffic: trafficSummary(), personal });
 }

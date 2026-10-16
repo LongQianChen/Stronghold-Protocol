@@ -6,7 +6,8 @@ export const TILE_H = Object.freeze({
   forbid: 0.3,     // '#' forbidden block (data: HIGH)
   sep: 0.55,       // 'X' hard separator wall (rows 6 / 13)
   bench: 0.16,     // 'a' / 'A' hand & temp slots (data: HIGH)
-  platform: 0.26,  // active 射击台 / mound devices
+  platform: 0.465, // active 射击台: the top of the official model (trap_1106_achplat, 46.5 cm; round 40)
+  mound: 0.26,     // active mound devices
 });
 
 /** Stage glyph → material + height class (data/stages.json legend, DATA.md §12). */
@@ -68,6 +69,9 @@ export const COLORS = Object.freeze({
   // the ammo bar's yellow cells (b.snap `ammo`) and 伺夜's 狼影 pips (b.snap `wolves`)
   ammo: 0xffd04a,
   wolf: 0xe8f0ff,
+  // 秘术师's stored attack energies (b.snap `energy`): a violet no other HUD state uses — the purse's gold coin and its
+  // count are told apart from the orb and its count at a glance
+  energy: 0xb07dff,
   shield: 0xdfe8ff,
 });
 

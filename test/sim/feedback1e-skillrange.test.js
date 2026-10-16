@@ -23,6 +23,7 @@ import { absoluteRangeKeys, extendedGrid } from '../../server/sim/targeting.js';
 import { buildBattleSpec, createBattleFromSpec } from '../../server/sim/spec.js';
 import { createRng } from '../../server/sim/rng.js';
 import { COLS } from '../../server/sim/constants.js';
+import { bodyInRange } from '../../server/sim/body.js';
 import { unitStatsEntry } from '../../shared/protocol.js';
 import { resolveRecordLoadout, loadoutRecord, attackRangeGrid } from '../../shared/loadoutRecord.js';
 
@@ -437,7 +438,8 @@ test('real product path: a BattleSpec (S3 by loadout) on act2 m01 with a real wa
   b.on('attack', (c) => {
     if (c.attacker !== u || !u.skill.active) return;
     const s3 = keysOf(s3Grid(), u);
-    for (const t of c.targets) { picks++; if (!s3.has(tileKey(t)) && t.blockedBy !== u) offGrid++; }
+    // in 4-11 by its 0.1 collider (the range test since 0.3.0), or blocked by her
+    for (const t of c.targets) { picks++; if (!bodyInRange(t, s3) && t.blockedBy !== u) offGrid++; }
   });
   b.on('damaged', (c) => {
     if (c.source !== u || !u.skill.active || !c.dmg.isSplash) return;

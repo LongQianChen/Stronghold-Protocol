@@ -1,0 +1,19 @@
+{
+  "op": 1,
+  "charId": "char_x_data_demo_guard",
+  "name": "演示守卫",
+  "profession": "TANK",
+  "subProfessionId": "protector",
+  "position": "MELEE",
+  "rarity": 4,
+  "as": "both",
+  "chess": { "tier": 1, "bonds": ["deputShip"] },
+  "forms": {
+    "normal": { "stats": { "maxHp": 2000, "atk": 200, "def": 250, "bat": 1.2, "blockCnt": 3 }, "rangeGrid": [[0,0],[0,1]] },
+    "elite": { "stats": { "maxHp": 3000, "atk": 300, "def": 400, "bat": 1.2, "blockCnt": 3 }, "rangeGrid": [[0,0],[0,1]] }
+  },
+  "skills": [{ "skillId": "skx_data_demo_guard_1", "name": "守御", "duration": 10, "spCost": 20, "initSp": 20, "bb": { "max_hp": 0.4, "def": 0.5, "magic_resistance": 0.2 }, "default": true }],
+  "trait": { "desc": "阻挡三个敌人" },
+  "kit": { "ref": "chess_char_1_02_a" },
+  "art": { "ref": "char_199_yak" }
+}

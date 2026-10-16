@@ -3,7 +3,7 @@
 
 import { canTargetAlly, enemyStealthed } from '../../targeting.js';
 import { ALLY_COLLIDER_RADIUS } from '../../constants.js';
-import { T, elem, hurt, targetsNear, byPriority, auraBuff } from './helpers.js';
+import { T, elem, hurt, targetsNear, byPriority, auraBuff, castSlot } from './helpers.js';
 import { stealth, onHitStatus, skill, kitStealth } from './archetypes.js';
 import { hypot } from '../../detmath.js';
 
@@ -62,6 +62,8 @@ function kitShadowKiller(ab) {
   return [stealth(), {
     spawn(b, e, a) { a.power = true; a.on = true; },
     tick(b, e, a) { const on = enemyStealthed(e); if (on && !a.on) a.power = true; a.on = on; },
+    // the marked attack is 破隐一击: its skill slot for the client (castSlot, display only)
+    before(c, b, e, a) { if (a.power) castSlot(b, e, ab.sk.InvisibleCombat); },
     hitOut(c, b, e, a) { if (a.power && c.dmg.isAttack) c.dmg.amount *= scale; },
     attack(c, b, e, a) { a.power = false; },
   }];

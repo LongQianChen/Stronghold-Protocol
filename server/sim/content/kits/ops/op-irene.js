@@ -136,7 +136,7 @@ export default {
             if (!m) return;
             m.t += dt;
             const iv = Math.max(0.05, num(b3.multi_hit_interval, 0.3)), times = Math.max(0, Math.floor(num(b3.multi_times, 10)));
-            while (m.n < times && m.t + 1e-9 >= (m.n + 1) * iv) {
+            while (m.n < times && m.t + 1e-9 >= (m.n + 1) * iv) { // loop-cap: interval floored at 0.05 and a slash count
               m.n++;
               const foes = battle.enemiesInKeys(keysOf(unit, grid3), unit, AIR);
               const cands = foes.length ? foes : battle.allyTargetsInKeys(keysOf(unit, grid3), unit);   // (the 铁钳号 when no enemy)

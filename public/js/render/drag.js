@@ -125,7 +125,7 @@ export function createDragController(hooks) {
   const clearT = h.clearTimeout || ((id) => clearTimeout(id));
   let editable = false;
   let canPlace = typeof h.canPlace === 'function' ? h.canPlace : null;
-  /** @type {null | { mode: 'pressed'|'dragging'|'held', pointerId, pointerType, piece, from, sx, sy, timer }} */
+  /** @type {null | { mode: 'pressed'|'dragging'|'held', pointerId, pointerType, piece, from, sx, sy, timer, last? }} */
   let st = null;
   let hoverUid = null;
   let hoverTileKey = '';
@@ -162,6 +162,7 @@ export function createDragController(hooks) {
   }
 
   function moveDrag(e) {
+    st.last = e;
     const tile = tileAt(e.x, e.y);
     const over = overCanvas(e.clientX, e.clientY);
     const slot = over && tile ? tileSlot(tile) : null;
@@ -260,6 +261,15 @@ export function createDragController(hooks) {
       if (st) return;
       setHoverPiece(null, e || {});
       setHoverTile(null);
+    },
+
+    /**
+     * Judge the drag again at the last pointer position: the ground under a still pointer changes while the camera
+     * moves (the shop-collapsed zoom of a deploy, GitHub #602), so the target tile, its legality and the dragged
+     * piece's place (pieceDragMove, tileHover) follow the camera, not only the pointer. No-op unless dragging.
+     */
+    refresh() {
+      if (st && st.mode === 'dragging' && st.last) moveDrag(st.last);
     },
 
     /** Abort any interaction (piece list replaced, view destroyed…). */

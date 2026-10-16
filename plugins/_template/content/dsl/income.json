@@ -1,0 +1,8 @@
+{
+  "dsl": 1,
+  "pluginId": "data-demo",
+  "meta": {
+    "key": "effect:data-demo:income",
+    "on": [{ "when": "income", "if": { "round": 1 }, "do": [{ "funds": { "amount": 15, "setIncome": true } }] }]
+  }
+}

@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_4_10-aroma.js — 阿罗玛 (char_446_aroma) kit, tier 4.
 // Conventions of the tier-4 kits: ../shared/tier4.js; kit contract and rules: ../README.md.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { num, tbb, keySet, skillActive, isSel, alt, instantKind, withDefaults } from '../shared/tier4.js';
 import { hypot } from '../../../detmath.js';
 
@@ -60,7 +60,7 @@ export default withDefaults({
             if (!e.alive) { floating.delete(id); continue; }
             if (e.findBuff('levitate')) continue;
             floating.delete(id);
-            if (S2 && unit.alive && unit.deployed && skillActive(unit) && bodyInKeys(e, keySet(unit))) {
+            if (S2 && unit.alive && unit.deployed && skillActive(unit) && bodyInRange(e, keySet(unit))) {
               battle.dealDamage(unit, e, { amount: unit.s.atk * land, type: 'arts', isSkill: true, tags: ['skill', 'landing'] });
               battle.fx('splash', { x: e.x, y: e.y, id: e.id });
             }

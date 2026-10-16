@@ -36,12 +36,17 @@ describe('make-windows-bundle.mjs: --out 不能指向仓库自己或它的上级
     assert.equal(outDirIsUnsafe(path.join(ROOT, 'dist-win')), false, '仓库内的子目录');
   });
 
-  test('大小写不同也算同一个目录（Windows / macOS 的文件系统默认不区分大小写）', async () => {
+  test('大小写不同也算同一个目录（Windows / macOS 的文件系统默认不区分大小写）', async (t) => {
     const { outDirIsUnsafe } = await mod('scripts/make-windows-bundle.mjs');
+    const base = await fsp.mkdtemp(path.join(os.tmpdir(), 'sp-case-'));
+    t.after(() => fsp.rm(base, { recursive: true, force: true }));
+    const root = path.join(base, 'Stronghold-Protocol');
+    await fsp.mkdir(root);
     // Linux 的默认文件系统区分大小写：`/HOME/X` 就是另一个目录，放行才对。
     const sameThing = process.platform !== 'linux';
-    assert.equal(outDirIsUnsafe(ROOT.toUpperCase()), sameThing, `大写写法的仓库路径（${ROOT.toUpperCase()}）`);
-    assert.equal(outDirIsUnsafe(ROOT.replace(/\//g, path.sep).toLowerCase()), sameThing, '全小写写法');
+    assert.equal(outDirIsUnsafe(root, root), true, '原路径');
+    assert.equal(outDirIsUnsafe(path.join(base, 'STRONGHOLD-PROTOCOL'), root), sameThing, '全大写写法');
+    assert.equal(outDirIsUnsafe(path.join(base, 'stronghold-protocol'), root), sameThing, '全小写写法');
   });
 
   test('经过符号链接的路径会被认出来（macOS 的 /tmp 就是指向 /private/tmp 的链接）', async () => {

@@ -6,7 +6,8 @@
 // stage (inclusive time: Spine pose, impostor redraw, Pixi render, three.js board, battle runner, sim, …).
 //
 // Usage: CHROME_PATH=<chrome> node tools/perfbench.mjs [--specs a,b] [--quality high,low] [--cpu 1,4,6] [--warm 20]
-//        [--sample 6] [--width 844] [--height 390] [--dpr 2] [--profile] [--out test/e2e/out/perf] [--json]
+//        [--sample 6] [--width 844] [--height 390] [--dpr 2] [--fx off,lite,full] [--profile] [--out test/e2e/out/perf] [--json]
+//   --fx       设置「官方特效」 tiers to measure (the official battle effects, render/vfx; default off; needs extracted effects)
 //   --specs    names of public/dev/perf/index.json (default: all)      --warm    seconds before sampling (default 20)
 //   --sample   seconds per sample (default 6)                          --profile also record and summarise a CPU profile
 // Needs the downloaded assets (public/assets: real Spine models; without them every unit is a diamond and the numbers
@@ -54,6 +55,8 @@ export const STAGES = [
   ['impostorFlush', 'impostor redraw (skeletons → atlas)', (cf) => cf.functionName === 'flush' && /render\/impostor\.js/.test(cf.url)],
   ['unitUpdate', 'unit views (units.js update)', (cf) => cf.functionName === 'update' && /render\/units\.js/.test(cf.url)],
   ['frameBody', 'view frame (all JS before the Pixi render)', (cf) => cf.functionName === 'frameBody' && /render\/app\.js/.test(cf.url)],
+  ['officialFx', 'official effects: simulate (render/vfx update)', (cf) => cf.functionName === 'update' && /render\/vfx\/system\.js/.test(cf.url)],
+  ['officialFxDraw', 'official effects: geometry + GL draw (render/vfx renderPass)', (cf) => cf.functionName === 'renderPass' && /render\/vfx\/system\.js/.test(cf.url)],
   ['pixiRender', 'Pixi render (main + render textures)', (cf) => cf.functionName === 'render' && /pixi(\.min)?\.js/.test(cf.url)],
   ['board3d', 'three.js board render', (cf) => cf.functionName === 'render' && /board3d\/scene\.js/.test(cf.url)],
   ['runner', 'battle runner frame', (cf) => cf.functionName === 'frame' && /js\/battle\/runner\.js/.test(cf.url)],
@@ -107,6 +110,7 @@ async function main() {
   const index = JSON.parse(fs.readFileSync(path.join(ROOT, 'public/dev/perf/index.json'), 'utf8'));
   const specs = argv.includes('--specs') ? list('specs', '') : index.map((s) => s.name);
   const qualities = list('quality', 'high');
+  const fxs = list('fx', 'off');
   const cpus = list('cpu', '1,4,6').map(Number);
   const warm = Number(opt('warm', 20)), sample = Number(opt('sample', 6));
   const width = Number(opt('width', 844)), height = Number(opt('height', 390)), dpr = Number(opt('dpr', 2));
@@ -123,12 +127,12 @@ async function main() {
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: gpuArgs() });
   const results = [];
   try {
-    for (const spec of specs) for (const quality of qualities) for (const cpu of cpus) {
+    for (const spec of specs) for (const quality of qualities) for (const fx of fxs) for (const cpu of cpus) {
       const page = await browser.newPage();
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
       await page.setViewport({ width, height, deviceScaleFactor: dpr });
-      await page.goto(`http://127.0.0.1:${srv.port}/dev/battle-perf.html?spec=${encodeURIComponent(spec)}&quality=${quality}&panel=0`);
+      await page.goto(`http://127.0.0.1:${srv.port}/dev/battle-perf.html?spec=${encodeURIComponent(spec)}&quality=${quality}&fx=${fx}&panel=0`);
       await page.waitForFunction('window.__perf && (window.__perf.ready || window.__perf.error)', { timeout: 60000 });
       const err = await page.evaluate(() => globalThis.__perf.error);
       if (err) { console.log(`${spec}: ${err.split('\n')[0]}`); await page.close(); continue; }
@@ -145,15 +149,18 @@ async function main() {
       if (profileOn) {
         const { profile } = await cdp.send('Profiler.stop');
         summary = aggregateProfile(profile);
-        const base = path.join(out, `${spec}-${quality}-${cpu}x`);
+        const base = path.join(out, `${spec}-${quality}${fx !== 'off' ? `-fx${fx}` : ''}-${cpu}x`);
         fs.writeFileSync(`${base}.cpuprofile`, JSON.stringify(profile));
         fs.writeFileSync(`${base}.summary.json`, JSON.stringify(summary, null, 1));
       }
-      const rec = { spec, quality, cpu, ...s, profiled: profileOn, errors: errors.slice(0, 3) };
+      const rec = { spec, quality, fx, cpu, ...s, profiled: profileOn, errors: errors.slice(0, 3) };
       results.push(rec);
       if (!argv.includes('--json')) {
-        console.log(`${spec.padEnd(18)} ${quality.padEnd(6)} ${String(cpu).padStart(2)}x  fps ${String(s.fps).padStart(6)}  p95 ${String(s.p95).padStart(6)} ms  >33ms ${String(s.over33).padStart(5)}%`
-          + `  sim ${s.simMsPerTick} ms/tick  view CPU ${s.viewCpuMs} ms  units ${s.units}  load ${s.lod}${errors.length ? `  ERRORS ${errors.length}` : ''}`);
+        const o = s.officialFx;
+        console.log(`${spec.padEnd(18)} ${quality.padEnd(6)} fx ${fx.padEnd(4)} ${String(cpu).padStart(2)}x  fps ${String(s.fps).padStart(6)}  p95 ${String(s.p95).padStart(6)} ms  >33ms ${String(s.over33).padStart(5)}%`
+          + `  sim ${s.simMsPerTick} ms/tick  view CPU ${s.viewCpuMs} ms  render ${s.renderMs} ms  units ${s.units}  load ${s.lod}`
+          + (o && o.tier !== 'off' ? `  fx ${o.effects} effects / ${o.particles} particles / ${o.draws} draws / ${o.texMB} MB` : '')
+          + `${errors.length ? `  ERRORS ${errors.length}` : ''}`);
         if (summary) console.log(`  ${summary.stages.filter((x) => x.pct > 0).map((x) => `${x.stage} ${x.pct}%`).join(' · ')}`);
       }
       await page.close();

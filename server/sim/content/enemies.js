@@ -77,7 +77,7 @@
 //                清明's veil 0 s) — Battle._stealthSwitch / targeting.js enemyStealthed (until 0.1.2: at once).
 //                The mirror rule for an ally's 隐匿 — enemy area effects skip it even when it blocks the enemy (0.1.3, GitHub #97) — is areaAllies.
 //   REFLECTION — 折射 (ba.refraction "生效时，法术抗性+70"): RES +refracting.magic_resistance while NOT silenced
-//                (the ability line is SILENCE-flagged: silencing turns it off); 镜膜 also gets max HP +100 % while on.
+//                (the ability line is SILENCE-flagged: silencing turns it off); 镜膜 also gets max HP +100 % until its first silence, which permanently stops its fan.
 //   SPECIAL    — mostly stats; prisoners, 穿刺手, 暴虐兵长, 镜卫, 动力装甲 … in enemies/special.js.
 // Every enemy key of data/enemies.json is either in KITS (this file), BOSS_KEYS (bosses.js) or STATS_ONLY (with the
 // reason) — pinned by test/content/enemies_bosses.test.js. Bounty (悬赏) leaders are included: multi-form ones
@@ -105,11 +105,12 @@
 //                   several keys (kitEp, kitStealth, kitTimes, kitRefraction, kitPrisoner, kitDeathSpawn, kitStun3 …)
 //   invisible.js, times.js, element.js, dot.js, reflection.js, fly.js, special.js — one file per special type
 //                   (factions.json): its kits, its kit-only constants and its part of KITS
+//   passengers.js   shared 载客 for the two carriers in special.js (伊利昂的木驮兽, “越长尘”)
 //   leaders.js      bounty (悬赏) leaders: kitLeaderMisc (single form) and the multi-form kits
 // Every name this file exported before the split is still exported from here.
 
 import { TICK } from '../constants.js';
-import { stOf, abOf, attach, safe, dispatch, canCast, elem, alliesInTiles } from './enemies/helpers.js';
+import { stOf, abOf, attach, safe, dispatch, canCast, elem, alliesInTiles, castSlot } from './enemies/helpers.js';
 import { INVISIBLE_KITS } from './enemies/invisible.js';
 import { TIMES_KITS } from './enemies/times.js';
 import { ELEMENT_KITS } from './enemies/element.js';
@@ -124,7 +125,7 @@ export {
   EROSION, EROSION_BURST, HUSK_REBIRTH, nthOf, abOf, attach, T, silenced, canCast, unbalancedNow, elem, hurt, alliesInTiles,
   targetsNear, allTargets, areaAllies, areaAlliesInTiles, fieldAllies, auraAllies, targetAndArea, byPriority, zone,
   remainingRoute, stayRoute, spawnChildren, stepToward, setHits, hitCount, isHitCount, setForm, lpLoss, expose,
-  expectedFinal, absorbArts,
+  expectedFinal, absorbArts, castSlot,
 } from './enemies/helpers.js';
 export { TRANSLATOR_CHANGE } from './enemies/leaders.js';
 export { BOMBD_RELEASE, BOMBD_POST_DELAY } from './enemies/fly.js';
@@ -172,7 +173,7 @@ export function registerMeta() {}
 // global dispatchers
 
 function onSpawn(b, e) {
-  const kit = KITS[e.defId];
+  const kit = KITS[e.def.raw?.effectRef ?? e.defId];
   if (typeof kit !== 'function') return;
   const ab = abOf(b, e);
   const list = safe(b, e, () => kit(ab, e, b)) || [];
@@ -245,7 +246,7 @@ function onTick(b, dt) {
   const n = list.length;
   for (let i = 0; i < n; i++) {
     const e = list[i];
-    if (!e || !e.alive || !e.mem.ab) continue;
+    if (!e || !e.alive || e.mem.carrier || !e.mem.ab) continue;
     const ab = e.mem.ab;
     for (let j = 0; j < ab.list.length; j++) {
       const a = ab.list[j];
@@ -256,7 +257,7 @@ function onTick(b, dt) {
           else {
             a._acc = (a._acc ?? 0) + dt;
             let k = 0;
-            while (a._acc >= a.iv - 1e-9 && k++ < 4 && e.alive) { a._acc -= a.iv; safe(b, e, () => a.tick(b, e, a, a.iv)); }
+            while (a._acc >= a.iv - 1e-9 && k++ < 4 && e.alive) { a._acc -= a.iv; safe(b, e, () => a.tick(b, e, a, a.iv)); } // loop-cap: at most 4 ability ticks
           }
         }
       }
@@ -266,6 +267,7 @@ function onTick(b, dt) {
           a.left = Math.max(TICK, a.cd);
           a.casts = (a.casts ?? 0) + 1;
           e.skillAnimUntil = b.time + 0.5;
+          if (a.sk) castSlot(b, e, a.sk);   // display only: the skill slot it uses (render/app.js 'cast')
           safe(b, e, () => a.fire(b, e, a));
         }
       }

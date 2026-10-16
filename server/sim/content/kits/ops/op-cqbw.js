@@ -59,7 +59,7 @@
 
 import { num, traitBb, skillRec, up, statBuff } from '../shared/tier1.js';
 import { sortEnemyTargets, canTargetEnemy } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { hasHp, isHpLoss } from '../../../damage.js';
 import { COLS, PROJECTILE_SPEEDS } from '../../../constants.js';
 import { hypot } from '../../../detmath.js';
@@ -294,7 +294,7 @@ export default {
           if (scale !== 1) {
             battle.on('hit', (ctx) => {
               const e = ctx.target, d = ctx.dmg;
-              if (!e || e.side !== 'enemy' || d.type !== 'phys' || !up(unit) || !stunned(e) || !bodyInKeys(e, unit.rangeKeySet)) return;
+              if (!e || e.side !== 'enemy' || d.type !== 'phys' || !up(unit) || !stunned(e) || !bodyInRange(e, unit.rangeKeySet)) return;
               const prev = STUN_SCALED.get(d) ?? 1;
               if (!(scale > prev)) return;
               d.mul *= scale / prev;
@@ -307,7 +307,7 @@ export default {
               if (!e || e.side !== 'enemy' || !d || d.type === 'element' || hasHp(e) || !up(unit) || !unit.skill) return;
               const src = ctx.source;
               const shot = (src === unit && d.isAttack) || ((ctx.credit ?? src) === unit && d.tags?.includes(D12_TAG));
-              if (isMineOf(src, unit) || (shot && bodyInKeys(e, unit.rangeKeySet))) unit.skill.gainSp(sp, 'init'); // 无视阻回
+              if (isMineOf(src, unit) || (shot && bodyInRange(e, unit.rangeKeySet))) unit.skill.gainSp(sp, 'init'); // 无视阻回
             }, { owner: unit });
           }
         } },

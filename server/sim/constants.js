@@ -28,6 +28,16 @@ export const ATTACK_PAUSE = 0.35;
  */
 export const ALLY_COLLIDER_RADIUS = 0.25;
 /**
+ * Collider radius of an enemy (a regular one: a huge enemy's hit rectangle is its collider, body.js). The official
+ * client gives every enemy prefab of this mode a CircleCollider2D of radius 0.1 (237 prefabs, local CN client read
+ * 2026-10-14), and target search tests colliders (PRTS 作战机制, above): an operator-side range — an attack range, a
+ * skill's or trait's range grid, the skill-range trigger — takes an enemy whose circle overlaps one of its tiles
+ * (body.js colliderKeys / bodyInRange; the owner's decision of 2026-10-14). Tile rules keep the tile of the position
+ * (格子判定: terrain, traps, fields and marks laid on tiles, "所在格" effects — Battle.enemiesOnTiles, body.js bodyInKeys),
+ * blocking and splash keep the position (中点判定); a radius PRTS marks 碰撞判定 takes the collider (Battle.foesInColliderRadius).
+ */
+export const ENEMY_COLLIDER_RADIUS = 0.1;
+/**
  * Block contact (PRTS 游戏数据基础 §阻挡半径; 作战机制 §碰撞体积与位置识别 "中点判定 … 案例: 阻挡"): an unblocked enemy whose
  * position lies within the blocker's radius of the blocker's centre touches it — compared on squared distances, as the
  * official client does. Ground blocking 0.70709997 (² 0.49999037); air blocking (起飞 / blockFly units against flyers)

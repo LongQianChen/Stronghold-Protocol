@@ -1,7 +1,7 @@
 // server/sim/content/kits/ops/chess_char_6_10-nymph.js — 妮芙 (char_4146_nymph) kit, tier 6 (hidden).
 // Conventions of the tier-6 kits: ../shared/tier6.js; kit contract and rules: ../README.md.
 
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { num, tbb, live, elementDmg } from '../shared/tier6.js';
 
 // ------------------------------------------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ function nymph(bb, chess, def) {
         battle.on('deploy', ({ unit: u }) => { if (u === unit) unit.mem.nymphKey = 0; }, { owner: unit });
         battle.on('elementBurst', ({ target, element }) => {
           if (element !== 'apoptosis' || !live(unit) || !target || target.side !== 'enemy') return;
-          if (!fieldWide && !bodyInKeys(target, unit.rangeKeySet)) return;
+          if (!fieldWide && !bodyInRange(target, unit.rangeKeySet)) return;
           unit.mem.nymphKey = Math.min(max, (unit.mem.nymphKey || 0) + 1);
           const n = unit.mem.nymphKey;
           battle.addBuff(unit, { key: 'nymph:key', mods: { atkPct: atk * n, aspd: fieldWide && n >= max ? as : 0 } });

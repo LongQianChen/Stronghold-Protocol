@@ -61,6 +61,7 @@
 //   redeploy time again (so the piece is back at once, now with its normal lifetime).
 
 import { num, talentBb, skillRec, up, batMod, toggleBuff } from '../shared/tier1.js';
+import { stepOf, STEP_PER_TICK } from '../../../../../shared/plugins/steps.js';
 import { COLS } from '../../../constants.js';
 import { dirVec, toLocal } from '../../../dir.js';
 
@@ -113,7 +114,7 @@ function aphrisPath(battle, unit, beam = false) {
   let [dr, dc] = dirVec(unit.dir);
   let reach = beam ? Infinity : baseReach(unit);
   let r = unit.tileR, c = unit.tileC, steps = 0;
-  while (steps < reach) {
+  while (steps < reach) { // loop-cap: grid: breaks when the tile is off-board or already seen
     const nr = r + dr, nc = c + dc;
     const k = nr * COLS + nc;
     if (!battle.grid.inBounds(nr, nc) || index.has(k)) break;
@@ -198,6 +199,9 @@ export default {
     const t0 = talentBb(chess, 0), t1 = talentBb(chess, 1);
     const b1 = bbOf(chess, S1), b2 = bbOf(chess, S2), b3 = bbOf(chess, S3);
     return {
+      // PRTS 链路协议 备注 "索敌与攻击始终采用格子判定": her searches take the tile of an enemy's position, never its 0.1
+      // collider (Battle.enemiesInKeys / anyEnemyInKeys / unitsInGrid read `rangeTiles`)
+      trait: { rangeTiles: true },
       skills: {
         [S1]: {
           kind: 'toggle', trigger: 'SP_FULL', mods: { atkPct: num(b1.atk) },
@@ -212,10 +216,11 @@ export default {
             battle.fx('beam', { x: unit.x, y: unit.y, id: unit.id, skill: 'aphris:beam' });
           },
           onTick({ battle, unit, skill, dt }) {
-            const iv = num(b2.interval, 0.5);
+            const iv = stepOf('interval', num(b2.interval, 0.5), 0.5);
             if (!(iv > 0)) return;
             const t = (unit.mem.beamAt = (unit.mem.beamAt ?? 0) + dt);
-            while (t >= unit.mem.beamNext - 1e-6 && skill.active && unit.alive) {
+            let guard = 0;
+            while (t >= unit.mem.beamNext - 1e-6 && skill.active && unit.alive && guard++ < STEP_PER_TICK) { // loop-cap: stepOf interval
               unit.mem.beamNext += iv;
               for (const e of battle.enemiesInKeys(unit.rangeKeys, unit, unit.profile)) {
                 battle.dealDamage(unit, e, { amount: unit.s.atk * num(b2.atk_scale), type: 'arts', isSkill: true, tags: ['skill', 'aphris:beam'] });

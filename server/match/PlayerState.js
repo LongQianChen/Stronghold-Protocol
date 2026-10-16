@@ -2,7 +2,7 @@
 //
 // Handlers validate → mutate → recompute bonds → mark the private view dirty. They never throw on bad input; they
 // return `{ ok: true }` or `{ error: ERR.*, detail? }`. Rules (research 00-INDEX §3–§4, 01 A1, 04 §2):
-//   * Hand (整备区) 10 slots filled right→left, temp (临时整备区) 5 slots. A full hand refuses buys and reward picks —
+//   * Hand: 10 slots filled right-to-left; temp: an expandable queue with five visible slots. A full hand refuses buys and reward picks —
 //     also one that would complete a merge at once (PRTS 卫戍协议/帮助 §手牌区 "例如招募/购入等通常情况下会增加手牌的操作";
 //     GitHub #82) — and withdrawals, except one whose own summon stack frees a slot. Passive gains (merge results,
 //     grants, returned equipment) overflow into temp, and a free hand slot pulls them back in at once, right→left
@@ -40,7 +40,7 @@
 //   * Transformations (transformChess, 突变细胞 — PRTS 备注 "生效时，原干员销毁，获得一名高一阶的随机初始干员"): a destroy
 //     followed by a gain. The carrier leaves wherever it stands (a board tile is freed, the deploy count drops), its
 //     equipment — the cell included — returns to the hand first (overflow temp), then the new chess is gained like any
-//     other (acquireChess: hand, overflow temp, the no-room rule; a merge it completes puts the elite on a consumed
+//     other (acquireChess: hand, overflow temp queue; a merge it completes puts the elite on a consumed
 //     deployed copy's tile — never the carrier's —, else in the hand). Official footage: the tile is empty at the next
 //     prep and the new operator waits in the 整备区 (pointed out in PR #2).
 //   * Items: equip max 2 (a 3rd replaces the equipped item the player picks — g.equip replaceUid, the oldest when
@@ -62,8 +62,8 @@
 //     owner's facing); a swap with its owner is checked from the owner's new tile, and one an in-place re-orientation
 //     (or a promotion) leaves outside goes back onto its stack (recompute → _liftOutOfRange) [ASSUMED: kept when still
 //     inside]. A re-orientation that would leave such a summon with no stack and no free hand / temp slot is refused
-//     (HAND_FULL); elsewhere (a promotion, an owner moved with no room) it leaves the board and its stack comes back at
-//     the next round start (grantTokensFor) — no out-of-range placement reaches the battle.
+//     (HAND_FULL); elsewhere (a promotion, an owner moved with no room) it leaves the board and its stack joins
+//     the expandable temp queue — no out-of-range placement reaches the battle.
 //   * Facing (DESIGN §3, research 09 §1.2): every board piece has `dir` ∈ UP|RIGHT|DOWN|LEFT (server/sim/dir.js), set
 //     by g.move {…, dir} (absent ⇒ RIGHT) and kept across rounds. g.move onto the piece's OWN tile re-orients it in
 //     place; a swap keeps the occupant's dir; a piece put on the board by an effect (a merge elite taking a consumed
@@ -95,9 +95,10 @@
 //     player's data view: the slotted slots' ids (normal and elite) are the composed 自选 records, so the player's piece
 //     of a slot is the operator for every rule (name, class, position, bonds from its factions, no 特质, the pick's skill
 //     and module; tier, price, sell price and the 3 → elite merge are the slot's). Each slotted piece has its own stock
-//     (8 at tier 5, 5 at tier 6 [ASSUMED]; none when every bond of it is banned this match) and joins this player's shop
-//     rolls once the 调度中心 reaches the slot's level; it never enters the shared pool. battleInput carries `diy` (the
-//     pick), m.private exposes `diy` (and `diyBanned`), the scouting views draw the operator with its pick.
+//     (8 at tier 5, 5 at tier 6 [ASSUMED]; twice that in co-op, like the shared pool — GitHub #650; none when every bond
+//     of it is banned this match) and joins this player's shop rolls once the 调度中心 reaches the slot's level; it never
+//     enters the shared pool. battleInput carries `diy` (the pick), m.private exposes `diy` (and `diyBanned`), the
+//     scouting views draw the operator with its pick.
 //
 // Code layout: this file keeps the constructor (the per-player state fields); the methods live in
 // server/match/player/, one module per concern, and are installed on PlayerState.prototype below in a fixed order,
@@ -230,6 +231,7 @@ export class PlayerState {
       bossDamage: 0, lpLost: 0, buys: 0, sells: 0, perfectRounds: 0, fundsGained: 0, healing: 0,
     };
     this.eliminatedRound = null;
+    this.creditedKills = 0;
     this.lpAtFinal = null;
     /** last combat result for this player (unite carry state, bounties) */
     this.lastResult = null;

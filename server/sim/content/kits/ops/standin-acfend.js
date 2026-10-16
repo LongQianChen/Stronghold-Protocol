@@ -78,7 +78,7 @@ export default {
         onStart({ unit }) { unit.mem.acfendStress = 0; },
         onTick({ battle, unit, dt }) {
           unit.mem.acfendStress = (unit.mem.acfendStress ?? 0) + dt;
-          while (unit.mem.acfendStress + 1e-6 >= STRESS_INTERVAL) {
+          while (unit.mem.acfendStress + 1e-6 >= STRESS_INTERVAL) { // loop-cap: constant STRESS_INTERVAL
             unit.mem.acfendStress -= STRESS_INTERVAL;
             const v = battle.blockedTargets(unit, { canHitFly: true });
             if (v.length) battle.fx('aoe', { x: unit.x, y: unit.y, id: unit.id, radius: 0.5, skill: S3 });

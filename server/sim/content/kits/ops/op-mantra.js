@@ -44,8 +44,9 @@ import { elementDmg } from '../shared/tier6.js';
 import { burstDamageUp } from '../shared/tier5.js';
 import { hasHp } from '../../../damage.js';
 import { canTargetEnemy, enemyStealthed } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { COLS, PALSY_MAX } from '../../../constants.js';
+import { burstLimit } from '../../../../../shared/plugins/steps.js';
 import { hypot } from '../../../detmath.js';
 
 const S1 = 'skchr_mantra_1';
@@ -76,6 +77,7 @@ function setPalsy(battle, e, n) {
   if (n <= 0) battle.removeBuff(e, b);
   else { b.stacks = n; e.markDirty(); }
 }
+// 【麻痹付与】 takes the enemy's tile (PRTS 备注: 格子判定), unlike the reveal and the overflow (碰撞判定: bodyInRange)
 const tileIn = (e, set) => set.has(Math.round(e.y) * COLS + Math.round(e.x));
 
 /** The S1 / S2 riders: share × the damage dealt as 神经 损伤, then elemScale × ATK 元素伤害 on a target in its 神经 burst. */
@@ -157,7 +159,10 @@ export default {
     }
     /** `e` leaves the overflow (range, fall, skill end): every 溢出麻痹 left bounces at once. */
     function flush(battle, unit, e, rec) {
-      while (rec.over > 0) { rec.over--; bounce(battle, unit, e); }
+      let guard = 0;
+      const limit = burstLimit(PALSY_MAX);
+      while (rec.over > 0 && guard++ < limit) { rec.over--; bounce(battle, unit, e); } // loop-cap: burstLimit palsy
+      if (rec.over > 0) rec.over = 0;
     }
     /** 真言's own 麻痹 (S3 grants, 全局洞悉): a 麻痹免疫 enemy keeps them (ineffective) for the overflow count. */
     function givePalsy(battle, unit, e, n) {
@@ -218,7 +223,7 @@ export default {
             if (!st || !set) return;
             const seen = new Set();
             for (const e of battle.enemies) {
-              if (!e.alive || e.hidden || !bodyInKeys(e, set)) continue;
+              if (!e.alive || e.hidden || !bodyInRange(e, set)) continue;
               seen.add(e);
               // 【反隐】 (隐匿免疫) on her range
               if (e.s.flags.stealth) battle.applyStatus(e, 'reveal', { duration: 2 * dt + 0.05, source: unit });

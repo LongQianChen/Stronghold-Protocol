@@ -346,7 +346,7 @@ export default {
             }
             return;
           }
-          const victims = sid === S2 ? battle.enemiesInKeys(lineKeys(n), src, ANY) : foes;
+          const victims = sid === S2 ? battle.enemiesOnTiles(lineKeys(n), src, ANY) : foes;
           const scale = sid === S2 ? num(b2['attack@atk_scale']) : num(b3.atk_scale);
           for (const e of victims) {
             if (!e.alive) continue;
@@ -397,7 +397,7 @@ export default {
           for (const n of nodes) {
             if (!n.act || n.gone) continue;
             const src = n.stone ?? unit;
-            const foes = battle.enemiesInKeys(trigKeys(n), src, ANY);
+            const foes = battle.enemiesOnTiles(trigKeys(n), src, ANY);
             if (!foes.length) continue;
             fire(n, foes);
             spend(n);

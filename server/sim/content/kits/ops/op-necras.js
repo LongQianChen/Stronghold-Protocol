@@ -67,7 +67,7 @@
 
 import { num, talentBb, traitBb, skillRec, moduleOn, up, batMod } from '../shared/tier1.js';
 import { absoluteRangeKeys, sortEnemyTargets, aggroCmp } from '../../../targeting.js';
-import { bodyInKeys } from '../../../body.js';
+import { bodyInRange } from '../../../body.js';
 import { COLS } from '../../../constants.js';
 
 const S1 = 'skchr_necras_1';
@@ -348,8 +348,8 @@ export default {
           battle.on('death', (ctx) => {
             const e = ctx.unit;
             if (!e || e.side !== 'enemy' || ctx.reason !== 'killed' || !up(unit)) return;
-            const mine = bodyInKeys(e, ownRange(unit));
-            const theirs = !mine && killAtk > 0 && skelsUp(unit).some((s) => bodyInKeys(e, new Set(s.rangeKeys ?? [])));
+            const mine = bodyInRange(e, ownRange(unit));
+            const theirs = !mine && killAtk > 0 && skelsUp(unit).some((s) => bodyInRange(e, new Set(s.rangeKeys ?? [])));
             if (!mine && !theirs) return;
             if (killAtk > 0 && killDur > 0) battle.addBuff(unit, { key: 'necras:killAtk', duration: killDur, mods: { atkPct: killAtk }, tags: ['talent'] });
             queue(battle, unit, 1, mine ? [Math.round(e.y), Math.round(e.x)] : null);

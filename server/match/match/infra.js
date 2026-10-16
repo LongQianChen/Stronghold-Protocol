@@ -91,7 +91,7 @@ export class MatchInfra {
   humans() { return this.order.filter((p) => !p.isBot && !p.left); }
 
   /** [ASSUMED] Touch's initial, match-long team grant survives its holder's elimination/quit; focus alone grants none. */
-  teamMedicGranted() { return this.order.some(p => p.bandId === 'band_amedic'); }
+  teamMedicGranted() { return this.order.some(p => (this.gd.band(p.bandId)?.effectRef ?? p.bandId) === 'band_amedic'); }
 
   /**
    * The boss-round group of a player (`bossWaves`: the per-match random pairs, planned in startRound

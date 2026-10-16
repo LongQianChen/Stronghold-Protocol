@@ -63,6 +63,7 @@
 
 import { weightedPick } from './waves.js';
 import { MAX_DRAFT_CARDS } from '../../shared/constants.js';
+import { PLUGIN_GAIN_COUNT_MAX } from '../../shared/plugins/limits.js';
 
 export const FAMILY_NAMES = { bounty: '悬赏决策', supply: '道具补给', shop: '机密商店', tactic: '战术决策' }; // i18n-ignore: = choices.json families (the client shows the localized record)
 
@@ -253,7 +254,7 @@ function drawDistinct(rng, list, k, taken) {
 function drawWeighted(rng, list, weights, k) {
   const pool = list.map((c, i) => [c, Math.max(0, Number(weights && weights[i]) || 1)]);
   const out = [];
-  while (out.length < k && pool.length) {
+  while (out.length < k && pool.length) { // loop-cap: pool length and k
     const c = weightedPick(rng, pool);
     out.push(c);
     pool.splice(pool.findIndex(([x]) => x === c), 1);
@@ -490,7 +491,8 @@ function applyDefault(m, ps, card) {
     const count = Number.isInteger(bb.count) ? bb.count : 1;
     switch (b.key) {
       case 'global_special_choice_gain_equip': {
-        for (let i = 0; i < count; i++) {
+        const gain = Math.min(PLUGIN_GAIN_COUNT_MAX, count);
+        for (let i = 0; i < gain; i++) {
           const id = m.rollItemId({ pool: bs.pool, player: ps });
           if (id) ps.acquireItem(id, { source: 'choice' });
         }
@@ -524,7 +526,8 @@ function applyDefault(m, ps, card) {
         // the player's 自选 stock joins the draw, its bonds read through the player's view (player/diy.js diyStockEntries)
         const pgd = ps.gd || gd;
         const hasBond = (cid) => { const c = pgd.chess(cid); return !!(c && Array.isArray(c.bonds) && c.bonds.includes(bs.bond)); };
-        for (let i = 0; i < count; i++) {
+        const gain = Math.min(PLUGIN_GAIN_COUNT_MAX, count);
+        for (let i = 0; i < gain; i++) {
           const extra = typeof ps.diyStockEntries === 'function' ? ps.diyStockEntries() : null;
           const id = ps.pool.roll(m.rngMeta, { maxTier: Math.max(1, ps.shop.level), filter: hasBond, extra })
             || ps.pool.roll(m.rngMeta, { maxTier: 6, filter: hasBond, extra });

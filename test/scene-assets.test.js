@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { artPlan, formatSummary, isPlayerFile, isRefused } from '../tools/package.mjs';
+import { artPlan, formatSummary, isPlayerFile, isRefused, FULL_ZIP_FX } from '../tools/package.mjs';
 import { localGaps, sceneInstallPlan } from '../tools/setup.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -82,6 +82,37 @@ test('official scene bundles and extracted scenes are not git files; the extract
   assert.equal(isPlayerFile('public/assets/local/scene/act2autochess_m02/scene.bin'), false);
   assert.equal(isPlayerFile('tools/local-extract/scenes.py'), true);
   assert.equal(isPlayerFile('tools/local-extract/fetch_scenes.py'), true);
+});
+
+test('the official effects (public/assets/local/fx + data/local-fx.json) ship in the full zip with fx (FULL_ZIP_FX), held back without', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-fxzip-'));
+  try {
+    const put = (rel, s) => { fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true }); fs.writeFileSync(path.join(dir, rel), s); };
+    put('data/assets.json', '{}\n');
+    put('data/local-assets.json', JSON.stringify({ version: 1, groups: { 'ui/battle': { b: { path: '/assets/local/ui/battle/b.png' } } } }));
+    put('public/assets/local/ui/battle/b.png', 'png');
+    put('data/local-fx.json', JSON.stringify({ version: 1, format: 'fx-manifest', groups: { 'fx/prefabs': { p: { path: '/assets/local/fx/prefabs/p.json' } } } }));
+    put('public/assets/local/fx/prefabs/p.json', '{}');
+    put('public/assets/local/fx/tex/t.webp', 'webp');
+    assert.equal(FULL_ZIP_FX, true, '0.3.0 ships the extracted effects (the maintainer\'s decision of 2026-10-15)');
+    assert.ok(artPlan(dir).files.includes('data/local-fx.json'), 'the default plan follows FULL_ZIP_FX');
+    const off = artPlan(dir, { fx: false });
+    assert.deepEqual(off.files, ['data/local-assets.json', 'public/assets/local/ui/battle/b.png']);
+    assert.deepEqual(off.fxHeld, ['public/assets/local/fx/prefabs/p.json', 'public/assets/local/fx/tex/t.webp']);
+    assert.deepEqual(off.orphans, [], 'held back on purpose, not "nothing lists them"');
+    const on = artPlan(dir, { fx: true });
+    for (const f of ['data/local-fx.json', 'public/assets/local/fx/prefabs/p.json', 'public/assets/local/fx/tex/t.webp']) assert.ok(on.files.includes(f), f);
+    assert.deepEqual(on.fxHeld, []);
+    fs.rmSync(path.join(dir, 'data/local-fx.json'));
+    assert.ok(!artPlan(dir, { fx: true }).files.some((f) => f.includes('/fx/')), 'no file list, no effects: the runtime could not find them');
+    const summary = formatSummary({
+      lite: false, version: '0.3.0-dev', tracked: [], art: off.files, localArt: true, generated: [], dropped: {}, orphans: [], held: [],
+      fxHeld: off.fxHeld, scanned: 0, names: 0, problems: [], bytes: { tracked: 0, art: 0, modules: 0, vendor: 0, total: 0, leftOut: 0, orphans: 0 },
+    });
+    assert.match(summary, /held back: 2 official effect files/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the full asset plan ships extracted scenes; the lite plan ships none', () => {

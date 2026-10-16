@@ -112,7 +112,7 @@ export class VirtualScheduler {
     // binary insertion keeps the queue sorted by (at, seq)
     let lo = 0;
     let hi = this._q.length;
-    while (lo < hi) {
+    while (lo < hi) { // loop-cap: binary search
       const mid = (lo + hi) >> 1;
       const o = this._q[mid];
       if (o.at < e.at || (o.at === e.at && o.seq < e.seq)) lo = mid + 1; else hi = mid;
@@ -135,13 +135,13 @@ export class VirtualScheduler {
 
   /** Time of the next live callback, or null. */
   nextAt() {
-    while (this._q.length && this._q[0].cancelled) this._q.shift();
+    while (this._q.length && this._q[0].cancelled) this._q.shift(); // loop-cap: queue of timers
     return this._q.length ? this._q[0].at : null;
   }
 
   /** Run the earliest callback (advancing the clock to it). Returns false when the queue is empty. */
   runNext() {
-    while (this._q.length && this._q[0].cancelled) this._q.shift();
+    while (this._q.length && this._q[0].cancelled) this._q.shift(); // loop-cap: queue of timers
     const e = this._q.shift();
     if (!e) return false;
     if (e.at > this.t) this.t = e.at;
@@ -162,7 +162,7 @@ export class VirtualScheduler {
   _reinsert(e) {
     let lo = 0;
     let hi = this._q.length;
-    while (lo < hi) {
+    while (lo < hi) { // loop-cap: binary search
       const mid = (lo + hi) >> 1;
       const o = this._q[mid];
       if (o.at < e.at || (o.at === e.at && o.seq < e.seq)) lo = mid + 1; else hi = mid;
@@ -199,7 +199,7 @@ export class VirtualScheduler {
   /** Run until the queue is empty (or maxSteps). Returns the number of callbacks run. */
   runAll({ maxSteps = 1e7 } = {}) {
     let n = 0;
-    while (n < maxSteps && this.runNext()) n++;
+    while (n < maxSteps && this.runNext()) n++; // loop-cap: maxSteps
     return n;
   }
 
